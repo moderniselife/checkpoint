@@ -53,6 +53,8 @@ nonisolated struct TicketDetail: Sendable, Hashable {
         var status: String
         var type: String
         var relation: String
+        /// Status category ("new" / "indeterminate" / "done") when known — drives colours and counts.
+        var category: String = ""
         var id: String { relation + key }
     }
 
@@ -112,6 +114,8 @@ nonisolated struct TicketDetail: Sendable, Hashable {
     var webURL: URL?
     var tracker: Tracker = .jira
     var externalLinks: [ExternalLink] = []
+    /// Issues whose parent is this one (epic children). Jira's `subtasks` field doesn't include them.
+    var children: [LinkedIssue] = []
 }
 
 // MARK: - Parsing
