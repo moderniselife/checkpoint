@@ -191,7 +191,7 @@ struct SettingsView: View {
             do {
                 try await MCPOAuth.linear.signIn()
                 settings.linearUser = "Signed in"
-                testLinear()
+                testLinear()   // replaces "Signed in" with your name when Linear offers get_user
             } catch MCPOAuth.OAuthError.cancelled {
             } catch {
                 linearState = .failed(error.localizedDescription)
@@ -211,11 +211,25 @@ struct SettingsView: View {
         Task {
             do {
                 let tools = try await client.listTools()
-                linearState = .ok("", tools.filter { PlanGenerator.isReadOnly($0.name) }.count)
+                linearState = .ok("", tools.count)
+                if settings.linearAuth == .oauth, let me = await Self.linearViewerName(client, tools: tools) {
+                    settings.linearUser = me
+                }
             } catch {
                 linearState = .failed(error.localizedDescription)
             }
         }
+    }
+
+    /// Best-effort display name via Linear's `get_user` tool ("me").
+    nonisolated private static func linearViewerName(_ client: MCPClient, tools: [MCPClient.Tool]) async -> String? {
+        guard let tool = tools.first(where: { $0.name == "get_user" }) else { return nil }
+        let props = tool.inputSchema["properties"]
+        let arg = ["query", "id", "userId"].first { props?[$0] != nil } ?? "query"
+        guard let r = try? await client.callTool("get_user", arguments: .object([arg: "me"])), !r.isError,
+              let json = try? JSONCoding.decoder.decode(JSONValue.self, from: Data(r.text.utf8)) else { return nil }
+        let user = json["user"] ?? json
+        return user["displayName"]?.stringValue ?? user["name"]?.stringValue
     }
 
     private func test() {

@@ -99,7 +99,26 @@ final class TicketInspector {
         if tools.contains(where: { $0.name == "list_comments" }) {
             comments = try? await mcp.callTool("list_comments", arguments: .object([arg("list_comments", ["issueId", "id", "issue"]): .string(key)]))
         }
-        return TicketDetail.parseLinear(key: key, issue: issue.text, comments: comments?.isError == false ? comments?.text : nil)
+        var detail = TicketDetail.parseLinear(key: key, issue: issue.text, comments: comments?.isError == false ? comments?.text : nil)
+
+        // Sub-issues aren't always embedded; ask list_issues for children when it supports a parent filter.
+        if detail.subtasks.isEmpty, let list = tools.first(where: { $0.name == "list_issues" }),
+           let parentArg = ["parentId", "parent"].first(where: { list.inputSchema["properties"]?[$0] != nil }) {
+            let issueID = (try? JSONCoding.decoder.decode(JSONValue.self, from: Data(issue.text.utf8)))
+                .flatMap { ($0["issue"] ?? $0)["id"]?.stringValue } ?? key
+            if let r = try? await mcp.callTool("list_issues", arguments: .object([parentArg: .string(issueID)])), !r.isError,
+               let json = try? JSONCoding.decoder.decode(JSONValue.self, from: Data(r.text.utf8)) {
+                let items = json.arrayValue ?? json["issues"]?.arrayValue ?? json["nodes"]?.arrayValue ?? []
+                detail.subtasks = items.compactMap { item in
+                    guard let k = item["identifier"]?.stringValue else { return nil }
+                    let state = item["state"] ?? item["status"]
+                    return .init(key: k, summary: item["title"]?.stringValue ?? "",
+                                 status: state?.stringValue ?? state?["name"]?.stringValue ?? "",
+                                 type: "", relation: "sub-issue")
+                }
+            }
+        }
+        return detail
     }
 
     nonisolated static func resolveCloudID(site: String, mcp: MCPClient) async throws -> String {
@@ -123,6 +142,8 @@ actor AttachmentLoader {
         var site: String
         var basicHeader: String?
         var useOAuth: Bool
+        var linearAPIKey: String?
+        var linearOAuth: Bool
     }
 
     private var cache: [String: Data] = [:]
@@ -133,6 +154,15 @@ actor AttachmentLoader {
         let kind = full ? "content" : "thumbnail"
 
         var attempts: [(URL, String)] = []
+        // Linear files: private uploads that take the API key or the OAuth bearer.
+        if let url = attachment.contentURL, url.host()?.hasSuffix("uploads.linear.app") == true {
+            if let key = creds.linearAPIKey { attempts.append((url, key)) }
+            if creds.linearOAuth, let token = try? await MCPOAuth.linear.accessToken() {
+                attempts.append((url, "Bearer " + token))
+            }
+            return await fetch(attempts, cacheKey: cacheKey)
+        }
+
         if let basic = creds.basicHeader, !creds.site.isEmpty,
            let url = URL(string: "https://\(creds.site)/rest/api/3/attachment/\(kind)/\(attachment.id)?redirect=false") {
             attempts.append((url, basic))
@@ -143,6 +173,10 @@ actor AttachmentLoader {
             attempts.append((url, "Bearer " + token))
         }
 
+        return await fetch(attempts, cacheKey: cacheKey)
+    }
+
+    private func fetch(_ attempts: [(URL, String)], cacheKey: String) async -> Data? {
         for (url, auth) in attempts {
             var req = URLRequest(url: url)
             req.setValue(auth, forHTTPHeaderField: "Authorization")
@@ -165,12 +199,15 @@ extension AppSettings {
             basicHeader: hasToken
                 ? "Basic " + Data("\(atlassianEmail):\(atlassianToken)".utf8).base64EncodedString()
                 : nil,
-            useOAuth: atlassianUser != nil
+            useOAuth: atlassianUser != nil,
+            linearAPIKey: linearAuth == .apiKey && !linearAPIKey.isEmpty ? linearAPIKey : nil,
+            linearOAuth: linearAuth == .oauth && linearUser != nil
         )
     }
 
     /// Browser URL for an attachment — the browser's own Jira session handles auth.
     func browserURL(for attachment: TicketDetail.Attachment) -> URL? {
+        if attachment.contentURL?.host()?.hasSuffix("linear.app") == true { return attachment.contentURL }
         guard !siteHost.isEmpty else { return attachment.contentURL }
         return URL(string: "https://\(siteHost)/rest/api/3/attachment/content/\(attachment.id)")
     }

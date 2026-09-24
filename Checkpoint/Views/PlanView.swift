@@ -44,7 +44,10 @@ struct PlanView: View {
                     Section(title: "Acceptance criteria", icon: "target") {
                         VStack(alignment: .leading, spacing: 10) {
                             ForEach(plan.acceptanceCriteria) { ac in
-                                CriterionRow(criterion: ac, state: coverage(of: ac))
+                                CriterionRow(criterion: ac, state: coverage(of: ac),
+                                             isMet: saved.metCriteria.contains(ac.id)) {
+                                    withAnimation(.smooth) { store.toggleCriterion(ac.id, in: saved.id) }
+                                }
                             }
                         }
                     }
@@ -114,7 +117,7 @@ struct PlanView: View {
                 Button(copied ? "Copied" : "Copy as Markdown",
                        systemImage: copied ? "checkmark" : "doc.on.doc") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(plan.markdown(done: saved.done), forType: .string)
+                    NSPasteboard.general.setString(plan.markdown(done: saved.done, met: saved.metCriteria), forType: .string)
                     copied = true
                     Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
                 }
@@ -162,21 +165,20 @@ struct PlanView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            VStack(spacing: 6) {
-                ZStack {
-                    ProgressRing(value: saved.progress, lineWidth: 8)
-                    Text("\(saved.done.intersection(plan.tasks.map(\.id)).count)/\(plan.tasks.count)")
-                        .font(.headline.monospacedDigit())
+            HStack(spacing: 16) {
+                MetricRing(value: saved.progress, label: "tested",
+                           text: "\(saved.tasksDone)/\(plan.tasks.count)", tint: .accentColor)
+                if !plan.acceptanceCriteria.isEmpty {
+                    MetricRing(value: saved.criteriaProgress, label: "AC met",
+                               text: "\(saved.criteriaMet)/\(plan.acceptanceCriteria.count)", tint: .teal)
                 }
-                .frame(width: 72, height: 72)
-                Text("tested").font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(24)
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
     }
 
-    private func coverage(of ac: TestPlan.Criterion) -> CriterionRow.State {
+    private func coverage(of ac: TestPlan.Criterion) -> CriterionRow.Coverage {
         let covering = plan.tasks.filter { $0.covers.contains(ac.id) }
         if covering.isEmpty { return .uncovered }
         return covering.allSatisfy { saved.done.contains($0.id) } ? .verified : .pending
@@ -292,20 +294,35 @@ private struct TaskRow: View {
     }
 }
 
+/// Acceptance criterion with a checkbox: click the seal to mark it met.
+/// While unmet, the seal hints at task coverage (uncovered / pending / ready).
 private struct CriterionRow: View {
-    enum State { case verified, pending, uncovered }
+    enum Coverage { case verified, pending, uncovered }
     let criterion: TestPlan.Criterion
-    let state: State
+    let state: Coverage
+    let isMet: Bool
+    let toggle: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-                .help(help)
+            Button(action: toggle) {
+                Image(systemName: icon)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(color)
+                    .scaleEffect(hovering ? 1.15 : 1)
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 20)
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering = $0 }
+            .help(help)
             Text(criterion.id)
                 .font(.callout.monospaced().weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(criterion.text)
+                .strikethrough(isMet, color: .secondary)
+                .foregroundStyle(isMet ? .secondary : .primary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
@@ -317,27 +334,52 @@ private struct CriterionRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
+        .animation(.smooth(duration: 0.15), value: hovering)
     }
 
     private var icon: String {
+        if isMet { return "checkmark.seal.fill" }
+        if hovering { return "checkmark.seal" }
         switch state {
-        case .verified: "checkmark.seal.fill"
-        case .pending: "seal"
-        case .uncovered: "exclamationmark.circle"
+        case .verified: return "checkmark.seal"
+        case .pending: return "seal"
+        case .uncovered: return "exclamationmark.circle"
         }
     }
     private var color: Color {
+        if isMet { return .green }
+        if hovering { return .green.opacity(0.7) }
         switch state {
-        case .verified: .green
-        case .pending: .secondary
-        case .uncovered: .orange
+        case .verified: return .green
+        case .pending: return .secondary
+        case .uncovered: return .orange
         }
     }
     private var help: String {
+        if isMet { return "Met — click to unmark" }
         switch state {
-        case .verified: "All covering tasks ticked"
-        case .pending: "Covering tasks still to do"
-        case .uncovered: "No task covers this criterion"
+        case .verified: return "All covering tasks ticked — click to mark met"
+        case .pending: return "Covering tasks still to do — click to mark met"
+        case .uncovered: return "No task covers this criterion — click to mark met"
+        }
+    }
+}
+
+/// Big labelled progress ring for the plan header.
+struct MetricRing: View {
+    let value: Double
+    let label: String
+    let text: String
+    var tint: Color = .accentColor
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                ProgressRing(value: value, lineWidth: 8, tint: tint)
+                Text(text).font(.headline.monospacedDigit())
+            }
+            .frame(width: 72, height: 72)
+            Text(label).font(.caption).foregroundStyle(.secondary)
         }
     }
 }

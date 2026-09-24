@@ -9,6 +9,9 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {
     var tracker: Tracker
     var createdAt: Date
     var done: Set<String>
+    /// Acceptance criteria the tester has marked as met.
+    var metCriteria: Set<String> = []
+    var folderID: UUID?
 
     /// Jira ids stay "KEY:mode" so plans saved before Linear support keep their identity.
     static func id(_ key: String, _ mode: TestMode, _ tracker: Tracker) -> String {
@@ -31,10 +34,19 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {
         tracker = try c.decodeIfPresent(Tracker.self, forKey: .tracker) ?? .jira
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         done = try c.decode(Set<String>.self, forKey: .done)
+        metCriteria = try c.decodeIfPresent(Set<String>.self, forKey: .metCriteria) ?? []
+        folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
     }
 
+    var tasksDone: Int { plan.tasks.filter { done.contains($0.id) }.count }
+    var criteriaMet: Int { plan.acceptanceCriteria.filter { metCriteria.contains($0.id) }.count }
+
     var progress: Double {
-        plan.tasks.isEmpty ? 0 : Double(plan.tasks.filter { done.contains($0.id) }.count) / Double(plan.tasks.count)
+        plan.tasks.isEmpty ? 0 : Double(tasksDone) / Double(plan.tasks.count)
+    }
+
+    var criteriaProgress: Double {
+        plan.acceptanceCriteria.isEmpty ? 0 : Double(criteriaMet) / Double(plan.acceptanceCriteria.count)
     }
 }
 
@@ -49,7 +61,12 @@ struct FeedItem: Identifiable, Hashable {
 @Observable
 final class PlanStore {
     private(set) var plans: [SavedPlan] = []
+    private(set) var folders: [PlanFolder] = []
+    /// A plan id, or `folder:<uuid>` for a folder overview.
     var selection: String?
+    var expandedFolders: Set<UUID> = [] {
+        didSet { UserDefaults.standard.set(expandedFolders.map(\.uuidString), forKey: "expandedFolders") }
+    }
 
     private(set) var runningKey: String?
     private(set) var feed: [FeedItem] = []
@@ -62,14 +79,122 @@ final class PlanStore {
         return dir.appending(path: "plans.json")
     }()
 
+    private var foldersURL: URL { fileURL.deletingLastPathComponent().appending(path: "folders.json") }
+
     init() {
         if let data = try? Data(contentsOf: fileURL),
            let saved = try? JSONDecoder().decode([SavedPlan].self, from: data) {
             plans = saved
         }
+        if let data = try? Data(contentsOf: foldersURL),
+           let saved = try? JSONDecoder().decode([PlanFolder].self, from: data) {
+            folders = saved
+        }
+        expandedFolders = Set((UserDefaults.standard.stringArray(forKey: "expandedFolders") ?? []).compactMap(UUID.init))
     }
 
     var selected: SavedPlan? { plans.first { $0.id == selection } }
+
+    // MARK: - Folders
+
+    static func folderTag(_ id: UUID) -> String { "folder:\(id.uuidString)" }
+
+    var selectedFolder: PlanFolder? {
+        guard let sel = selection, sel.hasPrefix("folder:"), let id = UUID(uuidString: String(sel.dropFirst(7))) else { return nil }
+        return folders.first { $0.id == id }
+    }
+
+    func folder(_ id: UUID?) -> PlanFolder? { id.flatMap { id in folders.first { $0.id == id } } }
+
+    func childFolders(of parent: UUID?) -> [PlanFolder] {
+        folders.filter { $0.parentID == parent }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func plans(in folder: UUID?) -> [SavedPlan] { plans.filter { $0.folderID == folder } }
+
+    /// Plans in a folder and all of its descendants.
+    func allPlans(under folder: UUID) -> [SavedPlan] {
+        plans(in: folder) + childFolders(of: folder).flatMap { allPlans(under: $0.id) }
+    }
+
+    /// Breadcrumb from the root down to `id`.
+    func path(to id: UUID?) -> [PlanFolder] {
+        var out: [PlanFolder] = []
+        var cursor = folder(id)
+        while let f = cursor { out.insert(f, at: 0); cursor = folder(f.parentID) }
+        return out
+    }
+
+    private func isDescendant(_ candidate: UUID?, of ancestor: UUID) -> Bool {
+        var cursor = candidate
+        while let c = cursor {
+            if c == ancestor { return true }
+            cursor = folder(c)?.parentID
+        }
+        return false
+    }
+
+    @discardableResult
+    func createFolder(named name: String = "New Folder", in parent: UUID?, color: FolderColor = .indigo) -> PlanFolder {
+        let f = PlanFolder(name: name, color: color, parentID: parent)
+        folders.append(f)
+        if let parent { expandedFolders.insert(parent) }
+        saveFolders()
+        return f
+    }
+
+    func updateFolder(_ id: UUID, name: String, color: FolderColor) {
+        guard let i = folders.firstIndex(where: { $0.id == id }) else { return }
+        folders[i].name = name.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled" : name
+        folders[i].color = color
+        saveFolders()
+    }
+
+    /// Deletes a folder; its plans and subfolders move up to its parent.
+    func deleteFolder(_ id: UUID) {
+        guard let f = folder(id) else { return }
+        for i in folders.indices where folders[i].parentID == id { folders[i].parentID = f.parentID }
+        for i in plans.indices where plans[i].folderID == id { plans[i].folderID = f.parentID }
+        folders.removeAll { $0.id == id }
+        if selection == Self.folderTag(id) { selection = nil }
+        saveFolders()
+        save()
+    }
+
+    /// Moves a folder under another (nil = top level). Refuses moves into its own subtree.
+    func moveFolder(_ id: UUID, to parent: UUID?) {
+        guard id != parent, !isDescendant(parent, of: id),
+              let i = folders.firstIndex(where: { $0.id == id }) else { return }
+        folders[i].parentID = parent
+        if let parent { expandedFolders.insert(parent) }
+        saveFolders()
+    }
+
+    func movePlan(_ planID: String, to folder: UUID?) {
+        guard let i = plans.firstIndex(where: { $0.id == planID }) else { return }
+        plans[i].folderID = folder
+        if let folder { expandedFolders.insert(folder) }
+        save()
+    }
+
+    /// Handles a sidebar drop payload ("plan:<id>" or "folder:<uuid>") onto a folder.
+    func handleDrop(_ items: [String], onto folder: UUID?) -> Bool {
+        var moved = false
+        for item in items {
+            if item.hasPrefix("folder:"), let id = UUID(uuidString: String(item.dropFirst(7))) {
+                moveFolder(id, to: folder); moved = true
+            } else if item.hasPrefix("plan:") {
+                movePlan(String(item.dropFirst(5)), to: folder); moved = true
+            }
+        }
+        return moved
+    }
+
+    private func saveFolders() {
+        guard let data = try? JSONEncoder().encode(folders) else { return }
+        try? data.write(to: foldersURL, options: .atomic)
+    }
     var isRunning: Bool { runningKey != nil }
 
     /// Accepts "PROJ-123", "proj-123" or a pasted Jira URL.
@@ -104,6 +229,8 @@ final class PlanStore {
         runningKey = key
         runningMode = mode
         runningTracker = tracker
+        // New plans land in the folder you're looking at.
+        let targetFolder = selectedFolder?.id ?? selected?.folderID
         selection = nil
 
         let generator = PlanGenerator(
@@ -125,8 +252,11 @@ final class PlanStore {
                 let previous = plans.first { $0.id == id }
                 // Keep ticks for tasks that survived a re-run.
                 let kept = previous?.done.intersection(plan.tasks.map(\.id)) ?? []
+                var saved = SavedPlan(plan: plan, mode: mode, tracker: tracker, createdAt: .now, done: kept)
+                saved.metCriteria = previous?.metCriteria.intersection(plan.acceptanceCriteria.map(\.id)) ?? []
+                saved.folderID = previous?.folderID ?? targetFolder
                 plans.removeAll { $0.id == id }
-                plans.insert(SavedPlan(plan: plan, mode: mode, tracker: tracker, createdAt: .now, done: kept), at: 0)
+                plans.insert(saved, at: 0)
                 save()
                 selection = id
             } catch is CancellationError {
@@ -145,6 +275,13 @@ final class PlanStore {
     func toggle(_ taskID: String, in planID: String) {
         guard let i = plans.firstIndex(where: { $0.id == planID }) else { return }
         if plans[i].done.contains(taskID) { plans[i].done.remove(taskID) } else { plans[i].done.insert(taskID) }
+        save()
+    }
+
+    func toggleCriterion(_ criterionID: String, in planID: String) {
+        guard let i = plans.firstIndex(where: { $0.id == planID }) else { return }
+        if plans[i].metCriteria.contains(criterionID) { plans[i].metCriteria.remove(criterionID) }
+        else { plans[i].metCriteria.insert(criterionID) }
         save()
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Maps Linear MCP `get_issue` / `list_comments` output onto `TicketDetail`.
 /// Linear's MCP output shape isn't formally documented, so every field is read
@@ -51,13 +52,14 @@ nonisolated extension TicketDetail {
             return linked(related, relation: (r["type"]?.stringValue ?? "related").replacingOccurrences(of: "_", with: " "))
         }
 
+        detail.tracker = .linear
         // Linear "attachments" are links (PRs, Sentry, Figma…), not files.
-        var other: [Field] = []
-        let attachmentLinks = list(i["attachments"]).compactMap { a -> String? in
-            guard let url = a["url"]?.stringValue else { return nil }
-            return "\(a["title"]?.stringValue ?? url) — \(url)"
+        detail.externalLinks = list(i["attachments"]).compactMap { a in
+            guard let s = a["url"]?.stringValue, let url = URL(string: s) else { return nil }
+            return ExternalLink(title: a["title"]?.stringValue ?? s, url: url,
+                                subtitle: a["subtitle"]?.stringValue ?? url.host() ?? "")
         }
-        if !attachmentLinks.isEmpty { other.append(Field(name: "Links", value: attachmentLinks.joined(separator: "\n"))) }
+        var other: [Field] = []
         if let e = i["estimate"], case .number(let n) = e { other.append(Field(name: "Estimate", value: String(Int(n)))) }
         if let branch = i["gitBranchName"]?.stringValue ?? i["branchName"]?.stringValue {
             other.append(Field(name: "Git branch", value: branch))
@@ -65,8 +67,11 @@ nonisolated extension TicketDetail {
         if let team = name(i["team"]) { other.append(Field(name: "Team", value: team)) }
         detail.otherFields = other
 
-        if let comments, let c = try? JSONCoding.decoder.decode(JSONValue.self, from: Data(comments.utf8)) {
-            let items = list(c["comments"] ?? c["nodes"] ?? c)
+        // Comments: from list_comments when available, else embedded in the issue.
+        let commentsJSON = comments.flatMap { try? JSONCoding.decoder.decode(JSONValue.self, from: Data($0.utf8)) }
+            ?? i["comments"]
+        if let c = commentsJSON {
+            let items = list(c["comments"] ?? c)
             detail.comments = items.enumerated().map { idx, item in
                 Comment(
                     id: item["id"]?.stringValue ?? "\(idx)",
@@ -79,7 +84,39 @@ nonisolated extension TicketDetail {
             .sorted { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
             detail.commentTotal = detail.comments.count
         }
+
+        // Files in Linear are uploads linked inline in the description/comments.
+        detail.attachments = uploads(in: ([detail.description] + detail.comments.map(\.body)).joined(separator: "\n"))
         return detail
+    }
+
+    /// `uploads.linear.app` links (images and files) found in markdown, de-duplicated.
+    static func uploads(in markdown: String) -> [Attachment] {
+        var seen = Set<String>()
+        return markdown.matches(of: /(!?)\[([^\]]*)\]\((https:\/\/uploads\.linear\.app\/[^)\s]+)\)/).compactMap { m in
+            let urlString = String(m.3)
+            guard seen.insert(urlString).inserted, let url = URL(string: urlString) else { return nil }
+            let label = String(m.2)
+            let name = label.isEmpty ? url.lastPathComponent : label
+            let ext = (name as NSString).pathExtension.lowercased()
+            let isImage = !m.1.isEmpty || ["png", "jpg", "jpeg", "gif", "webp", "heic"].contains(ext)
+            return Attachment(
+                id: urlString, filename: name,
+                mimeType: isImage ? "image/\(ext.isEmpty ? "png" : ext)" : mime(for: ext),
+                size: 0, author: "", created: nil, contentURL: url, thumbnailURL: url
+            )
+        }
+    }
+
+    private static func mime(for ext: String) -> String {
+        switch ext {
+        case "pdf": "application/pdf"
+        case "mp4", "mov": "video/\(ext)"
+        case "zip": "application/zip"
+        case "json": "application/json"
+        case "txt", "log", "csv": "text/plain"
+        default: "application/octet-stream"
+        }
     }
 
     private static func fallback(key: String, text: String) -> TicketDetail {

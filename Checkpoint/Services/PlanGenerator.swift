@@ -48,8 +48,10 @@ nonisolated struct PlanGenerator: Sendable {
     func run(ticketKey: String, onEvent: @Sendable (Event) async -> Void) async throws -> TestPlan {
         await onEvent(.status("Connecting to \(tracker == .jira ? "Atlassian" : "Linear")…"))
         let listed = tracker == .jira ? try await mcp.authenticatedTools() : try await mcp.listTools()
+        // Jira: expose only read tools. Linear: the /mcp/readonly endpoint only lists
+        // read tools and the server rejects writes, so keep everything it offers.
         let tools = listed
-            .filter { Self.isReadOnly($0.name) }
+            .filter { tracker == .linear || Self.isReadOnly($0.name) }
             .sorted { $0.name < $1.name }
         let toolDefs: [JSONValue] = tools.map {
             var schema = $0.inputSchema
@@ -142,7 +144,7 @@ nonisolated struct PlanGenerator: Sendable {
                 group.addTask {
                     let id = call["id"]?.stringValue ?? ""
                     let name = call["name"]?.stringValue ?? ""
-                    guard Self.isReadOnly(name) else {
+                    guard tracker == .linear || Self.isReadOnly(name) else {
                         return (i, Self.toolResult(id, "Tool \(name) is not available (read-only app).", isError: true))
                     }
                     do {
