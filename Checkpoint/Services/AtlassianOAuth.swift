@@ -1,10 +1,9 @@
 import AppKit
-import AuthenticationServices
 import CryptoKit
 import Foundation
 
 /// OAuth 2.1 for the Atlassian Rovo MCP server: dynamic client registration,
-/// PKCE authorization code flow via ASWebAuthenticationSession, and refresh.
+/// PKCE authorization code flow with a loopback redirect, and refresh.
 actor AtlassianOAuth {
     static let shared = AtlassianOAuth()
 
@@ -28,11 +27,12 @@ actor AtlassianOAuth {
         var expiresAt: Date
     }
 
-    nonisolated static let redirectURI = "checkpoint://oauth/callback"
-    nonisolated static let callbackScheme = "checkpoint"
+    /// Preferred loopback port; a different free port is used (and a new client registered) if it's taken.
+    private static let preferredPort: UInt16 = 33418
     private static let base = URL(string: "https://mcp.atlassian.com/v1/")!
     private static let tokensAccount = "atlassian-oauth"
-    private static let clientIDKey = "atlassianOAuthClientID"
+    /// Registered client IDs, keyed by redirect URI (DCR binds a client to its redirect).
+    private static let clientIDsKey = "atlassianOAuthClientIDs"
 
     private var refreshTask: Task<Tokens, Error>?
 
@@ -60,7 +60,10 @@ actor AtlassianOAuth {
     // MARK: - Sign in
 
     func signIn() async throws {
-        let clientID = try await clientID()
+        let server = LoopbackServer(preferredPort: Self.preferredPort)
+        let redirectURI = try await server.start()
+        defer { server.stop() }
+        let clientID = try await clientID(for: redirectURI)
         let verifier = Self.randomURLSafe(32)
         let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded
         let state = Self.randomURLSafe(16)
@@ -69,13 +72,16 @@ actor AtlassianOAuth {
         comps.queryItems = [
             .init(name: "response_type", value: "code"),
             .init(name: "client_id", value: clientID),
-            .init(name: "redirect_uri", value: Self.redirectURI),
+            .init(name: "redirect_uri", value: redirectURI),
             .init(name: "code_challenge", value: challenge),
             .init(name: "code_challenge_method", value: "S256"),
             .init(name: "state", value: state),
         ]
 
-        let callback = try await WebAuth.run(url: comps.url!, scheme: Self.callbackScheme)
+        // Default browser: already signed in to Atlassian, and loopback needs no admin allowlisting.
+        await MainActor.run { _ = NSWorkspace.shared.open(comps.url!) }
+        let callback = try await server.waitForCallback()
+        await MainActor.run { NSApp.activate() }
         let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if let err = items.first(where: { $0.name == "error" })?.value {
             let desc = items.first(where: { $0.name == "error_description" })?.value ?? err
@@ -91,23 +97,27 @@ actor AtlassianOAuth {
         let tokens = try await tokenRequest([
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": Self.redirectURI,
+            "redirect_uri": redirectURI,
             "client_id": clientID,
             "code_verifier": verifier,
         ], previousRefresh: nil)
         saveTokens(tokens)
+        UserDefaults.standard.set(clientID, forKey: Self.activeClientKey)
     }
 
     // MARK: - Internals
 
-    private func clientID() async throws -> String {
-        if let id = UserDefaults.standard.string(forKey: Self.clientIDKey) { return id }
+    private static let activeClientKey = "atlassianOAuthActiveClient"
+
+    private func clientID(for redirectURI: String) async throws -> String {
+        var ids = UserDefaults.standard.dictionary(forKey: Self.clientIDsKey) as? [String: String] ?? [:]
+        if let id = ids[redirectURI] { return id }
         var req = URLRequest(url: Self.base.appending(path: "register"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: JSONValue = [
             "client_name": "Checkpoint",
-            "redirect_uris": [.string(Self.redirectURI)],
+            "redirect_uris": [.string(redirectURI)],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",
@@ -118,15 +128,16 @@ actor AtlassianOAuth {
         guard (response as? HTTPURLResponse)?.statusCode ?? 0 < 300, let id = json?["client_id"]?.stringValue else {
             throw OAuthError.badResponse("client registration failed: \(String(decoding: data, as: UTF8.self).prefix(200))")
         }
-        UserDefaults.standard.set(id, forKey: Self.clientIDKey)
+        ids[redirectURI] = id
+        UserDefaults.standard.set(ids, forKey: Self.clientIDsKey)
         return id
     }
 
     private func refresh(_ tokens: Tokens) async throws -> Tokens {
         // Coalesce concurrent refreshes (parallel tool calls) into one request.
         if let refreshTask { return try await refreshTask.value }
-        guard let refreshToken = tokens.refreshToken else { throw OAuthError.notSignedIn }
-        let clientID = try await clientID()
+        guard let refreshToken = tokens.refreshToken,
+              let clientID = UserDefaults.standard.string(forKey: Self.activeClientKey) else { throw OAuthError.notSignedIn }
         let task = Task {
             try await self.tokenRequest([
                 "grant_type": "refresh_token",
@@ -188,40 +199,6 @@ actor AtlassianOAuth {
         var buf = [UInt8](repeating: 0, count: bytes)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes, &buf)
         return Data(buf).base64URLEncoded
-    }
-}
-
-/// Runs ASWebAuthenticationSession on the main actor and returns the callback URL.
-private final class WebAuth: NSObject, ASWebAuthenticationPresentationContextProviding {
-    private static var current: WebAuth?
-    private var session: ASWebAuthenticationSession?
-
-    static func run(url: URL, scheme: String) async throws -> URL {
-        let auth = WebAuth()
-        current = auth
-        defer { current = nil }
-        return try await withCheckedThrowingContinuation { cont in
-            let session = ASWebAuthenticationSession(url: url, callback: .customScheme(scheme)) { callback, error in
-                if let callback {
-                    cont.resume(returning: callback)
-                } else if let error = error as? ASWebAuthenticationSessionError, error.code == .canceledLogin {
-                    cont.resume(throwing: AtlassianOAuth.OAuthError.cancelled)
-                } else {
-                    cont.resume(throwing: error ?? AtlassianOAuth.OAuthError.cancelled)
-                }
-            }
-            // Reuse the browser's existing Atlassian login.
-            session.prefersEphemeralWebBrowserSession = false
-            session.presentationContextProvider = auth
-            auth.session = session
-            if !session.start() {
-                cont.resume(throwing: AtlassianOAuth.OAuthError.badResponse("couldn't open the sign-in window"))
-            }
-        }
-    }
-
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
     }
 }
 

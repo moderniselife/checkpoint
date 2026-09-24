@@ -73,7 +73,7 @@ struct SettingsView: View {
                         Text("Your org admin must allow API-token auth for the Rovo MCP server.")
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Opens Atlassian's consent screen in a secure browser sheet. Tokens refresh automatically.")
+                        Text("Opens Atlassian's consent screen in your browser, then returns here. Tokens refresh automatically.")
                             .foregroundStyle(.secondary)
                     }
                     Text("Checkpoint only ever uses read-only tools.").foregroundStyle(.secondary)

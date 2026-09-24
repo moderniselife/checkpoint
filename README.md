@@ -22,9 +22,11 @@ its comments, children, parent epic, linked issues and Confluence specs, then pr
    - **Connect with**: *Sign in with Atlassian* (OAuth, default) or *API token* (email + token from https://id.atlassian.com/manage-profile/security/api-tokens)
    - Hit **Test connection** — it should show your name.
 
-OAuth uses dynamic client registration + PKCE against `mcp.atlassian.com`, the system
-`ASWebAuthenticationSession` sheet (reuses your browser login), redirect `checkpoint://oauth/callback`,
-and refreshes tokens automatically (including once on a mid-run 401).
+OAuth uses dynamic client registration + PKCE against `mcp.atlassian.com`, opens your default
+browser, and catches the redirect on `http://127.0.0.1:33418/callback` (falls back to a free port).
+Loopback redirects are pre-approved in Atlassian's MCP domain allowlist, so no admin change is
+needed — custom schemes like `checkpoint://` would need allowlisting. Tokens refresh automatically
+(including once on a mid-run 401).
 
 > API-token auth for the Rovo MCP server must be enabled by your Atlassian org admin.
 > With bad credentials Atlassian still answers, but hides the Jira tools — Checkpoint detects this.
