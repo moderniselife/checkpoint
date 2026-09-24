@@ -162,6 +162,11 @@ assets/       logo.png (master), logo-512.png (README)
 project.yml   XcodeGen spec (the .xcodeproj is generated, not committed)
 ```
 
+## Feature tracker
+
+See [`FEATURES.md`](FEATURES.md) for every feature, its verification status, Jira↔Linear parity,
+known limitations, support guide, backlog and changelog.
+
 ## Troubleshooting
 
 - **"Atlassian rejected your credentials"** with an API token → your admin hasn't enabled API-token
