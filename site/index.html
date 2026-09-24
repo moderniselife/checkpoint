@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Checkpoint — AI Test Plan Generator for Jira &amp; Linear (macOS)</title>
 <meta name="description" content="Turn any Jira or Linear ticket into a QA test plan in a minute: test cases, an acceptance-criteria checklist and edge cases, written for you. Free macOS app.">
-<meta name="keywords" content="test plan generator, AI test cases, Jira test plan, Linear test plan, test cases from Jira ticket, acceptance criteria checklist, QA checklist, manual testing, UAT, regression testing, macOS app, Claude, OpenAI, GPT, Gemini, Grok, OpenRouter, local LLM, Ollama, LM Studio">
+<meta name="keywords" content="test plan generator, AI test cases, Jira test plan, Linear test plan, test cases from Jira ticket, acceptance criteria checklist, QA checklist, manual testing, UAT, regression testing, macOS app, Claude, OpenAI, GPT, Gemini, Grok, OpenRouter, local LLM, Ollama, LM Studio, test scenarios, end-to-end testing">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
 <meta name="author" content="Checkpoint">
 <meta name="application-name" content="Checkpoint">
@@ -76,13 +76,14 @@
         "Generate test cases from Jira and Linear tickets",
         "Works with Anthropic Claude, OpenAI, Google Gemini, xAI Grok, OpenRouter and local models (Ollama, LM Studio, vLLM)",
         "Acceptance criteria checklist with coverage tracking",
+        "Optional end-to-end test scenarios from related tickets or a read-only codebase",
         "Dev and QA (black-box) test plan modes",
         "Reads comments, epic children, linked issues and Confluence specs",
         "Ticket details panel with comments, attachments and history",
         "Folders, research log and live progress",
         "Read-only access to Jira and Linear"
       ],
-      "keywords": "test plan generator, AI test cases, Jira, Linear, acceptance criteria, QA, manual testing, UAT, regression testing, OpenAI, Gemini, Grok, OpenRouter, local LLM, Ollama"
+      "keywords": "test plan generator, AI test cases, Jira, Linear, acceptance criteria, QA, manual testing, UAT, regression testing, OpenAI, Gemini, Grok, OpenRouter, local LLM, Ollama, test scenarios, end-to-end testing, user journeys"
     },
     {
       "@type": "WebSite",
@@ -172,6 +173,22 @@
           "acceptedAnswer": {
             "@type": "Answer",
             "text": "Yes. Point Checkpoint at any OpenAI-compatible server (Ollama, LM Studio, vLLM, llama.cpp) or Anthropic-compatible endpoint (such as LiteLLM) on your machine or network. No API key needed, and ticket content stays local. Use a model with tool calling and a large context window for big epics."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What are test scenarios?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "An optional extra: besides the step-by-step test cases, Checkpoint can write 3–6 end-to-end user journeys that exercise the change in context — through the screens and features around it — with a role, goal, steps and end result. Build them from related tickets alone, or also let Checkpoint read your codebase (read-only, only the folder you choose) for journeys that match how the product really works."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I build Checkpoint from source?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Clone the GitHub repository and run ./build.sh — it checks for Xcode 26 and XcodeGen and produces a universal Checkpoint.app in the dist folder. Add --install to copy it to Applications."
           }
         },
         {
@@ -605,6 +622,7 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
     <symbol id="i-key" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="8" cy="15" r="4.5"/><path d="m11.2 11.8 8.3-8.3M16.5 6.5l2.5 2.5M14 9l2 2"/></g></symbol>
     <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></g></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="5" r="2.2"/><path d="M8.2 19H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.8"/></g></symbol>
     <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5M9 12h6M9 16h6"/></g></symbol>
   </defs>
 </svg>
@@ -800,9 +818,14 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
       <p>Go back to every lookup and thought behind a plan, with timestamps and duration.</p>
     </div>
     <div class="tile glass reveal">
+      <div class="ic"><svg><use href="#i-route"/></svg></div>
+      <h3>End-to-end scenarios</h3>
+      <p>Optional: realistic user journeys through neighbouring features, built from related tickets — or your codebase, read-only.</p>
+    </div>
+    <div class="tile glass full reveal" style="min-height:0">
       <div class="ic"><svg><use href="#i-link"/></svg></div>
-      <h3>Jira and Linear</h3>
-      <p>Same features for both. Paste a link and Checkpoint picks the right tracker.</p>
+      <h3>Jira and Linear — with the AI you choose</h3>
+      <p>Same features for both trackers: paste a link and Checkpoint picks the right one. Plans are written by Claude, GPT, Gemini, Grok, anything on OpenRouter, or a model running on your own machine.</p>
     </div>
   </div>
 </section>
@@ -967,6 +990,8 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
     <details class="glass"><summary>How is this different from a test case management tool?</summary><p>Test management tools store test cases you write by hand. Checkpoint writes the test plan for you from the ticket itself, keeps it next to the full ticket details, and tracks what you've tested — no spreadsheet or separate tool to maintain.</p></details>
     <details class="glass"><summary>Does it work with OpenAI, Gemini or Grok?</summary><p>Yes. Checkpoint supports OpenAI, Google Gemini, xAI Grok and OpenRouter alongside Anthropic Claude. Paste your API key, fetch the model list, and pick any model that supports tool calling.</p></details>
     <details class="glass"><summary>Can I use a local LLM like Ollama or LM Studio?</summary><p>Yes. Point Checkpoint at any OpenAI-compatible server (Ollama, LM Studio, vLLM, llama.cpp) or Anthropic-compatible endpoint (such as LiteLLM) on your machine or network. No API key needed, and ticket content stays local. Use a model with tool calling and a large context window for big epics.</p></details>
+    <details class="glass"><summary>What are test scenarios?</summary><p>An optional extra: besides the step-by-step test cases, Checkpoint can write 3–6 end-to-end user journeys that exercise the change in context — through the screens and features around it — with a role, goal, steps and end result. Build them from related tickets alone, or also let Checkpoint read your codebase (read-only, only the folder you choose) for journeys that match how the product really works.</p></details>
+    <details class="glass"><summary>Can I build Checkpoint from source?</summary><p>Yes. Clone the GitHub repository and run ./build.sh — it checks for Xcode 26 and XcodeGen and produces a universal Checkpoint.app in the dist folder. Add --install to copy it to Applications.</p></details>
     <details class="glass"><summary>Is Checkpoint free?</summary><p>Yes — it's free and open source. You bring your own AI provider key and pay that provider directly for what your plans use — or run a local model for free.</p></details>
     <details class="glass"><summary>Can it change my tickets?</summary><p>No. Checkpoint only ever reads. For Jira it exposes read tools only; for Linear it uses Linear's read-only MCP endpoint with a read-only scope, so Linear itself blocks writes.</p></details>
     <details class="glass"><summary>Does my data go through your servers?</summary><p>There are no Checkpoint servers. The app talks directly to your tracker's MCP server and to Anthropic's API. Plans are saved locally on your Mac.</p></details>
