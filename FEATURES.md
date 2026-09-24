@@ -124,6 +124,14 @@ verified, what's known to be rough, and how to fix things when they break.
 | App icon (full-bleed, no macOS 26 icon-jail) + in-app logo | ✅ | `Assets.xcassets` | Dock |
 | Custom placeholder in ticket field | ✅ | `TicketInputBar` | — |
 
+### 1.9 Distribution
+
+| Feature | Status | Where | How to verify |
+|---|---|---|---|
+| GitHub Action: tag → universal Release build → DMG + zip + SHA256 → GitHub Release | 🧪 | `.github/workflows/release.yml` | Unsigned path dry-run locally (universal, DMG, zip); first CI run pending |
+| Developer ID signing + notarization + stapling when secrets are set | 🔍 | same | Add the five secrets, push a tag |
+| Ad-hoc signed fallback when no secrets | 🧪 | same | Dry-run verified locally |
+
 ---
 
 ## 2. Jira ↔ Linear parity
@@ -218,6 +226,7 @@ To reset: quit, delete the `Checkpoint` folder above, remove the Keychain items.
 
 | Idea | Notes |
 |---|---|
+| 💡 Auto-update via Sparkle (appcast from GitHub Releases) | Needs Developer ID signing first |
 | 💡 Post the plan back to Jira/Linear as a comment | Needs a write-capable connection + explicit confirmation |
 | 💡 Icon Composer `.icon` with layered glass | Split logo into foreground/background layers |
 | 💡 Menu-bar quick analyze | Global shortcut → paste key |

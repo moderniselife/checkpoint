@@ -1,0 +1,202 @@
+name: Release
+
+# Builds Checkpoint.app (universal), signs it, and publishes a GitHub Release
+# with a DMG, a zip and SHA-256 checksums.
+#
+# Trigger: push a tag like `v0.2.0`, or run manually from the Actions tab.
+#
+# Signing:
+#   • With the Developer ID secrets below → Developer ID signed, notarized and stapled
+#     (opens with no Gatekeeper warning).
+#   • Without them → ad-hoc signed (users right-click → Open the first time).
+#
+# Optional secrets (Settings → Secrets and variables → Actions):
+#   MACOS_CERTIFICATE_P12        base64 of your "Developer ID Application" .p12
+#   MACOS_CERTIFICATE_PASSWORD   password for that .p12
+#   APPLE_TEAM_ID                10-character team ID
+#   APPLE_ID                     Apple ID email used for notarization
+#   APPLE_APP_PASSWORD           app-specific password for that Apple ID
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.2.0). Creates tag v<version>."
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      APP_NAME: Checkpoint
+      HAS_SIGNING: ${{ secrets.MACOS_CERTIFICATE_P12 != '' && secrets.APPLE_TEAM_ID != '' }}
+      HAS_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing $VERSION (build ${{ github.run_number }})"
+
+      - name: Select Xcode 26
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Import Developer ID certificate
+        if: env.HAS_SIGNING == 'true'
+        env:
+          P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Build (universal, Release)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "$HAS_SIGNING" = "true" ]; then
+            SIGNING=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application"
+                     DEVELOPMENT_TEAM="$TEAM_ID" OTHER_CODE_SIGN_FLAGS=--timestamp)
+          else
+            SIGNING=(CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=)
+          fi
+          set -o pipefail
+          xcodebuild \
+            -project "$APP_NAME.xcodeproj" \
+            -scheme "$APP_NAME" \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            "${SIGNING[@]}" \
+            build | xcbeautify --renderer github-actions
+          APP="build/Build/Products/Release/$APP_NAME.app"
+          test -d "$APP"
+          mkdir -p dist
+          cp -R "$APP" dist/
+          lipo -info "dist/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+          codesign --verify --deep --strict --verbose=2 "dist/$APP_NAME.app"
+          # Notarization rejects the debug-only get-task-allow entitlement.
+          if codesign -d --entitlements - "dist/$APP_NAME.app" 2>/dev/null | grep -q get-task-allow; then
+            echo "::error::Release build still has get-task-allow"; exit 1
+          fi
+
+      - name: Create DMG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          STAGE="$RUNNER_TEMP/dmg"
+          mkdir -p "$STAGE"
+          cp -R "dist/$APP_NAME.app" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO \
+            "dist/$APP_NAME-$VERSION.dmg"
+          if [ "$HAS_SIGNING" = "true" ]; then
+            codesign --sign "Developer ID Application" --timestamp "dist/$APP_NAME-$VERSION.dmg"
+          fi
+
+      - name: Notarize and staple
+        if: env.HAS_SIGNING == 'true' && env.HAS_NOTARY == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG="dist/$APP_NAME-$VERSION.dmg"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$TEAM_ID" \
+            --wait --timeout 30m
+          # Notarizing the DMG also registers a ticket for the app inside it.
+          xcrun stapler staple "$DMG"
+          xcrun stapler staple "dist/$APP_NAME.app"
+          spctl --assess --type open --context context:primary-signature -v "$DMG" || true
+
+      - name: Zip app and checksums
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd dist
+          ditto -c -k --keepParent "$APP_NAME.app" "$APP_NAME-$VERSION.zip"
+          shasum -a 256 "$APP_NAME-$VERSION.dmg" "$APP_NAME-$VERSION.zip" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Release notes header
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$HAS_SIGNING" = "true" ] && [ "$HAS_NOTARY" = "true" ]; then
+            INSTALL="Signed with Developer ID and notarized by Apple — open the DMG and drag **Checkpoint** to Applications."
+          else
+            INSTALL=$'This build is **ad-hoc signed** (not notarized). After dragging **Checkpoint** to Applications, right-click it → **Open** the first time, or run:\n\n```bash\nxattr -dr com.apple.quarantine /Applications/Checkpoint.app\n```'
+          fi
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          ## Checkpoint $VERSION
+
+          Requires **macOS 26** or later · Universal (Apple Silicon + Intel)
+
+          ### Install
+          $INSTALL
+
+          Verify downloads against \`SHA256SUMS.txt\`.
+          EOF
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Checkpoint ${{ steps.version.outputs.version }}
+          body_path: ${{ runner.temp }}/notes.md
+          generate_release_notes: true
+          files: |
+            dist/Checkpoint-${{ steps.version.outputs.version }}.dmg
+            dist/Checkpoint-${{ steps.version.outputs.version }}.zip
+            dist/SHA256SUMS.txt
+
+      - name: Clean up keychain
+        if: always() && env.HAS_SIGNING == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
