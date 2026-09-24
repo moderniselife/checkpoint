@@ -60,11 +60,11 @@
       "url": "https://checkpoint.guide/",
       "downloadUrl": "https://github.com/moderniselife/checkpoint/releases/latest",
       "installUrl": "https://github.com/moderniselife/checkpoint/releases/latest",
-      "softwareVersion": "0.2.0",
+      "softwareVersion": "0.3.0",
       "image": "https://checkpoint.guide/og.jpg",
       "screenshot": "https://checkpoint.guide/og.jpg",
       "isAccessibleForFree": true,
-      "license": "https://github.com/moderniselife/checkpoint",
+      "license": "https://opensource.org/license/mit",
       "codeRepository": "https://github.com/moderniselife/checkpoint",
       "offers": {
         "@type": "Offer",
@@ -77,6 +77,7 @@
         "Works with Anthropic Claude, OpenAI, Google Gemini, xAI Grok, OpenRouter and local models (Ollama, LM Studio, vLLM)",
         "Acceptance criteria checklist with coverage tracking",
         "Optional end-to-end test scenarios from related tickets or a read-only codebase",
+        "Export plans as Markdown or a self-contained HTML page",
         "Dev and QA (black-box) test plan modes",
         "Reads comments, epic children, linked issues and Confluence specs",
         "Ticket details panel with comments, attachments and history",
@@ -193,10 +194,18 @@
         },
         {
           "@type": "Question",
+          "name": "Can I share or export a test plan?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Copy a plan as Markdown for Jira comments and pull requests, or save it as a self-contained HTML page styled like the app — light and dark mode, print-friendly, with checkboxes anyone can tick in their browser."
+          }
+        },
+        {
+          "@type": "Question",
           "name": "Is Checkpoint free?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes — it's free and open source. You bring your own AI provider key and pay that provider directly for what your plans use — or run a local model for free."
+            "text": "Yes — it's free and open source under the MIT license. You bring your own AI provider key and pay that provider directly for what your plans use — or run a local model for free."
           }
         },
         {
@@ -800,7 +809,7 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
     <div class="tile glass reveal">
       <div class="ic"><svg><use href="#i-panel"/></svg></div>
       <h3>Every detail, one panel</h3>
-      <p>Description, inline images, attachments, comments, work log, history and custom fields — in floating glass tabs.</p>
+      <p>Description, inline images, attachments, epic children, comments, work log, history and custom fields — in floating glass tabs.</p>
     </div>
     <div class="tile glass reveal">
       <div class="ic"><svg><use href="#i-folder"/></svg></div>
@@ -822,10 +831,15 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
       <h3>End-to-end scenarios</h3>
       <p>Optional: realistic user journeys through neighbouring features, built from related tickets — or your codebase, read-only.</p>
     </div>
-    <div class="tile glass full reveal" style="min-height:0">
+    <div class="tile glass wide reveal">
+      <div class="ic"><svg><use href="#i-doc"/></svg></div>
+      <h3>Export &amp; share</h3>
+      <p>Save any plan as Markdown or a beautiful self-contained HTML page — light/dark, printable, tickable in the browser. Perfect for sign-offs and Jira comments.</p>
+    </div>
+    <div class="tile glass wide reveal">
       <div class="ic"><svg><use href="#i-link"/></svg></div>
-      <h3>Jira and Linear — with the AI you choose</h3>
-      <p>Same features for both trackers: paste a link and Checkpoint picks the right one. Plans are written by Claude, GPT, Gemini, Grok, anything on OpenRouter, or a model running on your own machine.</p>
+      <h3>Jira &amp; Linear, any AI</h3>
+      <p>Same features for both trackers — paste a link and Checkpoint picks the right one. Plans by Claude, GPT, Gemini, Grok, OpenRouter or a local model.</p>
     </div>
   </div>
 </section>
@@ -992,7 +1006,8 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
     <details class="glass"><summary>Can I use a local LLM like Ollama or LM Studio?</summary><p>Yes. Point Checkpoint at any OpenAI-compatible server (Ollama, LM Studio, vLLM, llama.cpp) or Anthropic-compatible endpoint (such as LiteLLM) on your machine or network. No API key needed, and ticket content stays local. Use a model with tool calling and a large context window for big epics.</p></details>
     <details class="glass"><summary>What are test scenarios?</summary><p>An optional extra: besides the step-by-step test cases, Checkpoint can write 3–6 end-to-end user journeys that exercise the change in context — through the screens and features around it — with a role, goal, steps and end result. Build them from related tickets alone, or also let Checkpoint read your codebase (read-only, only the folder you choose) for journeys that match how the product really works.</p></details>
     <details class="glass"><summary>Can I build Checkpoint from source?</summary><p>Yes. Clone the GitHub repository and run ./build.sh — it checks for Xcode 26 and XcodeGen and produces a universal Checkpoint.app in the dist folder. Add --install to copy it to Applications.</p></details>
-    <details class="glass"><summary>Is Checkpoint free?</summary><p>Yes — it's free and open source. You bring your own AI provider key and pay that provider directly for what your plans use — or run a local model for free.</p></details>
+    <details class="glass"><summary>Can I share or export a test plan?</summary><p>Yes. Copy a plan as Markdown for Jira comments and pull requests, or save it as a self-contained HTML page styled like the app — light and dark mode, print-friendly, with checkboxes anyone can tick in their browser.</p></details>
+    <details class="glass"><summary>Is Checkpoint free?</summary><p>Yes — it's free and open source under the MIT license. You bring your own AI provider key and pay that provider directly for what your plans use — or run a local model for free.</p></details>
     <details class="glass"><summary>Can it change my tickets?</summary><p>No. Checkpoint only ever reads. For Jira it exposes read tools only; for Linear it uses Linear's read-only MCP endpoint with a read-only scope, so Linear itself blocks writes.</p></details>
     <details class="glass"><summary>Does my data go through your servers?</summary><p>There are no Checkpoint servers. The app talks directly to your tracker's MCP server and to Anthropic's API. Plans are saved locally on your Mac.</p></details>
     <details class="glass"><summary>Which Macs does it run on?</summary><p>Any Mac on macOS 26 or later — it's a universal app for Apple Silicon and Intel.</p></details>
@@ -1024,6 +1039,7 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
       <a href="https://github.com/moderniselife/checkpoint/releases">Releases</a>
       <a href="https://github.com/moderniselife/checkpoint/blob/main/FEATURES.md">Features &amp; support</a>
       <a href="https://github.com/moderniselife/checkpoint/issues">Report an issue</a>
+      <a href="https://github.com/moderniselife/checkpoint/blob/main/LICENSE">MIT license</a>
     </nav>
     <span>Not affiliated with Atlassian, Linear or Anthropic.</span>
   </div>

@@ -55,6 +55,11 @@ Toggle in the input bar (**⌘⇧M**); default in Settings.
 Set **Hosted environment** (e.g. `https://app.dev.example.com (DEV)`) and QA plans aim at it.
 Dev and QA plans for the same ticket live side by side — right-click → **Run in QA/Dev mode**.
 
+### Export & share
+**Export** in the plan toolbar: copy Markdown, save a `.md`, or save a self-contained **HTML page** in the
+Checkpoint Liquid Glass style — light/dark, print-friendly, with checkboxes you can tick in the browser and live
+progress rings. Great for Jira comments, PRs, sign-off docs or sending to someone without the app.
+
 ### Scenarios (optional)
 Turn on **Scenarios** in the input bar to add 3–6 end-to-end user journeys to each plan — realistic flows that start
 before the changed screen and carry on through neighbouring features, with a role, goal, steps and end result.
@@ -65,7 +70,7 @@ before the changed screen and carry on through neighbouring features, with a rol
 ### Ticket panel
 Click any ticket key (feed, plan header, task groups, AC sources, source chips) or hit
 **Ticket details / ⌘I** to slide in a resizable Liquid Glass panel with *everything*:
-fields, time tracking, description (task lists, tables, code, panels), **inline images**,
+fields, time tracking, description (task lists, tables, code, panels), **inline images**, **epic child issues**,
 attachments with previews, parent / sub-issues / links (navigable, with Back),
 comments, work log, change history and every other custom field.
 
@@ -259,6 +264,10 @@ requests; report security issues privately per [SECURITY.md](SECURITY.md). Every
 
 See [`FEATURES.md`](FEATURES.md) for every feature, its verification status, Jira↔Linear parity,
 known limitations, support guide, backlog and changelog.
+
+## License
+
+[MIT](LICENSE) © 2026 Joseph Shenton
 
 ## Troubleshooting
 

@@ -60,7 +60,7 @@ New, untriaged ideas land here (`./ideas/idea "…"` appends to this table). Mov
 |---|---|---|---|---|---|
 | IDEA-040 | Post plan as a comment | Jira/Linear comment with the plan (explicit confirm; needs write scope) | L | M | 💭 |
 | IDEA-041 | Post results summary | Pass/fail counts + evidence links back to the ticket | L | M | 💭 |
-| IDEA-042 | Export PDF / HTML report | Per plan or per folder, for release sign-off | L | M | 💭 |
+| IDEA-042 | Export PDF / HTML report | Per plan: HTML + Markdown shipped in 0.3.0 (print → PDF). Per folder still open | L | M | ✅ |
 | IDEA-043 | Folder test report | Rolled-up metrics + per-plan status for a sprint/release | L | M | 💭 |
 | IDEA-044 | Share to Slack | Send plan or results to a channel | M | M | 💭 |
 | IDEA-045 | Team sync | Share plans/folders via iCloud Drive or a shared folder | M | L | 💭 |
