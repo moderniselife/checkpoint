@@ -48,8 +48,10 @@ final class TicketInspector {
                     "cloudId": .string(cloudID),
                     "issueIdOrKey": .string(key),
                     "fields": ["*all"],
-                    "expand": "names,changelog",
-                    "responseContentFormat": "markdown",
+                    // ADF + renderedFields keep inline images resolvable to attachment IDs;
+                    // the markdown format drops or blob-ifies them.
+                    "expand": "names,changelog,renderedFields",
+                    "responseContentFormat": "adf",
                 ])
                 if result.isError { throw TicketDetail.ParseError.notFound(result.text) }
                 let raw = try JSONCoding.decoder.decode(JSONValue.self, from: Data(result.text.utf8))
@@ -92,11 +94,12 @@ actor AttachmentLoader {
 
         var attempts: [(URL, String)] = []
         if let basic = creds.basicHeader, !creds.site.isEmpty,
-           let url = URL(string: "https://\(creds.site)/rest/api/3/attachment/\(kind)/\(attachment.id)") {
+           let url = URL(string: "https://\(creds.site)/rest/api/3/attachment/\(kind)/\(attachment.id)?redirect=false") {
             attempts.append((url, basic))
         }
         if creds.useOAuth, let token = try? await AtlassianOAuth.shared.accessToken(),
-           let url = full ? attachment.contentURL : (attachment.thumbnailURL ?? attachment.contentURL) {
+           let base = full ? attachment.contentURL : (attachment.thumbnailURL ?? attachment.contentURL),
+           let url = URL(string: base.absoluteString + "?redirect=false") {
             attempts.append((url, "Bearer " + token))
         }
 

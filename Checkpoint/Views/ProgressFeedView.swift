@@ -51,20 +51,42 @@ private struct FeedRow: View {
                 .disabled(key == nil)
                 .help(key.map { "Show \($0) details" } ?? "")
         case .thinking:
+            let multiline = item.detail.contains("\n") || item.detail.count > 90
             VStack(alignment: .leading, spacing: 6) {
-                Label(item.title, systemImage: "brain")
+                Button {
+                    withAnimation(.smooth) { expanded.toggle() }
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "brain")
+                        Text(expanded ? "Thinking" : item.title)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if multiline {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .rotationEffect(.degrees(expanded ? 90 : 0))
+                        }
+                    }
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .lineLimit(expanded ? nil : 1)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .disabled(!multiline)
+                .help(expanded ? "Collapse" : "Expand")
+
                 if expanded {
                     Text(item.detail)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.background.opacity(0.4), in: .rect(cornerRadius: 12))
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .contentShape(.rect)
-            .onTapGesture { withAnimation(.smooth) { expanded.toggle() } }
         }
     }
 

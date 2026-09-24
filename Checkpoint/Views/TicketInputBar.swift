@@ -13,9 +13,19 @@ struct TicketInputBar: View {
                 HStack(spacing: 10) {
                     Image(systemName: "ticket")
                         .foregroundStyle(.secondary)
-                    TextField("Jira key or link — e.g. PROJ-123", text: $input)
+                    // Custom placeholder: macOS hides the built-in one as soon as the field
+                    // is focused, and this field auto-focuses, so it was never visible.
+                    TextField("", text: $input)
                         .textFieldStyle(.plain)
                         .font(.title3)
+                        .background(alignment: .leading) {
+                            if input.isEmpty {
+                                Text("Jira key or link — e.g. PROJ-123")
+                                    .font(.title3)
+                                    .foregroundStyle(.tertiary)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                         .focused($focused)
                         .onSubmit(submit)
                         .disabled(store.isRunning)

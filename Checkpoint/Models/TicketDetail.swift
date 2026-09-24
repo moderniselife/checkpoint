@@ -132,6 +132,7 @@ nonisolated extension TicketDetail {
             throw ParseError.notFound(raw["error"]?.stringValue ?? raw.compactString)
         }
         let names = node["names"]
+        let media = MediaResolver(attachments: f["attachment"]?.arrayValue ?? [], rendered: node["renderedFields"])
 
         var detail = TicketDetail(
             key: key,
@@ -150,7 +151,7 @@ nonisolated extension TicketDetail {
             components: (f["components"]?.arrayValue ?? []).compactMap { $0["name"]?.stringValue },
             fixVersions: (f["fixVersions"]?.arrayValue ?? []).compactMap { $0["name"]?.stringValue },
             parent: f["parent"].flatMap { linked($0, relation: "parent") },
-            description: text(f["description"]),
+            description: markdown(f["description"], media),
             comments: [],
             commentTotal: 0,
             attachments: [],
@@ -171,7 +172,7 @@ nonisolated extension TicketDetail {
                 author: person(c["author"]) ?? Person(name: "Unknown"),
                 created: JiraDate.parse(c["created"]?.stringValue),
                 updated: JiraDate.parse(c["updated"]?.stringValue),
-                body: text(c["body"])
+                body: markdown(c["body"], media)
             )
         }
         detail.commentTotal = int(f["comment"]?["total"]) ?? comments.count
@@ -197,7 +198,7 @@ nonisolated extension TicketDetail {
                 started: JiraDate.parse(w["started"]?.stringValue),
                 timeSpent: w["timeSpent"]?.stringValue ?? "",
                 seconds: int(w["timeSpentSeconds"]) ?? 0,
-                comment: text(w["comment"])
+                comment: markdown(w["comment"], media)
             )
         }
         detail.worklogTotal = int(f["worklog"]?["total"]) ?? worklogs.count
@@ -240,6 +241,160 @@ nonisolated extension TicketDetail {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         }
         return detail
+    }
+
+
+    // MARK: ADF → markdown
+
+    /// Maps ADF media nodes to Jira attachment IDs. ADF only carries a media-service
+    /// UUID plus `alt` (the filename), so match on filename, falling back to the
+    /// `<img src=".../attachment/content/ID" alt="...">` tags in renderedFields.
+    struct MediaResolver {
+        private var byFilename: [String: String] = [:]
+
+        init(attachments: [JSONValue], rendered: JSONValue?) {
+            for a in attachments {
+                if let name = a["filename"]?.stringValue, let id = a["id"]?.stringValue, byFilename[name] == nil {
+                    byFilename[name] = id
+                }
+            }
+            let html = rendered?.compactString ?? ""
+            for m in html.matches(of: /attachment\/content\/(\d+)\\?"[^>]*?alt=\\?"([^"\\]+)/) {
+                let name = String(m.2), id = String(m.1)
+                if byFilename[name] == nil { byFilename[name] = id }
+            }
+        }
+
+        func attachmentID(for attrs: JSONValue?) -> String? {
+            guard let alt = attrs?["alt"]?.stringValue else { return nil }
+            return byFilename[alt]
+        }
+    }
+
+    /// Jira body → markdown. Strings (already markdown) pass through; ADF docs are
+    /// converted so images become `![alt](attachment:ID)` the panel can load inline.
+    static func markdown(_ v: JSONValue?, _ media: MediaResolver) -> String {
+        guard let v else { return "" }
+        if let s = v.stringValue { return s }
+        guard v["type"]?.stringValue == "doc" else { return "" }
+        return blocks(v["content"], media, indent: 0)
+            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func blocks(_ content: JSONValue?, _ media: MediaResolver, indent: Int) -> String {
+        (content?.arrayValue ?? []).map { block($0, media, indent: indent) }.joined()
+    }
+
+    private static func block(_ n: JSONValue, _ media: MediaResolver, indent: Int) -> String {
+        let pad = String(repeating: "  ", count: indent)
+        switch n["type"]?.stringValue ?? "" {
+        case "paragraph":
+            return inlines(n["content"], media) + "\n\n"
+        case "heading":
+            var level = 2
+            if case .number(let x) = n["attrs"]?["level"] ?? .null { level = Int(x) }
+            return String(repeating: "#", count: max(1, min(6, level))) + " " + inlines(n["content"], media) + "\n\n"
+        case "bulletList", "orderedList", "taskList":
+            let ordered = n["type"]?.stringValue == "orderedList"
+            var out = ""
+            for (i, item) in (n["content"]?.arrayValue ?? []).enumerated() {
+                let children = item["content"]?.arrayValue ?? []
+                let marker: String
+                if item["type"]?.stringValue == "taskItem" {
+                    marker = item["attrs"]?["state"]?.stringValue == "DONE" ? "- [x] " : "- [ ] "
+                    out += pad + marker + inlines(item["content"], media) + "\n"
+                    continue
+                }
+                marker = ordered ? "\(i + 1). " : "- "
+                let first = children.first.map { $0["type"]?.stringValue == "paragraph" ? inlines($0["content"], media) : "" } ?? ""
+                out += pad + marker + first + "\n"
+                for child in children.dropFirst() {
+                    out += block(child, media, indent: indent + 1).replacingOccurrences(of: "\n\n", with: "\n")
+                }
+            }
+            return out + (indent == 0 ? "\n" : "")
+        case "codeBlock":
+            return "```\n" + inlines(n["content"], media) + "\n```\n\n"
+        case "blockquote":
+            return blocks(n["content"], media, indent: indent)
+                .split(separator: "\n", omittingEmptySubsequences: true).map { "> " + $0 }.joined(separator: "\n") + "\n\n"
+        case "panel":
+            return blocks(n["content"], media, indent: indent)
+                .split(separator: "\n", omittingEmptySubsequences: true).map { "> " + $0 }.joined(separator: "\n") + "\n\n"
+        case "expand", "nestedExpand":
+            let title = n["attrs"]?["title"]?.stringValue ?? "Details"
+            return "**\(title)**\n\n" + blocks(n["content"], media, indent: indent)
+        case "rule":
+            return "---\n\n"
+        case "mediaSingle", "mediaGroup":
+            return blocks(n["content"], media, indent: indent)
+        case "media":
+            return image(n, media) + "\n\n"
+        case "table":
+            var rows: [String] = []
+            for (i, row) in (n["content"]?.arrayValue ?? []).enumerated() {
+                let cells = (row["content"]?.arrayValue ?? []).map { cell in
+                    blocks(cell["content"], media, indent: 0)
+                        .replacingOccurrences(of: "\n", with: " ")
+                        .replacingOccurrences(of: "|", with: "\\|")
+                        .trimmingCharacters(in: .whitespaces)
+                }
+                rows.append("| " + cells.joined(separator: " | ") + " |")
+                if i == 0 { rows.append("|" + cells.map { _ in " --- |" }.joined()) }
+            }
+            return rows.joined(separator: "\n") + "\n\n"
+        case "blockCard", "embedCard":
+            let url = n["attrs"]?["url"]?.stringValue ?? ""
+            return "[\(url)](\(url))\n\n"
+        default:
+            return n["content"] != nil ? blocks(n["content"], media, indent: indent) : inlines(.array([n]), media)
+        }
+    }
+
+    private static func image(_ n: JSONValue, _ media: MediaResolver) -> String {
+        let attrs = n["attrs"]
+        let alt = (attrs?["alt"]?.stringValue ?? "image").replacingOccurrences(of: "]", with: "")
+        if attrs?["type"]?.stringValue == "external", let url = attrs?["url"]?.stringValue {
+            return "![\(alt)](\(url))"
+        }
+        if let id = media.attachmentID(for: attrs) { return "![\(alt)](attachment:\(id))" }
+        return "![\(alt)](attachment:unresolved)"
+    }
+
+    private static func inlines(_ content: JSONValue?, _ media: MediaResolver) -> String {
+        (content?.arrayValue ?? []).map { n -> String in
+            let attrs = n["attrs"]
+            switch n["type"]?.stringValue ?? "" {
+            case "text":
+                var t = n["text"]?.stringValue ?? ""
+                for mark in n["marks"]?.arrayValue ?? [] {
+                    switch mark["type"]?.stringValue {
+                    case "strong": t = "**\(t)**"
+                    case "em": t = "*\(t)*"
+                    case "code": t = "`\(t)`"
+                    case "strike": t = "~~\(t)~~"
+                    case "link": if let href = mark["attrs"]?["href"]?.stringValue { t = "[\(t)](\(href))" }
+                    default: break
+                    }
+                }
+                return t
+            case "hardBreak": return "\n"
+            case "mention": return "**" + (attrs?["text"]?.stringValue ?? "@someone") + "**"
+            case "emoji": return attrs?["text"]?.stringValue ?? attrs?["shortName"]?.stringValue ?? ""
+            case "inlineCard":
+                let url = attrs?["url"]?.stringValue ?? ""
+                return "[\(url)](\(url))"
+            case "status": return "`" + (attrs?["text"]?.stringValue ?? "").uppercased() + "`"
+            case "date":
+                if let ms = attrs?["timestamp"]?.stringValue, let v = Double(ms) {
+                    return Date(timeIntervalSince1970: v / 1000).formatted(date: .abbreviated, time: .omitted)
+                }
+                return ""
+            case "media", "mediaInline": return image(n, media)
+            default: return inlines(n["content"], media)
+            }
+        }.joined()
     }
 
     private static func person(_ v: JSONValue?) -> Person? {

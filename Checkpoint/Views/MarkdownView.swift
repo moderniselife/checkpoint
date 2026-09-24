@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Block-level markdown renderer for Jira content (headings, lists, task lists,
 /// tables, code, quotes). Inline styling and links use AttributedString.
@@ -15,7 +16,7 @@ struct MarkdownView: View {
         case quote(String)
         case code(String)
         case table([[String]])
-        case image
+        case image(alt: String, url: String)
         case rule
     }
 
@@ -81,13 +82,8 @@ struct MarkdownView: View {
                 .padding(10)
             }
             .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 8))
-        case .image:
-            Label("Inline image — see Attachments", systemImage: "photo")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.quaternary.opacity(0.5), in: .capsule)
+        case .image(let alt, let url):
+            InlineImage(alt: alt, url: url)
         case .rule:
             Divider()
         }
@@ -132,7 +128,9 @@ struct MarkdownView: View {
             flushTable()
 
             if line.isEmpty { flushParagraph(); continue }
-            if line.hasPrefix("![") { flushParagraph(); blocks.append(.image); continue }
+            if let m = line.firstMatch(of: /^!\[([^\]]*)\]\(([^)\s]+)[^)]*\)$/) {
+                flushParagraph(); blocks.append(.image(alt: String(m.1), url: String(m.2))); continue
+            }
             if line == "---" || line == "***" { flushParagraph(); blocks.append(.rule); continue }
             if let m = line.firstMatch(of: /^(#{1,6})\s+(.*)$/) {
                 flushParagraph(); blocks.append(.heading(m.1.count, String(m.2))); continue
@@ -155,5 +153,101 @@ struct MarkdownView: View {
         flushParagraph()
         flushTable()
         return blocks
+    }
+}
+
+extension EnvironmentValues {
+    /// Attachments of the ticket being rendered, so `attachment:ID` images can load.
+    @Entry var ticketAttachments: [String: TicketDetail.Attachment] = [:]
+}
+
+/// Image inside a description/comment: a Jira attachment (`attachment:ID`,
+/// loaded with Jira auth) or a plain external URL.
+private struct InlineImage: View {
+    let alt: String
+    let url: String
+    @Environment(\.ticketAttachments) private var attachments
+    @Environment(AppSettings.self) private var settings
+    @State private var image: NSImage?
+    @State private var failed = false
+    @State private var zoomed = false
+
+    private var attachment: TicketDetail.Attachment? {
+        url.hasPrefix("attachment:") ? attachments[String(url.dropFirst("attachment:".count))] : nil
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: min(image.size.width, 560), alignment: .leading)
+                    .clipShape(.rect(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.5)))
+                    .onTapGesture { zoomed = true }
+                    .help("\(alt) — click to enlarge")
+            } else if url.hasPrefix("http") {
+                AsyncImage(url: URL(string: url)) { $0.resizable().scaledToFit() } placeholder: { placeholder }
+                    .frame(maxWidth: 560, alignment: .leading)
+            } else {
+                placeholder
+            }
+        }
+        .task(id: url) { await load() }
+        .sheet(isPresented: $zoomed) {
+            if let image { ZoomedImage(image: image, title: alt) }
+        }
+    }
+
+    private var placeholder: some View {
+        HStack(spacing: 8) {
+            if failed || attachment == nil && !url.hasPrefix("http") {
+                Image(systemName: "photo.badge.exclamationmark")
+            } else {
+                ProgressView().controlSize(.small)
+            }
+            Text(alt).lineLimit(1)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 10))
+        .help(failed ? "Couldn't load — add an Atlassian API token in Settings for image access." : alt)
+    }
+
+    private func load() async {
+        guard let attachment else { return }
+        // Prefer the full image; inline images are usually screenshots worth reading.
+        if let data = await AttachmentLoader.shared.data(for: attachment, full: true, creds: settings.attachmentCredentials),
+           let img = NSImage(data: data) {
+            image = img
+        } else {
+            failed = true
+        }
+    }
+}
+
+struct ZoomedImage: View {
+    let image: NSImage
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title).font(.headline).lineLimit(1)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding(14)
+            Divider()
+            ScrollView([.horizontal, .vertical]) {
+                Image(nsImage: image).resizable().scaledToFit()
+                    .frame(maxWidth: max(image.size.width, 400))
+            }
+        }
+        .frame(minWidth: 640, idealWidth: min(image.size.width + 40, 1400), minHeight: 480, idealHeight: min(image.size.height + 80, 1000))
     }
 }
