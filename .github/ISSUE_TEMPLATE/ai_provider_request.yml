@@ -1,0 +1,47 @@
+name: 🤖 AI provider request
+description: Ask for support for another AI provider or model gateway.
+title: "[AI provider]: "
+labels: ["enhancement", "ai-provider"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Checkpoint already supports **Anthropic Claude, OpenAI, Google Gemini, xAI Grok, OpenRouter**, plus any **OpenAI-compatible** or **Anthropic-compatible** endpoint (Ollama, LM Studio, vLLM, llama.cpp, LiteLLM…).
+        If your provider speaks one of those APIs, try **Settings → AI provider → Local / …-compatible** with its base URL first.
+  - type: input
+    id: provider
+    attributes:
+      label: Provider or gateway
+      placeholder: e.g. Mistral, DeepSeek, AWS Bedrock, Azure OpenAI, Groq
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: API documentation link
+    validations:
+      required: true
+  - type: dropdown
+    id: compat
+    attributes:
+      label: Does it offer an OpenAI- or Anthropic-compatible API?
+      options: ["OpenAI-compatible", "Anthropic-compatible", "Both", "Neither — its own API", "Not sure"]
+    validations:
+      required: true
+  - type: dropdown
+    id: tried
+    attributes:
+      label: Did you try it through a compatible provider setting?
+      options: ["Yes — it didn't work (details below)", "No", "Not applicable"]
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Auth method (API key, OAuth, cloud credentials), models you'd use, tool-calling / structured-output support, and any errors you hit.
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this provider?
+      description: e.g. company policy, data residency, cost, a model you rely on.

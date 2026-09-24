@@ -1,0 +1,30 @@
+name: 🔌 Integration request
+description: Pull context from another tool during research (docs, designs, code hosts…).
+title: "[Integration]: "
+labels: ["enhancement", "integration"]
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      placeholder: e.g. Figma, Notion, GitHub PRs, Bitbucket, Sentry, Slack, TestRail
+    validations:
+      required: true
+  - type: textarea
+    id: use
+    attributes:
+      label: How should it help a test plan?
+      description: e.g. "read the linked PR's changed files so Dev plans target them".
+    validations:
+      required: true
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Read or write?
+      options: ["Read only (research)", "Write (export / post results)", "Both"]
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: API / MCP docs link

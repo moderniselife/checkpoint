@@ -1,0 +1,41 @@
+name: 🗂 Tracker / platform request
+description: Ask for support for another issue tracker (like Jira and Linear).
+title: "[Tracker]: "
+labels: ["enhancement", "tracker"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Checkpoint reads tickets through each tracker's **official MCP server** (Atlassian Rovo MCP for Jira/Confluence, Linear MCP). Trackers with an MCP server are the quickest to add.
+  - type: input
+    id: tracker
+    attributes:
+      label: Tracker
+      placeholder: e.g. GitHub Issues, Azure DevOps, Shortcut, ClickUp, Asana, YouTrack, GitLab
+    validations:
+      required: true
+  - type: dropdown
+    id: mcp
+    attributes:
+      label: Does it have an official MCP server?
+      options: ["Yes", "Community MCP server only", "No — REST/GraphQL API only", "Not sure"]
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: MCP server or API docs link
+  - type: dropdown
+    id: hosting
+    attributes:
+      label: Hosting
+      options: ["Cloud / SaaS", "Self-hosted / on-prem", "Both"]
+  - type: textarea
+    id: needs
+    attributes:
+      label: What would Checkpoint need to read?
+      description: e.g. issues, comments, sub-issues, attachments, linked docs/wiki, custom fields.
+  - type: textarea
+    id: why
+    attributes:
+      label: How does your team use it?

@@ -1,0 +1,97 @@
+name: 🐞 Bug report
+description: Something in Checkpoint isn't working as expected.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **remove API keys, tokens, ticket contents and customer names** from anything you paste.
+        Check [FEATURES.md → Troubleshooting](https://github.com/moderniselife/checkpoint/blob/main/FEATURES.md#4-support--troubleshooting) first — your fix may already be there.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, and what went wrong?
+      placeholder: I pasted an epic key in QA mode and the plan stopped at "Reading 3 of 8"…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Settings → AI provider → …
+        2. Paste …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Plan generation / research
+        - Ticket panel
+        - Folders / sidebar
+        - Settings / sign-in
+        - AI provider connection
+        - Scenarios
+        - Build / install
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: tracker
+    attributes:
+      label: Tracker
+      options: ["Jira (OAuth)", "Jira (API token)", "Linear (OAuth)", "Linear (API key)", "Not tracker-related"]
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: AI provider
+      options: ["Anthropic Claude", "OpenAI", "Google Gemini", "xAI Grok", "OpenRouter", "Local — OpenAI-compatible", "Local — Anthropic-compatible", "Not provider-related"]
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: e.g. claude-opus-5, gpt-5, llama3.1:70b
+  - type: input
+    id: version
+    attributes:
+      label: Checkpoint version
+      description: Checkpoint → About, or the release you downloaded.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 26.1, MacBook Pro M3
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error message or screenshots
+      description: The error banner text, or screenshots (redact sensitive info).
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed keys, tokens and sensitive ticket content from this report.
+          required: true
+        - label: I searched existing issues and FEATURES.md.
+          required: true
