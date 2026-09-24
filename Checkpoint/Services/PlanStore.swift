@@ -59,7 +59,7 @@ final class PlanStore {
             return
         }
         guard settings.isConfigured else {
-            error = "Add your Anthropic key and Atlassian email + API token in Settings (⌘,)."
+            error = "Add your Anthropic key and connect Atlassian in Settings (⌘,)."
             return
         }
         task?.cancel()
@@ -70,7 +70,7 @@ final class PlanStore {
 
         let generator = PlanGenerator(
             claude: ClaudeClient(apiKey: settings.anthropicKey),
-            mcp: MCPClient(authHeader: settings.atlassianAuthHeader),
+            mcp: settings.makeMCPClient(),
             model: settings.model,
             effort: settings.effort,
             site: settings.siteHost

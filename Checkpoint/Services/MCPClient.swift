@@ -23,7 +23,7 @@ actor MCPClient {
         var errorDescription: String? {
             switch self {
             case .http(401, _), .http(403, _), .unauthenticated:
-                return "Atlassian rejected the API token. Check the email/token in Settings, and that your org admin has enabled API-token auth for the Rovo MCP server."
+                return "Atlassian rejected your credentials. In Settings, sign in with Atlassian again — or, for API tokens, check the email/token and that your org admin allows API-token auth for the Rovo MCP server."
             case .http(let code, let body): return "Atlassian MCP HTTP \(code): \(body.prefix(300))"
             case .rpc(let msg): return "Atlassian MCP error: \(msg)"
             case .noResponse: return "Atlassian MCP returned no response."
@@ -34,14 +34,19 @@ actor MCPClient {
     static let endpoint = URL(string: "https://mcp.atlassian.com/v1/mcp")!
     private static let protocolVersion = "2025-06-18"
 
-    private let authHeader: String
+    /// Returns the Authorization header value; called per request so OAuth tokens can refresh.
+    typealias AuthProvider = @Sendable () async throws -> String
+    private let auth: AuthProvider
+    /// Called once after a 401 (e.g. to force an OAuth refresh) before retrying.
+    private let onUnauthorized: (@Sendable () async throws -> Void)?
     private let session: URLSession
     private var sessionID: String?
     private var nextID = 1
     private var initialized = false
 
-    init(authHeader: String) {
-        self.authHeader = authHeader
+    init(auth: @escaping AuthProvider, onUnauthorized: (@Sendable () async throws -> Void)? = nil) {
+        self.auth = auth
+        self.onUnauthorized = onUnauthorized
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 120
         self.session = URLSession(configuration: config)
@@ -121,13 +126,13 @@ actor MCPClient {
         return response["result"] ?? .null
     }
 
-    private func send(_ message: JSONValue, expectID: Int?) async throws -> JSONValue? {
+    private func send(_ message: JSONValue, expectID: Int?, isRetry: Bool = false) async throws -> JSONValue? {
         var req = URLRequest(url: Self.endpoint)
         req.httpMethod = "POST"
         req.httpBody = try JSONCoding.encoder.encode(message)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
-        req.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        req.setValue(try await auth(), forHTTPHeaderField: "Authorization")
         if initialized || sessionID != nil {
             req.setValue(Self.protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
         }
@@ -137,6 +142,10 @@ actor MCPClient {
         guard let http = response as? HTTPURLResponse else { throw MCPError.noResponse }
         if let sid = http.value(forHTTPHeaderField: "Mcp-Session-Id") { sessionID = sid }
 
+        if http.statusCode == 401, !isRetry, let onUnauthorized {
+            try await onUnauthorized()
+            return try await send(message, expectID: expectID, isRetry: true)
+        }
         guard (200..<300).contains(http.statusCode) else {
             var body = ""
             for try await line in bytes.lines { body += line; if body.count > 2000 { break } }
