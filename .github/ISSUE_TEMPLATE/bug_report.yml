@@ -71,7 +71,7 @@ body:
     attributes:
       label: Checkpoint version
       description: Checkpoint → About, or the release you downloaded.
-      placeholder: 0.1.0
+      placeholder: 0.2.0
     validations:
       required: true
   - type: input
