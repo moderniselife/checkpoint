@@ -88,13 +88,13 @@ New, untriaged ideas land here (`./ideas/idea "…"` appends to this table). Mov
 |---|---|---|---|---|---|
 | IDEA-080 | Cost readout per plan | Tokens + $ from streamed usage; show in research log | M | S | 💭 |
 | IDEA-081 | Cost estimate before run | Rough estimate based on ticket size / epic children | S | M | 💭 |
-| IDEA-082 | Quick vs deep plans | Fast plan on a cheaper model/effort; deep plan on the best model | L | S | 💭 |
+| IDEA-082 | Quick vs deep plans | Fast plan on a cheaper model/effort; deep plan on the best model (now easy: any provider/model) | L | S | 👍 |
 | IDEA-083 | Chat with the ticket | Ask follow-ups ("what about admins?") and refine the plan | L | M | 💭 |
 | IDEA-084 | Regenerate one section | Redo just tasks / AC / edge cases | M | S | 💭 |
 | IDEA-085 | Research cache | Reuse fetched tickets across plans (epics share children) | M | M | 💭 |
 | IDEA-086 | "Why this task?" | Explain a task's reasoning and source on demand | M | S | 💭 |
 | IDEA-087 | Plan-quality evals | Rubric + sample tickets to measure prompt changes | L | M | 💭 |
-| IDEA-088 | Local model option | Offline planning with a local model for sensitive projects | M | L | 💭 |
+| IDEA-088 | Local model option | Offline planning with a local model for sensitive projects | M | L | ✅ |
 
 ## 🗂 Organisation
 
@@ -151,3 +151,6 @@ New, untriaged ideas land here (`./ideas/idea "…"` appends to this table). Mov
 | IDEA-163 | Encrypted plan storage | Encrypt plans.json at rest | S | S | 💭 |
 | IDEA-164 | Fetch full comment threads | Paginate comments when Jira truncates | S | S | 💭 |
 | IDEA-165 | Structured logging / debug panel | Inspect MCP calls and API errors in-app | M | S | 💭 |
+| IDEA-166 | Per-mode provider | e.g. QA plans on a local model, Dev plans on Claude | M | S | 💭 |
+| IDEA-167 | Provider fallback chain | If one provider errors or rate-limits, retry on the next | M | M | 💭 |
+| IDEA-168 | Side-by-side model compare | Generate the same plan with two models and diff them | M | M | 💭 |

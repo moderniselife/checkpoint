@@ -90,7 +90,19 @@ Build & run (⌘R). Signing uses the team in `project.yml` (`DEVELOPMENT_TEAM`) 
 
 Then open **Settings (⌘,)**:
 
-1. **Anthropic** — API key from <https://platform.claude.com/settings/keys>; pick model and effort.
+1. **AI provider** — pick one, add its key, then **Fetch models** and **Test**:
+
+   | Provider | Key | Notes |
+   |---|---|---|
+   | Anthropic Claude | <https://platform.claude.com/settings/keys> | Adaptive thinking, schema-enforced plans, refusal fallbacks |
+   | OpenAI | <https://platform.openai.com/api-keys> | Any model with tool calling |
+   | Google Gemini | <https://aistudio.google.com/apikey> | Via Gemini's OpenAI-compatible endpoint |
+   | xAI Grok | <https://console.x.ai> | |
+   | OpenRouter | <https://openrouter.ai/keys> | Hundreds of models, one key |
+   | Local — OpenAI-compatible | optional | Ollama (`http://localhost:11434/v1`), LM Studio, vLLM, llama.cpp |
+   | Local — Anthropic-compatible | optional | LiteLLM or any Messages-API gateway |
+
+   Local models need tool calling and a big context window — large epics can overflow small models.
 2. **Testing** — default mode and your hosted environment.
 3. **Atlassian (Rovo MCP)** — Jira site (e.g. `yourco.atlassian.net`), then either
    - **Sign in with Atlassian** (OAuth, recommended), or
@@ -110,7 +122,7 @@ bare keys go to the tracker chosen in the input bar menu.
 ## How it works
 
 ```
-Ticket key ─▶ PlanGenerator ──(Messages API, adaptive thinking, structured output)──▶ TestPlan
+Ticket key ─▶ PlanGenerator ──(Claude · OpenAI · Gemini · Grok · OpenRouter · local)──▶ TestPlan
                   │   ▲
       tool calls  ▼   │ results
                 MCPClient ──(Streamable HTTP)──▶ Atlassian Rovo MCP  /  Linear MCP (read-only)
@@ -120,7 +132,8 @@ Ticket key ─▶ PlanGenerator ──(Messages API, adaptive thinking, structur
 |---|---|
 | `MCPClient` | Minimal MCP Streamable-HTTP client: JSON-RPC over POST, SSE responses, `Mcp-Session-Id`, per-request auth with one refresh-and-retry on 401. |
 | `MCPOAuth` | OAuth 2.1 for Atlassian and Linear: dynamic client registration, PKCE, loopback redirect on `127.0.0.1:33418` (pre-approved by Atlassian's domain allowlist), Keychain tokens with coalesced auto-refresh. |
-| `PlanGenerator` | Agent loop on the Claude Messages API (raw HTTP — no Swift SDK). Parallel tool calls, prompt caching, server-side refusal fallbacks, final turn constrained to the `TestPlan` JSON schema. Prompts vary by tracker and Dev/QA mode. |
+| `PlanGenerator` | Agent loop with two engines. **Anthropic Messages** (Claude + compatible servers): streaming, adaptive thinking, prompt caching, refusal fallbacks and a schema-constrained final turn on native Claude. **OpenAI Chat Completions** (OpenAI, Gemini, Grok, OpenRouter, local): research with tools, then a final JSON-schema call. Prompts vary by tracker and Dev/QA mode. |
+| `OpenAIChatClient` | Streaming Chat Completions with tool-call/reasoning reassembly, `/models` listing, strip-and-retry for unsupported parameters. |
 | `TicketInspector` | Loads full issues for the panel — Jira as ADF + `renderedFields` (so inline images map to attachment IDs), Linear via `get_issue` + `list_comments` with argument names read from the tool schemas. |
 | `PlanStore` | Plan history + tick state in the app's Application Support container. |
 
@@ -130,7 +143,7 @@ Ticket key ─▶ PlanGenerator ──(Messages API, adaptive thinking, structur
 - Linear → `https://mcp.linear.app/mcp/readonly`
 
 Keys and tokens live in the macOS Keychain. The app is sandboxed (network client + a loopback
-listener for sign-in only).
+listener for sign-in only); App Transport Security allows plain HTTP only for local networking (local model servers).
 
 ---
 
@@ -152,8 +165,8 @@ listener for sign-in only).
 ```
 Checkpoint/
   App/        CheckpointApp — scenes and environment
-  Models/     TestPlan, TicketDetail (+ ADF→markdown), LinearParsing, PlanFolder, TestMode, Tracker, JSONValue
-  Services/   MCPClient, MCPOAuth, LoopbackServer, ClaudeClient, PlanGenerator,
+  Models/     TestPlan, TicketDetail (+ ADF→markdown), LinearParsing, PlanFolder, LLMProvider, TestMode, Tracker, JSONValue
+  Services/   MCPClient, MCPOAuth, LoopbackServer, ClaudeClient, OpenAIChatClient, PlanGenerator,
               PlanStore, TicketInspector (+ AttachmentLoader), AppSettings, Keychain
   Views/      ContentView, TicketInputBar, SidebarView, FolderOverview, ProgressFeedView, PlanView,
               TicketPanel, MarkdownView, GlassScrollIndicator, SettingsView

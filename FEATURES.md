@@ -124,6 +124,18 @@ verified, what's known to be rough, and how to fix things when they break.
 | App icon (full-bleed, no macOS 26 icon-jail) + in-app logo | ✅ | `Assets.xcassets` | Dock |
 | Custom placeholder in ticket field | ✅ | `TicketInputBar` | — |
 
+### 1.8b AI providers
+
+| Feature | Status | Where | How to verify |
+|---|---|---|---|
+| Anthropic Claude (thinking, schema-enforced plan, fallbacks) | ✅ | `PlanGenerator.runAnthropic` | Default provider |
+| OpenAI, Google Gemini, xAI Grok, OpenRouter | 🧪 | `OpenAIChatClient`, `PlanGenerator.runOpenAI` | Fixture-tested end to end (tool call, round-trip, JSON plan); needs a real key per provider |
+| Local OpenAI-compatible (Ollama, LM Studio, vLLM, llama.cpp) | 🧪 | same | Fixture-tested; try `http://localhost:11434/v1` |
+| Local Anthropic-compatible (LiteLLM, gateways) | 🧪 | `runAnthropic` compatible branch | Fixture-tested end to end |
+| Per-provider key/model/base URL, Fetch models, Test | 🧪 | Settings → AI provider | Switch providers; each keeps its setup |
+| Strip-and-retry unsupported params (reasoning effort, JSON schema…) | 🧪 | `OpenAIChatClient.stream` | Fixture 400 on `reasoning_effort` recovered |
+| Gemini-safe tool schemas | 🧪 | `PlanGenerator.cleanSchema` | Unit-checked |
+
 ### 1.9 Distribution
 
 | Feature | Status | Where | How to verify |
@@ -169,6 +181,8 @@ verified, what's known to be rough, and how to fix things when they break.
 | L6 | Big epics | Research + writing can take a few minutes at high effort | Lower effort in Settings; progress card shows it's alive |
 | L7 | Comments | Panel shows what Jira returns in one call (usually all); very long threads may be truncated | "Open in Jira" |
 | L8 | Pasted images in Jira markdown | The markdown format drops/blob-ifies images, so the panel uses ADF instead (the plan generator still reads markdown) | — |
+| L10 | Non-Claude providers | Plans are written in two phases (research, then JSON); models without tool calling can't research | Pick a tool-calling model |
+| L11 | Local models | Big epics can exceed a small local model's context window | Use a larger-context model, or analyze children individually |
 | L9 | App icon | Legacy asset-catalog icon (full-bleed) rather than an Icon Composer `.icon` with live glass layers | Split the logo into layers in Xcode's Icon Composer |
 
 ---
@@ -251,7 +265,9 @@ picking the good ones later (`./ideas/idea "…"` to add one). Picked ideas get 
 | 2026-09-24 | `06fc9ce` | GitHub Actions release workflow (DMG + zip + checksums, optional notarization) |
 | 2026-09-24 | `8fd0695` | Landing page, GitHub Pages deploy, ideas board |
 | 2026-09-24 | `001811c` | Landing page SEO: structured data, social cards, sitemap, use cases, FAQ |
-| 2026-09-25 | — | Landing page moves to the checkpoint.guide custom domain |
+| 2026-09-25 | `e0c2179` | Landing page moves to the checkpoint.guide custom domain |
+| 2026-09-25 | `9fda0f6` | OpenAI, Gemini, Grok, OpenRouter and local model support |
+| 2026-09-25 | — | Docs + website for multi-provider support |
 
 ---
 
