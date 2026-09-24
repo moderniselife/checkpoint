@@ -41,4 +41,15 @@ needed — custom schemes like `checkpoint://` would need allowlisting. Tokens r
 - `PlanStore` — history + tick state in `~/Library/Containers/com.josephshenton.checkpoint/.../Application Support/Checkpoint/plans.json`.
 - Keys live in the Keychain.
 
-Shortcuts: ⌘L focus ticket field · ⌘↩ analyze.
+## Dev vs QA mode
+
+Toggle in the input bar (⌘⇧M), default in Settings.
+
+- **Dev** — for the developer verifying their own change: may reference branches, commits, APIs, logs, tests.
+- **QA** — black-box plans for testing the *hosted* app: UI names only, no code/branches/local setup,
+  starts by confirming the fix is deployed, covers roles/negative/edge/regression, and pushes anything
+  only verifiable technically into open questions. Set **Hosted environment** in Settings to aim plans at it.
+
+Dev and QA plans for the same ticket are saved side by side; right-click a plan → "Run in QA/Dev mode".
+
+Shortcuts: ⌘L focus ticket field · ⌘↩ analyze · ⌘⇧M toggle Dev/QA.

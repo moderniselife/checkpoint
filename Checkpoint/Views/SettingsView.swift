@@ -26,6 +26,20 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("Default mode", selection: $settings.mode) {
+                    ForEach(TestMode.allCases) { Label($0.label, systemImage: $0.icon).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                TextField("Hosted environment", text: $settings.qaEnvironment,
+                          prompt: Text("e.g. https://app.dev.example.com (DEV)"))
+            } header: {
+                Text("Testing")
+            } footer: {
+                Text("QA mode writes black-box, UI-only plans for the hosted app. The environment is where QA plans point you.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 TextField("Jira site", text: $settings.site, prompt: Text("yourcompany.atlassian.net"))
                 Picker("Connect with", selection: $settings.atlassianAuth) {
                     ForEach(AppSettings.AtlassianAuth.allCases) { Text($0.label).tag($0) }

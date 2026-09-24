@@ -12,6 +12,7 @@ struct SidebarView: View {
                     HStack {
                         ProgressView().controlSize(.small)
                         Text(key).font(.body.monospaced())
+                        ModeBadge(mode: store.runningMode, compact: true)
                     }
                 }
             }
@@ -20,7 +21,10 @@ struct SidebarView: View {
                     SidebarRow(saved: saved)
                         .tag(saved.id)
                         .contextMenu {
-                            Button("Show ticket details") { inspector.open(saved.id) }
+                            Button("Show ticket details") { inspector.open(saved.plan.ticket.key) }
+                            Button("Run in \(saved.mode == .dev ? "QA" : "Dev") mode") {
+                                store.analyze(saved.plan.ticket.key, mode: saved.mode == .dev ? .qa : .dev, settings: settings)
+                            }
                             Button("Re-run") { rerun(saved) }
                             if let url = URL(string: saved.plan.ticket.url) {
                                 Link("Open in Jira", destination: url)
@@ -39,7 +43,7 @@ struct SidebarView: View {
     }
 
     @Environment(AppSettings.self) private var settings
-    private func rerun(_ saved: SavedPlan) { store.analyze(saved.id, settings: settings) }
+    private func rerun(_ saved: SavedPlan) { store.analyze(saved.plan.ticket.key, mode: saved.mode, settings: settings) }
 }
 
 private struct SidebarRow: View {
@@ -50,8 +54,11 @@ private struct SidebarRow: View {
             ProgressRing(value: saved.progress, lineWidth: 3)
                 .frame(width: 18, height: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(saved.plan.ticket.key)
-                    .font(.body.monospaced().weight(.medium))
+                HStack(spacing: 6) {
+                    Text(saved.plan.ticket.key)
+                        .font(.body.monospaced().weight(.medium))
+                    ModeBadge(mode: saved.mode, compact: true)
+                }
                 Text(saved.plan.ticket.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -76,5 +83,21 @@ struct ProgressRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .animation(.smooth, value: value)
+    }
+}
+
+struct ModeBadge: View {
+    let mode: TestMode
+    var compact = false
+
+    var body: some View {
+        Label(mode.label, systemImage: mode.icon)
+            .labelStyle(.titleAndIcon)
+            .font(compact ? .caption2.weight(.semibold) : .caption.weight(.semibold))
+            .padding(.horizontal, compact ? 5 : 8)
+            .padding(.vertical, compact ? 1 : 3)
+            .foregroundStyle(mode == .qa ? Color.teal : Color.indigo)
+            .background((mode == .qa ? Color.teal : Color.indigo).opacity(0.14), in: .capsule)
+            .help(mode.help)
     }
 }
