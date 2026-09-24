@@ -18,32 +18,118 @@ final class TicketInspector {
         var cacheKey: String { "\(tracker.rawValue):\(key)" }
     }
 
-    private(set) var stack: [Ref] = []
+    /// Open tickets, shown as floating glass tabs above the panel.
+    private(set) var tabs: [Ref] = [] { didSet { persistTabs() } }
+    private(set) var active: Ref? { didSet { persistTabs() } }
+    /// The panel can be hidden while its tabs stay open.
+    private(set) var isVisible = false
     private(set) var states: [String: LoadState] = [:]
+    /// Previously active tabs, most recent last — drives Back.
+    private var history: [Ref] = []
     private var settings: AppSettings?
 
-    var current: Ref? { stack.last }
-    var currentKey: String? { stack.last?.key }
+    var current: Ref? { isVisible ? active : nil }
+    var currentKey: String? { current?.key }
     var currentState: LoadState? { current.flatMap { states[$0.cacheKey] } }
-    var isOpen: Bool { !stack.isEmpty }
-    var canGoBack: Bool { stack.count > 1 }
+    var isOpen: Bool { isVisible && active != nil }
+    var canGoBack: Bool { history.contains(where: tabs.contains) }
 
-    func attach(_ settings: AppSettings) { self.settings = settings }
+    func attach(_ settings: AppSettings) {
+        self.settings = settings
+        restoreTabs()
+    }
 
-    /// Opens a ticket; from inside the panel it pushes so Back returns to where you were.
+    func state(for ref: Ref) -> LoadState? { states[ref.cacheKey] }
+
+    /// Opens (or switches to) a ticket's tab and shows the panel. `push` opens it
+    /// right after the current tab, e.g. when following a linked issue.
     func open(_ key: String, tracker: Tracker = .jira, push: Bool = false) {
         let ref = Ref(key: key.uppercased(), tracker: tracker)
-        if push, stack.last != ref { stack.append(ref) } else if !push { stack = [ref] }
+        if !tabs.contains(ref) {
+            if push, let a = active, let i = tabs.firstIndex(of: a) { tabs.insert(ref, at: i + 1) } else { tabs.append(ref) }
+        }
+        activate(ref)
+        isVisible = true
+    }
+
+    func activate(_ ref: Ref, recordHistory: Bool = true) {
+        if recordHistory, let a = active, a != ref { history.append(a) }
+        active = ref
+        isVisible = true
         if states[ref.cacheKey] == nil { load(ref) }
     }
 
     /// Toggle used by the toolbar button and ⌘I.
     func toggle(_ key: String, tracker: Tracker) {
-        if current == Ref(key: key.uppercased(), tracker: tracker) { close() } else { open(key, tracker: tracker) }
+        if isOpen && active == Ref(key: key.uppercased(), tracker: tracker) { close() } else { open(key, tracker: tracker) }
     }
 
-    func back() { if canGoBack { stack.removeLast() } }
-    func close() { stack = [] }
+    /// Back = the previously active tab that's still open.
+    func back() {
+        while let prev = history.popLast() {
+            if tabs.contains(prev) { activate(prev, recordHistory: false); return }
+        }
+    }
+
+    func closeTab(_ ref: Ref) {
+        guard let i = tabs.firstIndex(of: ref) else { return }
+        tabs.remove(at: i)
+        history.removeAll { $0 == ref }
+        if active == ref {
+            if let prev = history.last(where: tabs.contains) {
+                history.removeAll { $0 == prev }
+                activate(prev, recordHistory: false)
+            } else if !tabs.isEmpty {
+                activate(tabs[min(i, tabs.count - 1)], recordHistory: false)
+            } else {
+                active = nil
+                isVisible = false
+            }
+        }
+    }
+
+    func closeOtherTabs(_ ref: Ref) {
+        tabs = tabs.filter { $0 == ref }
+        history = []
+        activate(ref, recordHistory: false)
+    }
+
+    /// ⌃Tab / ⌃⇧Tab.
+    func cycle(_ step: Int) {
+        guard !tabs.isEmpty else { return }
+        let i = active.flatMap(tabs.firstIndex(of:)) ?? 0
+        activate(tabs[(i + step + tabs.count) % tabs.count])
+    }
+
+    /// Hides the panel; tabs stay open.
+    func close() { isVisible = false }
+
+    private func persistTabs() {
+        UserDefaults.standard.set(tabs.map(\.cacheKey), forKey: "openTicketTabs")
+        UserDefaults.standard.set(active?.cacheKey, forKey: "activeTicketTab")
+    }
+
+    private func restoreTabs() {
+        func ref(_ s: String) -> Ref? {
+            let parts = s.split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let t = Tracker(rawValue: parts[0]) else { return nil }
+            return Ref(key: parts[1], tracker: t)
+        }
+        let saved = (UserDefaults.standard.stringArray(forKey: "openTicketTabs") ?? []).compactMap(ref)
+        guard !saved.isEmpty, tabs.isEmpty else { return }
+        // Read before assigning: setting `tabs` persists and would overwrite the saved active tab.
+        let savedActive = UserDefaults.standard.string(forKey: "activeTicketTab").flatMap(ref)
+        tabs = saved
+        // Restored hidden; the active tab loads when the panel is next shown.
+        active = savedActive.flatMap { saved.contains($0) ? $0 : nil } ?? saved.first
+    }
+
+    /// Shows the panel on the active tab (e.g. ⌘I with no ticket in view).
+    func show() {
+        guard let a = active else { return }
+        activate(a, recordHistory: false)
+    }
+
     func refresh() { if let current { load(current) } }
 
     private func load(_ ref: Ref) {

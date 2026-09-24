@@ -7,6 +7,21 @@ struct TicketPanel: View {
     @Environment(AppSettings.self) private var settings
 
     var body: some View {
+        VStack(spacing: 10) {
+            TicketTabStrip()
+            pane
+        }
+        .background {
+            // ⌃Tab / ⌃⇧Tab cycle through open tickets.
+            Group {
+                Button("") { inspector.cycle(1) }.keyboardShortcut(.tab, modifiers: .control)
+                Button("") { inspector.cycle(-1) }.keyboardShortcut(.tab, modifiers: [.control, .shift])
+            }
+            .hidden()
+        }
+    }
+
+    private var pane: some View {
         VStack(spacing: 0) {
             toolbar
             Divider().opacity(0.4)
@@ -51,7 +66,7 @@ struct TicketPanel: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
-                .help("Back")
+                .help("Back to the previous ticket")
             }
             Text(inspector.currentKey ?? "")
                 .font(.headline.monospaced())
@@ -611,5 +626,106 @@ private struct ExternalLinkRow: View {
         if host.contains("sentry") { return "ant" }
         if host.contains("slack") { return "bubble.left" }
         return "link"
+    }
+}
+
+// MARK: - Tabs
+
+/// Open tickets as floating glass tabs; click to switch, × to close.
+private struct TicketTabStrip: View {
+    @Environment(TicketInspector.self) private var inspector
+    @Namespace private var glass
+
+    var body: some View {
+        GlassEffectContainer(spacing: 6) {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        ForEach(inspector.tabs, id: \.self) { ref in
+                            TicketTab(ref: ref, isActive: ref == inspector.active)
+                                .glassEffectID(ref.cacheKey, in: glass)
+                                .id(ref)
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 2)
+                }
+                .scrollIndicators(.never)
+                .onChange(of: inspector.active) { _, new in
+                    withAnimation(.smooth) { proxy.scrollTo(new, anchor: .center) }
+                }
+            }
+        }
+        .animation(.smooth(duration: 0.3), value: inspector.tabs)
+        .animation(.smooth(duration: 0.3), value: inspector.active)
+    }
+}
+
+private struct TicketTab: View {
+    let ref: TicketInspector.Ref
+    let isActive: Bool
+    @Environment(TicketInspector.self) private var inspector
+    @Environment(AppSettings.self) private var settings
+    @State private var hovering = false
+
+    private var detail: TicketDetail? {
+        if case .loaded(let d) = inspector.state(for: ref) { return d }
+        return nil
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 7, height: 7)
+            Text(ref.key)
+                .font(.caption.monospaced().weight(isActive ? .semibold : .medium))
+            if isActive, let title = detail?.summary, !title.isEmpty {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 160, alignment: .leading)
+            }
+            if isActive || hovering {
+                Button { withAnimation(.smooth) { inspector.closeTab(ref) } } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .frame(width: 14, height: 14)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Close tab")
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, isActive || hovering ? 6 : 10)
+        .padding(.vertical, 7)
+        .contentShape(.capsule)
+        .glassEffect(
+            isActive ? .regular.tint(.accentColor.opacity(0.22)).interactive() : .regular.interactive(),
+            in: .capsule
+        )
+        .onTapGesture { withAnimation(.smooth) { inspector.activate(ref) } }
+        .onHover { hovering = $0 }
+        .help(detail.map { "\(ref.key) — \($0.summary)" } ?? ref.key)
+        .contextMenu {
+            Button("Close Tab") { inspector.closeTab(ref) }
+            Button("Close Other Tabs") { inspector.closeOtherTabs(ref) }
+            if let url = detail?.webURL ?? (ref.tracker == .jira ? settings.browseURL(for: ref.key) : nil) {
+                Divider()
+                Button("Open in \(ref.tracker.label)") { NSWorkspace.shared.open(url) }
+            }
+        }
+    }
+
+    private var statusColor: Color {
+        switch detail?.statusCategory {
+        case "done": .green
+        case "indeterminate": .blue
+        case .some: .gray
+        case nil: .secondary.opacity(0.4)
+        }
     }
 }

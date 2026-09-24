@@ -6,8 +6,14 @@ import Foundation
 nonisolated struct PlanGenerator: Sendable {
     enum Event: Sendable {
         case status(String)
-        case thinking(String)
-        case toolCall(name: String, detail: String)
+        /// A request to Claude started (turn is 1-based).
+        case waiting(turn: Int)
+        /// Live summarised thinking for one content block of a turn.
+        case thinking(turn: Int, index: Int, text: String)
+        /// Characters of the final answer (the plan JSON) streamed so far.
+        case writing(characters: Int)
+        case toolCall(id: String, name: String, detail: String)
+        case toolDone(id: String, ok: Bool)
     }
 
     enum GeneratorError: LocalizedError {
@@ -77,8 +83,9 @@ nonisolated struct PlanGenerator: Sendable {
         let usesFallbacks = model.hasPrefix("claude-opus") || model.hasPrefix("claude-fable")
         await onEvent(.status("Reading \(ticketKey)…"))
 
-        for _ in 0..<Self.maxTurns {
+        for turn in 1...Self.maxTurns {
             try Task.checkCancellation()
+            await onEvent(.waiting(turn: turn))
             var body: JSONValue = [
                 "model": .string(model),
                 "max_tokens": 32000,
@@ -97,15 +104,17 @@ nonisolated struct PlanGenerator: Sendable {
                 body = .object(o)
             }
 
-            let response = try await claude.createMessage(
+            // Streamed so thinking and plan-writing progress show live on long epics.
+            let response = try await claude.streamMessage(
                 body, betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : []
-            )
+            ) { event in
+                switch event {
+                case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
+                case .writing(let n): await onEvent(.writing(characters: n))
+                }
+            }
             let content = response["content"]?.arrayValue ?? []
             let stopReason = response["stop_reason"]?.stringValue ?? ""
-
-            for block in content where block["type"]?.stringValue == "thinking" {
-                if let t = block["thinking"]?.stringValue, !t.isEmpty { await onEvent(.thinking(t)) }
-            }
 
             switch stopReason {
             case "refusal":
@@ -116,9 +125,10 @@ nonisolated struct PlanGenerator: Sendable {
                 messages.append(["role": "assistant", "content": .array(content)])
                 let calls = content.filter { $0["type"]?.stringValue == "tool_use" }
                 for call in calls {
-                    await onEvent(.toolCall(name: call["name"]?.stringValue ?? "?", detail: Self.describe(call["input"])))
+                    await onEvent(.toolCall(id: call["id"]?.stringValue ?? "", name: call["name"]?.stringValue ?? "?",
+                                            detail: Self.describe(call["input"])))
                 }
-                let results = await executeAll(calls)
+                let results = await executeAll(calls, onEvent: onEvent)
                 messages.append(["role": "user", "content": .array(results)])
             default:
                 await onEvent(.status("Writing your test plan…"))
@@ -138,8 +148,8 @@ nonisolated struct PlanGenerator: Sendable {
 
     /// Runs every tool call from one assistant turn concurrently and returns
     /// all results together (one user message keeps parallel tool use working).
-    private func executeAll(_ calls: [JSONValue]) async -> [JSONValue] {
-        await withTaskGroup(of: (Int, JSONValue).self) { group in
+    private func executeAll(_ calls: [JSONValue], onEvent: @Sendable (Event) async -> Void) async -> [JSONValue] {
+        let results = await withTaskGroup(of: (Int, JSONValue).self) { group in
             for (i, call) in calls.enumerated() {
                 group.addTask {
                     let id = call["id"]?.stringValue ?? ""
@@ -161,9 +171,13 @@ nonisolated struct PlanGenerator: Sendable {
                 }
             }
             var out = [(Int, JSONValue)]()
-            for await r in group { out.append(r) }
+            for await r in group {
+                out.append(r)
+                await onEvent(.toolDone(id: r.1["tool_use_id"]?.stringValue ?? "", ok: r.1["is_error"]?.boolValue != true))
+            }
             return out.sorted { $0.0 < $1.0 }.map(\.1)
         }
+        return results
     }
 
     private static func toolResult(_ id: String, _ text: String, isError: Bool) -> JSONValue {

@@ -12,6 +12,9 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {
     /// Acceptance criteria the tester has marked as met.
     var metCriteria: Set<String> = []
     var folderID: UUID?
+    /// Everything the research step did, kept so it can be reviewed later.
+    var research: [FeedItem] = []
+    var researchDuration: TimeInterval?
 
     /// Jira ids stay "KEY:mode" so plans saved before Linear support keep their identity.
     static func id(_ key: String, _ mode: TestMode, _ tracker: Tracker) -> String {
@@ -36,6 +39,8 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {
         done = try c.decode(Set<String>.self, forKey: .done)
         metCriteria = try c.decodeIfPresent(Set<String>.self, forKey: .metCriteria) ?? []
         folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
+        research = try c.decodeIfPresent([FeedItem].self, forKey: .research) ?? []
+        researchDuration = try c.decodeIfPresent(TimeInterval.self, forKey: .researchDuration)
     }
 
     var tasksDone: Int { plan.tasks.filter { done.contains($0.id) }.count }
@@ -50,12 +55,27 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {
     }
 }
 
-struct FeedItem: Identifiable, Hashable {
-    enum Kind { case status, thinking, tool }
-    let id = UUID()
-    let kind: Kind
-    let title: String
-    let detail: String
+/// One step of the research log: a status line, a thought, or a tool call.
+nonisolated struct FeedItem: Identifiable, Hashable, Codable, Sendable {
+    enum Kind: String, Codable, Sendable { case status, thinking, tool }
+    enum State: String, Codable, Sendable { case pending, done, failed }
+    var id = UUID()
+    var kind: Kind
+    var title: String
+    var detail: String
+    var at: Date = .now
+    /// Tool calls: pending until their result comes back.
+    var state: State?
+    /// Matches tool results / streamed thinking back to this row.
+    var ref: String?
+}
+
+/// What the research run is doing right now, for the live progress header.
+enum LivePhase: Equatable {
+    case connecting
+    case thinking(turn: Int)
+    case reading(done: Int, total: Int)
+    case writing(characters: Int)
 }
 
 @Observable
@@ -70,6 +90,9 @@ final class PlanStore {
 
     private(set) var runningKey: String?
     private(set) var feed: [FeedItem] = []
+    private(set) var phase: LivePhase = .connecting
+    private(set) var startedAt: Date?
+    private var currentTurn = 0
     var error: String?
     private var task: Task<Void, Never>?
 
@@ -226,6 +249,9 @@ final class PlanStore {
         task?.cancel()
         error = nil
         feed = []
+        phase = .connecting
+        let startedAt = Date()
+        self.startedAt = startedAt
         runningKey = key
         runningMode = mode
         runningTracker = tracker
@@ -255,6 +281,8 @@ final class PlanStore {
                 var saved = SavedPlan(plan: plan, mode: mode, tracker: tracker, createdAt: .now, done: kept)
                 saved.metCriteria = previous?.metCriteria.intersection(plan.acceptanceCriteria.map(\.id)) ?? []
                 saved.folderID = previous?.folderID ?? targetFolder
+                saved.research = feed
+                saved.researchDuration = Date().timeIntervalSince(startedAt)
                 plans.removeAll { $0.id == id }
                 plans.insert(saved, at: 0)
                 save()
@@ -295,12 +323,35 @@ final class PlanStore {
         switch event {
         case .status(let s):
             feed.append(FeedItem(kind: .status, title: s, detail: ""))
-        case .thinking(let t):
-            let firstLine = t.split(separator: "\n").first.map(String.init) ?? t
-            feed.append(FeedItem(kind: .thinking, title: firstLine, detail: t))
-        case .toolCall(let name, let detail):
-            feed.append(FeedItem(kind: .tool, title: Self.friendly(name), detail: detail))
+        case .waiting(let turn):
+            currentTurn = turn
+            phase = .thinking(turn: turn)
+        case .thinking(let turn, let index, let text):
+            let ref = "t\(turn)-\(index)"
+            let firstLine = text.split(separator: "\n").first.map(String.init) ?? text
+            if let i = feed.lastIndex(where: { $0.ref == ref }) {
+                feed[i].title = firstLine
+                feed[i].detail = text
+            } else {
+                feed.append(FeedItem(kind: .thinking, title: firstLine, detail: text, ref: ref))
+            }
+        case .writing(let n):
+            phase = .writing(characters: n)
+        case .toolCall(let id, let name, let detail):
+            feed.append(FeedItem(kind: .tool, title: Self.friendly(name), detail: detail, state: .pending, ref: id))
+            updateReadingPhase()
+        case .toolDone(let id, let ok):
+            if let i = feed.lastIndex(where: { $0.ref == id }) { feed[i].state = ok ? .done : .failed }
+            updateReadingPhase()
         }
+    }
+
+    /// Progress across the current batch of tool calls; once all return, Claude is thinking again.
+    private func updateReadingPhase() {
+        let batchStart = feed.lastIndex { $0.kind != .tool }.map { $0 + 1 } ?? 0
+        let batch = feed[batchStart...]
+        let done = batch.filter { $0.state != .pending }.count
+        phase = done < batch.count ? .reading(done: done, total: batch.count) : .thinking(turn: currentTurn)
     }
 
     private static func friendly(_ tool: String) -> String {
