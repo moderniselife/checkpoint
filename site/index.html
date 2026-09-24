@@ -3,16 +3,213 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Checkpoint — Paste a ticket. Get a test plan.</title>
-<meta name="description" content="Checkpoint is a native macOS app that reads your Jira or Linear ticket — comments, children, links and specs — and turns it into a focused, tickable test plan.">
-<meta name="theme-color" content="#4B3FD1">
-<link rel="icon" type="image/png" href="favicon.png">
-<link rel="apple-touch-icon" href="logo.png">
-<meta property="og:title" content="Checkpoint — Paste a ticket. Get a test plan.">
-<meta property="og:description" content="A Liquid Glass macOS app that turns Jira and Linear tickets into tickable test plans.">
-<meta property="og:image" content="og.png">
+<title>Checkpoint — AI Test Plan Generator for Jira &amp; Linear (macOS)</title>
+<meta name="description" content="Turn any Jira or Linear ticket into a QA test plan in a minute: test cases, an acceptance-criteria checklist and edge cases, written for you. Free macOS app.">
+<meta name="keywords" content="test plan generator, AI test cases, Jira test plan, Linear test plan, test cases from Jira ticket, acceptance criteria checklist, QA checklist, manual testing, UAT, regression testing, macOS app, Claude">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="author" content="Checkpoint">
+<meta name="application-name" content="Checkpoint">
+<meta name="apple-mobile-web-app-title" content="Checkpoint">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#4B3FD1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0A12" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://moderniselife.github.io/checkpoint/">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+<link rel="icon" type="image/png" sizes="256x256" href="logo.png">
+<link rel="apple-touch-icon" sizes="256x256" href="logo.png">
+<link rel="manifest" href="site.webmanifest">
+<link rel="preconnect" href="https://api.github.com" crossorigin>
+<link rel="preload" as="image" href="logo.png" fetchpriority="high">
+
+<!-- Open Graph -->
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Checkpoint">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://moderniselife.github.io/checkpoint/">
+<meta property="og:title" content="Checkpoint — Paste a ticket. Get a test plan.">
+<meta property="og:description" content="A free Liquid Glass macOS app that turns Jira and Linear tickets into tickable QA test plans with acceptance-criteria tracking.">
+<meta property="og:image" content="https://moderniselife.github.io/checkpoint/og.png">
+<meta property="og:image:secure_url" content="https://moderniselife.github.io/checkpoint/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Checkpoint app icon with the headline: Paste a ticket. Get a test plan.">
+
+<!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Checkpoint — Paste a ticket. Get a test plan.">
+<meta name="twitter:description" content="Turn Jira and Linear tickets into tickable QA test plans. Free, open-source macOS app.">
+<meta name="twitter:image" content="https://moderniselife.github.io/checkpoint/og.png">
+<meta name="twitter:image:alt" content="Checkpoint app icon with the headline: Paste a ticket. Get a test plan.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://moderniselife.github.io/checkpoint/#app",
+      "name": "Checkpoint",
+      "alternateName": "Checkpoint test plan generator",
+      "description": "Checkpoint is a native macOS app that turns Jira and Linear tickets into tickable QA test plans. It reads comments, epic children, linked issues and specs, then writes test cases, an acceptance-criteria checklist, edge cases and open questions.",
+      "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "Software testing",
+      "operatingSystem": "macOS 26 or later",
+      "processorRequirements": "Apple Silicon or Intel (universal)",
+      "url": "https://moderniselife.github.io/checkpoint/",
+      "downloadUrl": "https://github.com/moderniselife/checkpoint/releases/latest",
+      "installUrl": "https://github.com/moderniselife/checkpoint/releases/latest",
+      "softwareVersion": "0.1.0",
+      "image": "https://moderniselife.github.io/checkpoint/og.png",
+      "screenshot": "https://moderniselife.github.io/checkpoint/og.png",
+      "isAccessibleForFree": true,
+      "license": "https://github.com/moderniselife/checkpoint",
+      "codeRepository": "https://github.com/moderniselife/checkpoint",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "availability": "https://schema.org/InStock"
+      },
+      "featureList": [
+        "Generate test cases from Jira and Linear tickets",
+        "Acceptance criteria checklist with coverage tracking",
+        "Dev and QA (black-box) test plan modes",
+        "Reads comments, epic children, linked issues and Confluence specs",
+        "Ticket details panel with comments, attachments and history",
+        "Folders, research log and live progress",
+        "Read-only access to Jira and Linear"
+      ],
+      "keywords": "test plan generator, AI test cases, Jira, Linear, acceptance criteria, QA, manual testing, UAT, regression testing"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://moderniselife.github.io/checkpoint/#website",
+      "url": "https://moderniselife.github.io/checkpoint/",
+      "name": "Checkpoint",
+      "description": "AI test plan generator for Jira and Linear on macOS.",
+      "inLanguage": "en",
+      "about": {
+        "@id": "https://moderniselife.github.io/checkpoint/#app"
+      }
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://moderniselife.github.io/checkpoint/#webpage",
+      "url": "https://moderniselife.github.io/checkpoint/",
+      "name": "Checkpoint — AI Test Plan Generator for Jira & Linear (macOS)",
+      "isPartOf": {
+        "@id": "https://moderniselife.github.io/checkpoint/#website"
+      },
+      "about": {
+        "@id": "https://moderniselife.github.io/checkpoint/#app"
+      },
+      "primaryImageOfPage": {
+        "@type": "ImageObject",
+        "url": "https://moderniselife.github.io/checkpoint/og.png",
+        "width": 1200,
+        "height": 630
+      },
+      "inLanguage": "en"
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://moderniselife.github.io/checkpoint/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How do I generate test cases from a Jira ticket?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Install Checkpoint, add your Anthropic API key, sign in with Atlassian, then paste the ticket key (for example PROJ-123) or its link. Checkpoint reads the ticket, its comments, linked issues, epic children and Confluence specs, and writes a numbered test plan with expected results in about a minute."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does Checkpoint work with Linear?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Sign in with Linear or use a Linear API key. Linear issues get the same test plans, Dev and QA modes, ticket panel, folders and acceptance-criteria tracking as Jira."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can it turn acceptance criteria into test cases?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Explicit acceptance criteria are quoted from the ticket, every criterion is mapped to the test cases that cover it, and criteria with no covering test are flagged so nothing slips through. You can tick each criterion as met."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which AI model does Checkpoint use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Checkpoint uses Anthropic's Claude with your own API key. You can choose the model and how much effort it spends in Settings — lower effort for quick plans, higher for large epics."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How is this different from a test case management tool?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Test management tools store test cases you write by hand. Checkpoint writes the test plan for you from the ticket itself, keeps it next to the full ticket details, and tracks what you've tested — no spreadsheet or separate tool to maintain."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Checkpoint free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes — it's free and open source. You bring your own Anthropic API key, so you pay Anthropic directly for the model usage your plans consume."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can it change my tickets?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Checkpoint only ever reads. For Jira it exposes read tools only; for Linear it uses Linear's read-only MCP endpoint with a read-only scope, so Linear itself blocks writes."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does my data go through your servers?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "There are no Checkpoint servers. The app talks directly to your tracker's MCP server and to Anthropic's API. Plans are saved locally on your Mac."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which Macs does it run on?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Any Mac on macOS 26 or later — it's a universal app for Apple Silicon and Intel."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "My org restricts Atlassian API tokens. Will it work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Use Sign in with Atlassian. It uses OAuth with a local redirect that Atlassian pre-approves for every org, so no admin change is usually needed."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "macOS says the app can't be opened.",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "If a release isn't notarized yet, right-click Checkpoint in Applications and choose Open the first time, or run xattr -dr com.apple.quarantine /Applications/Checkpoint.app."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
 <style>
 :root {
   --indigo: #4B3FD1;
@@ -191,7 +388,7 @@ section { padding: 96px 0; }
 .m-go { padding: 8px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: #fff; background: linear-gradient(135deg, var(--indigo), #3E7FD8); white-space: nowrap; }
 .m-card { border-radius: 16px; padding: 14px 16px; }
 .m-head { display: flex; gap: 16px; align-items: flex-start; }
-.m-head h4 { margin: 6px 0 4px; font-size: 16px; line-height: 1.25; }
+.m-head .m-h { margin: 6px 0 4px; font-size: 16px; line-height: 1.25; font-weight: 700; color: var(--text); }
 .m-head p { font-size: 11.5px; color: var(--muted); }
 .chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; font-size: 10.5px; }
 .chip { padding: 2px 8px; border-radius: 999px; font-weight: 600; background: var(--glass-strong); border: 1px solid var(--glass-border); }
@@ -391,10 +588,11 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
 
 <!-- Nav -->
 <nav class="nav glass" aria-label="Main">
-  <a class="brand" href="#top"><img src="logo.png" alt="">Checkpoint</a>
+  <a class="brand" href="#top" aria-label="Checkpoint home"><img src="logo.png" alt="" width="30" height="30">Checkpoint</a>
   <div class="nav-links">
     <a href="#how">How it works</a>
     <a href="#features">Features</a>
+    <a href="#use-cases">Use cases</a>
     <a href="#modes">Dev vs QA</a>
     <a href="#privacy">Privacy</a>
     <a href="#faq">FAQ</a>
@@ -409,7 +607,7 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
 
 <!-- Hero -->
 <header class="hero wrap">
-  <img class="hero-logo" src="logo.png" alt="Checkpoint app icon" width="116" height="116">
+  <img class="hero-logo" src="logo.png" alt="Checkpoint — AI test plan generator app icon" width="116" height="116" fetchpriority="high">
   <h1>Paste a ticket.<br><span class="grad">Get a test plan.</span></h1>
   <p class="lede">Checkpoint reads your Jira or Linear ticket — the comments, epic children, linked issues and specs — and turns it into a focused, tickable plan: what changed, what "done" means, and exactly what to click to prove it.</p>
   <div class="cta-row">
@@ -450,7 +648,7 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
           <div class="m-head">
             <div style="min-width:0">
               <div class="chips"><span class="mono" style="font-weight:700;font-size:12px">PROJ-123</span><span class="chip qa">QA</span><span class="chip">Task</span><span class="chip blue">In Progress</span></div>
-              <h4>Checkout — let shoppers save a card for next time</h4>
+              <p class="m-h">Checkout — let shoppers save a card for next time</p>
               <p>Shoppers can tick “Save card” when paying, and saved cards are offered at their next checkout — showing only the last four digits.</p>
             </div>
             <div class="rings">
@@ -585,6 +783,43 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
   </div>
 </section>
 
+
+<!-- Use cases -->
+<section id="use-cases" class="wrap">
+  <div class="center">
+    <span class="eyebrow">Use cases</span>
+    <h2 class="section-title reveal">One app for QA testers, developers and team leads.</h2>
+    <p class="section-sub reveal">Checkpoint is an AI test plan generator for Jira and Linear: it writes test cases from your tickets so you can spend your time testing, not reading.</p>
+  </div>
+  <div class="bento">
+    <article class="tile glass wide reveal">
+      <div class="ic"><svg><use href="#i-list"/></svg></div>
+      <h3>Generate test cases from Jira tickets</h3>
+      <p>Paste a Jira issue key or link and get step-by-step manual test cases with a single expected result each — including the edge cases and negative paths people forget.</p>
+    </article>
+    <article class="tile glass wide reveal">
+      <div class="ic"><svg><use href="#i-seal-o"/></svg></div>
+      <h3>Turn acceptance criteria into a checklist</h3>
+      <p>Acceptance criteria are quoted from the ticket (or derived when missing), mapped to the test cases that cover them, and tracked as met or not met.</p>
+    </article>
+    <article class="tile glass reveal">
+      <div class="ic"><svg><use href="#i-folder"/></svg></div>
+      <h3>Epic &amp; sprint regression testing</h3>
+      <p>Analyze an epic and every active child is covered, grouped per ticket — ready for a release regression pass.</p>
+    </article>
+    <article class="tile glass reveal">
+      <div class="ic"><svg><use href="#i-shield"/></svg></div>
+      <h3>UAT on the hosted app</h3>
+      <p>QA mode writes black-box, UI-only test plans for staging or production — starting with a check that the fix is actually deployed.</p>
+    </article>
+    <article class="tile glass reveal">
+      <div class="ic"><svg><use href="#i-hammer"/></svg></div>
+      <h3>Developer self-testing</h3>
+      <p>Dev mode adds branches, APIs, logs and tests, so you can verify your own change before handing it to QA.</p>
+    </article>
+  </div>
+</section>
+
 <!-- Research showcase -->
 <section class="wrap">
   <div class="split">
@@ -684,6 +919,11 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
   <span class="eyebrow">FAQ</span>
   <h2 class="section-title reveal">Questions, answered.</h2>
   <div class="faq" style="text-align:left">
+    <details class="glass"><summary>How do I generate test cases from a Jira ticket?</summary><p>Install Checkpoint, add your Anthropic API key, sign in with Atlassian, then paste the ticket key (for example PROJ-123) or its link. Checkpoint reads the ticket, its comments, linked issues, epic children and Confluence specs, and writes a numbered test plan with expected results in about a minute.</p></details>
+    <details class="glass"><summary>Does Checkpoint work with Linear?</summary><p>Yes. Sign in with Linear or use a Linear API key. Linear issues get the same test plans, Dev and QA modes, ticket panel, folders and acceptance-criteria tracking as Jira.</p></details>
+    <details class="glass"><summary>Can it turn acceptance criteria into test cases?</summary><p>Yes. Explicit acceptance criteria are quoted from the ticket, every criterion is mapped to the test cases that cover it, and criteria with no covering test are flagged so nothing slips through. You can tick each criterion as met.</p></details>
+    <details class="glass"><summary>Which AI model does Checkpoint use?</summary><p>Checkpoint uses Anthropic's Claude with your own API key. You can choose the model and how much effort it spends in Settings — lower effort for quick plans, higher for large epics.</p></details>
+    <details class="glass"><summary>How is this different from a test case management tool?</summary><p>Test management tools store test cases you write by hand. Checkpoint writes the test plan for you from the ticket itself, keeps it next to the full ticket details, and tracks what you've tested — no spreadsheet or separate tool to maintain.</p></details>
     <details class="glass"><summary>Is Checkpoint free?</summary><p>Yes — it's free and open source. You bring your own Anthropic API key, so you pay Anthropic directly for the model usage your plans consume.</p></details>
     <details class="glass"><summary>Can it change my tickets?</summary><p>No. Checkpoint only ever reads. For Jira it exposes read tools only; for Linear it uses Linear's read-only MCP endpoint with a read-only scope, so Linear itself blocks writes.</p></details>
     <details class="glass"><summary>Does my data go through your servers?</summary><p>There are no Checkpoint servers. The app talks directly to your tracker's MCP server and to Anthropic's API. Plans are saved locally on your Mac.</p></details>
@@ -696,7 +936,7 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
 <!-- Final CTA -->
 <section class="wrap">
   <div class="final glass reveal">
-    <img src="logo.png" alt="">
+    <img src="logo.png" alt="" width="84" height="84" loading="lazy">
     <h2>Test the ticket,<br><span class="grad">not your patience.</span></h2>
     <p>Download Checkpoint and turn your next ticket into a plan in about a minute.</p>
     <div class="cta-row">
@@ -710,13 +950,13 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
 
 <footer class="wrap">
   <div class="foot">
-    <a class="brand" href="#top"><img src="logo.png" alt="" style="width:24px;height:24px">Checkpoint</a>
-    <div class="foot-links">
+    <a class="brand" href="#top"><img src="logo.png" alt="" width="24" height="24" loading="lazy" style="width:24px;height:24px">Checkpoint</a>
+    <nav class="foot-links" aria-label="Footer">
       <a href="https://github.com/moderniselife/checkpoint">GitHub</a>
       <a href="https://github.com/moderniselife/checkpoint/releases">Releases</a>
       <a href="https://github.com/moderniselife/checkpoint/blob/main/FEATURES.md">Features &amp; support</a>
       <a href="https://github.com/moderniselife/checkpoint/issues">Report an issue</a>
-    </div>
+    </nav>
     <span>Not affiliated with Atlassian, Linear or Anthropic.</span>
   </div>
 </footer>
