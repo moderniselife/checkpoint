@@ -159,6 +159,8 @@ Checkpoint/
               TicketPanel, MarkdownView, GlassScrollIndicator, SettingsView
   Assets.xcassets  AppIcon (generated from assets/logo.png on Apple's icon grid) + Logo
 assets/       logo.png (master), logo-512.png (README)
+ideas/        Idea board (IDEAS.md), specs/, and the `idea` capture script
+site/         Landing page (GitHub Pages)
 project.yml   XcodeGen spec (the .xcodeproj is generated, not committed)
 ```
 
@@ -185,6 +187,24 @@ they're Developer ID signed, notarized and stapled:
 | `APPLE_APP_PASSWORD` | an app-specific password from appleid.apple.com |
 
 Ad-hoc builds: right-click → **Open** the first time, or `xattr -dr com.apple.quarantine /Applications/Checkpoint.app`.
+
+## Landing page
+
+`site/` is a self-contained landing page (no build step). It deploys to GitHub Pages on every push that
+touches `site/` — enable it once under **Settings → Pages → Source: GitHub Actions**. Preview locally:
+
+```bash
+cd site && python3 -m http.server 8000
+```
+
+## Ideas
+
+Feature ideas are captured and triaged on the board in [`ideas/IDEAS.md`](ideas/IDEAS.md):
+
+```bash
+./ideas/idea "Your idea"      # add to the Inbox
+./ideas/idea --stats          # counts by status
+```
 
 ## Feature tracker
 
