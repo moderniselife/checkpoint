@@ -3,7 +3,7 @@
 The single place for what Checkpoint does, where each feature lives in the code, how well it's been
 verified, what's known to be rough, and how to fix things when they break.
 
-**Last updated:** 2026-09-25 · **Released:** 0.1.0 · **Unreleased on `main`:** AI providers, scenarios, build script, landing page, community files
+**Last updated:** 2026-09-25 · **Latest release:** 0.2.0 — AI providers, scenarios, build script, landing page, community files
 
 ---
 
@@ -17,7 +17,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | 🐞 **Known issue** | Works with a caveat — see *Known limitations* |
 | 💡 **Backlog** | Idea / not built |
 
-> Everything that shipped in **0.1.0** has been tested by the maintainer (✅). Work added since is 🧪 — logic
+> Everything that shipped in **0.1.0** has been tested by the maintainer (✅). Work added in **0.2.0** is 🧪 — logic
 > tested with harnesses and fixture servers — until someone runs it for real. Promote a row to ✅ once seen working.
 
 ---
@@ -285,7 +285,8 @@ picking the good ones later (`./ideas/idea "…"` to add one). Picked ideas get 
 | 2026-09-25 | `8f1c78a` | Optional end-to-end scenarios (related tickets or tickets + codebase) |
 | 2026-09-25 | `8311efd` | `build.sh` one-command build from source |
 | 2026-09-25 | `34d929b` | Issue forms and community health files |
-| 2026-09-25 | — | Docs: verified 0.1.0 features, scenarios, build script, community |
+| 2026-09-25 | `6e94039` | Docs: verified 0.1.0 features, scenarios, build script, community |
+| 2026-09-25 | — | **Release 0.2.0** — multi-provider AI, scenarios, build script, landing page, community files, new link-preview banner |
 
 ---
 

@@ -35,6 +35,9 @@ actor MCPClient {
 
     /// OAuth tokens are issued for v1; API tokens (Basic/Bearer) only work on v2 —
     /// v1 silently treats them as anonymous and hides the Jira tools.
+    /// Reported to MCP servers in the handshake.
+    static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+
     static let oauthEndpoint = URL(string: "https://mcp.atlassian.com/v1/mcp")!
     static let apiTokenEndpoint = URL(string: "https://mcp.atlassian.com/v2/mcp")!
     /// Linear's read-only endpoint — write tools aren't even listed.
@@ -67,7 +70,7 @@ actor MCPClient {
         _ = try await request("initialize", params: [
             "protocolVersion": .string(Self.protocolVersion),
             "capabilities": [:],
-            "clientInfo": ["name": "Checkpoint", "version": "0.1.0"],
+            "clientInfo": ["name": "Checkpoint", "version": .string(Self.appVersion)],
         ])
         try await notify("notifications/initialized")
         initialized = true

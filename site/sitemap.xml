@@ -7,7 +7,7 @@
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://checkpoint.guide/og.png</image:loc>
+      <image:loc>https://checkpoint.guide/og.jpg</image:loc>
       <image:title>Checkpoint — AI test plan generator for Jira and Linear</image:title>
     </image:image>
   </url>
