@@ -1,0 +1,44 @@
+name: ✨ Feature request
+description: Suggest something new for Checkpoint.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Big or small, all ideas welcome. Have a look at the [idea board](https://github.com/moderniselife/checkpoint/blob/main/ideas/IDEAS.md) — if it's there, 👍 an existing issue or add detail here with the IDEA-### id.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What's painful today, and for whom (developer, QA tester, lead)?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+      description: What would you see and do in the app?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: ["Test plans", "Scenarios", "Test execution / evidence", "Ticket panel", "Organisation (folders, search…)", "Sharing / export", "Mac experience", "Other"]
+    validations:
+      required: true
+  - type: input
+    id: idea
+    attributes:
+      label: Idea board id (if any)
+      placeholder: IDEA-042
+  - type: dropdown
+    id: help
+    attributes:
+      label: Would you like to help build it?
+      options: ["Yes, I'd like to open a PR", "Maybe, with guidance", "No, just suggesting"]

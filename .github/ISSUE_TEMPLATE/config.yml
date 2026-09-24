@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/moderniselife/checkpoint/security/advisories/new
+    about: Please report security issues privately — never in a public issue. See SECURITY.md.
+  - name: 💡 Browse the idea board
+    url: https://github.com/moderniselife/checkpoint/blob/main/ideas/IDEAS.md
+    about: Check whether your idea is already on the board before opening a feature request.
+  - name: 📖 Features & troubleshooting
+    url: https://github.com/moderniselife/checkpoint/blob/main/FEATURES.md
+    about: Known limitations and fixes for common problems.
