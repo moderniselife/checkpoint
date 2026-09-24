@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProgressFeedView: View {
     @Environment(PlanStore.self) private var store
+    @Environment(TicketInspector.self) private var inspector
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -12,6 +13,16 @@ struct ProgressFeedView: View {
                         Text("Researching \(store.runningKey ?? "")")
                             .font(.title3.weight(.semibold))
                         ModeBadge(mode: store.runningMode)
+                        Spacer()
+                        if let key = store.runningKey {
+                            Button {
+                                withAnimation(.smooth) { inspector.toggle(key, tracker: store.runningTracker) }
+                            } label: {
+                                Label("Ticket details", systemImage: "sidebar.right").font(.callout.weight(.medium))
+                            }
+                            .buttonStyle(.glass)
+                            .keyboardShortcut("i", modifiers: .command)
+                        }
                     }
                     .padding(.bottom, 6)
 
@@ -21,12 +32,14 @@ struct ProgressFeedView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
+                .environment(\.ticketTracker, store.runningTracker)
                 .frame(maxWidth: 720, alignment: .leading)
                 .padding(.horizontal, 24)
                 .padding(.top, 96)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity)
             }
+            .glassScrollIndicator()
             .onChange(of: store.feed.count) {
                 withAnimation(.smooth) { proxy.scrollTo(store.feed.last?.id, anchor: .bottom) }
             }
@@ -38,6 +51,7 @@ private struct FeedRow: View {
     let item: FeedItem
     @State private var expanded = false
     @Environment(TicketInspector.self) private var inspector
+    @Environment(\.ticketTracker) private var tracker
 
     var body: some View {
         switch item.kind {
@@ -47,7 +61,7 @@ private struct FeedRow: View {
                 .font(.callout)
         case .tool:
             let key = PlanStore.extractKey(item.detail).flatMap { $0 == item.detail.uppercased() ? $0 : nil }
-            Button { if let key { inspector.open(key) } } label: { toolChip(key: key) }
+            Button { if let key { inspector.open(key, tracker: tracker) } } label: { toolChip(key: key) }
                 .buttonStyle(.plain)
                 .disabled(key == nil)
                 .help(key.map { "Show \($0) details" } ?? "")

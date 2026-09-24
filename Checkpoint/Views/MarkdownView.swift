@@ -187,7 +187,7 @@ private struct InlineImage: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.5)))
                     .onTapGesture { zoomed = true }
                     .help("\(alt) — click to enlarge")
-            } else if url.hasPrefix("http") {
+            } else if url.hasPrefix("http"), !isLinearUpload {
                 AsyncImage(url: URL(string: url)) { $0.resizable().scaledToFit() } placeholder: { placeholder }
                     .frame(maxWidth: 560, alignment: .leading)
             } else {
@@ -217,7 +217,22 @@ private struct InlineImage: View {
         .help(failed ? "Couldn't load — add an Atlassian API token in Settings for image access." : alt)
     }
 
+    private var isLinearUpload: Bool { URL(string: url)?.host()?.hasSuffix("uploads.linear.app") == true }
+
     private func load() async {
+        if isLinearUpload {
+            // Linear's uploads are private; they take the API key or OAuth bearer.
+            guard let target = URL(string: url), let auth = await settings.linearUploadAuth() else { failed = true; return }
+            var req = URLRequest(url: target)
+            req.setValue(auth, forHTTPHeaderField: "Authorization")
+            if let (data, resp) = try? await URLSession.shared.data(for: req),
+               (resp as? HTTPURLResponse)?.statusCode == 200, let img = NSImage(data: data) {
+                image = img
+            } else {
+                failed = true
+            }
+            return
+        }
         guard let attachment else { return }
         // Prefer the full image; inline images are usually screenshots worth reading.
         if let data = await AttachmentLoader.shared.data(for: attachment, full: true, creds: settings.attachmentCredentials),

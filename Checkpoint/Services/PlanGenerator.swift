@@ -32,6 +32,7 @@ nonisolated struct PlanGenerator: Sendable {
     let effort: String
     let site: String
     let mode: TestMode
+    let tracker: Tracker
     /// Hosted app URL/name QA tests against (optional).
     let environment: String
 
@@ -41,12 +42,13 @@ nonisolated struct PlanGenerator: Sendable {
     /// Only read-only Atlassian tools are exposed — Claude can never edit tickets from this app.
     static func isReadOnly(_ name: String) -> Bool {
         let n = name.lowercased()
-        return ["get", "search", "fetch", "lookup", "atlassianuserinfo"].contains { n.hasPrefix($0) }
+        return ["get", "search", "fetch", "lookup", "list", "atlassianuserinfo"].contains { n.hasPrefix($0) }
     }
 
     func run(ticketKey: String, onEvent: @Sendable (Event) async -> Void) async throws -> TestPlan {
-        await onEvent(.status("Connecting to Atlassian…"))
-        let tools = try await mcp.authenticatedTools()
+        await onEvent(.status("Connecting to \(tracker == .jira ? "Atlassian" : "Linear")…"))
+        let listed = tracker == .jira ? try await mcp.authenticatedTools() : try await mcp.listTools()
+        let tools = listed
             .filter { Self.isReadOnly($0.name) }
             .sorted { $0.name < $1.name }
         let toolDefs: [JSONValue] = tools.map {
@@ -55,10 +57,16 @@ nonisolated struct PlanGenerator: Sendable {
             return ["name": .string($0.name), "description": .string($0.description), "input_schema": schema]
         }
 
-        let siteLine = site.isEmpty
-            ? "The Jira site is unknown — call getAccessibleAtlassianResources first to find the cloudId."
-            : "Jira site / cloudId: \(site)"
-        var request = "Build the \(mode == .qa ? "QA" : "developer") test brief for Jira ticket \(ticketKey).\n\(siteLine)"
+        let siteLine: String
+        switch tracker {
+        case .jira:
+            siteLine = site.isEmpty
+                ? "The Jira site is unknown — call getAccessibleAtlassianResources first to find the cloudId."
+                : "Jira site / cloudId: \(site)"
+        case .linear:
+            siteLine = "The issue is in Linear."
+        }
+        var request = "Build the \(mode == .qa ? "QA" : "developer") test brief for \(tracker.label) issue \(ticketKey).\n\(siteLine)"
         if mode == .qa, !environment.isEmpty {
             request += "\nHosted environment under test: \(environment). Unless the tickets say otherwise, write the plan for this environment."
         }
@@ -72,7 +80,7 @@ nonisolated struct PlanGenerator: Sendable {
             var body: JSONValue = [
                 "model": .string(model),
                 "max_tokens": 32000,
-                "system": .string(Self.systemPrompt(for: mode)),
+                "system": .string(Self.systemPrompt(for: mode, tracker: tracker)),
                 "thinking": ["type": "adaptive", "display": "summarized"],
                 "output_config": [
                     "effort": .string(effort),
@@ -162,32 +170,45 @@ nonisolated struct PlanGenerator: Sendable {
 
     /// Short human label for the progress feed, e.g. "PROJ-123" or a JQL / CQL query.
     private static func describe(_ input: JSONValue?) -> String {
-        for key in ["issueIdOrKey", "jql", "cql", "query", "pageId", "id", "url"] {
+        for key in ["issueIdOrKey", "identifier", "issueId", "jql", "cql", "query", "pageId", "id", "url"] {
             if let v = input?[key]?.stringValue { return v }
         }
         return ""
     }
 
-    static func systemPrompt(for mode: TestMode) -> String {
-        research + (mode == .dev ? devPlan : qaPlan) + shared
+    static func systemPrompt(for mode: TestMode, tracker: Tracker) -> String {
+        research + (tracker == .jira ? jiraResearch : linearResearch) + (mode == .dev ? devPlan : qaPlan) + shared
     }
 
     private static let research = """
-    You prepare manual test briefs for someone about to verify a Jira ticket. They hate flipping \
+    You prepare manual test briefs for someone about to verify a ticket from their issue tracker. They hate flipping \
     between tabs, so your brief must be the only thing they need open: what changed, what "done" \
     means, and exactly what to do to prove it.
 
-    Research with the Atlassian tools before writing anything:
-    - Fetch the ticket with description, comments, issue links, subtasks, parent, labels, components, \
-    status and fix versions. Ask for markdown content where the tool supports it.
+    Research with the tracker tools before writing anything:
     - Comments matter. They often hold revised acceptance criteria, triage notes, notes on what was \
     actually changed and where it was deployed, and QA feedback. Later comments override earlier ones.
-    - If the ticket is an epic or has subtasks/children (JQL `parent = KEY`), fetch every active child \
-    and cover each one — skip children that are closed as superseded or duplicate.
-    - Follow the parent epic, linked issues (relates, blocks, replaces, duplicates) and any Confluence \
-    pages or specs linked from the ticket, but only as far as they change what needs testing. Don't crawl \
-    the whole graph.
+    - If the ticket has children, fetch every active child and cover each one — skip children that are \
+    closed as superseded, duplicate or cancelled.
+    - Follow the parent, linked/related issues and any specs or documents linked from the ticket, but only \
+    as far as they change what needs testing. Don't crawl the whole graph.
     - Batch independent fetches into one turn so they run in parallel.
+
+    """
+
+    private static let jiraResearch = """
+    Jira specifics: fetch the ticket with description, comments, issue links, subtasks, parent, labels, \
+    components, status and fix versions, asking for markdown content. Epic children come from JQL \
+    `parent = KEY`. Specs usually live in linked Confluence pages. Use the ticket key as the source id, and \
+    https://<site>/browse/<KEY> as its url.
+
+
+    """
+
+    private static let linearResearch = """
+    Linear specifics: fetch the issue (including its sub-issues, parent, relations, labels, project and \
+    cycle), then its comments. Project descriptions and Linear documents often hold the spec. Use the \
+    issue identifier (e.g. ENG-123) as the source id and its Linear URL as the url.
 
 
     """

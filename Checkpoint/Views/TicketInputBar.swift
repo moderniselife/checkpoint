@@ -11,8 +11,12 @@ struct TicketInputBar: View {
         GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
                 HStack(spacing: 10) {
-                    Image(systemName: "ticket")
-                        .foregroundStyle(.secondary)
+                    if settings.isAtlassianConfigured && settings.isLinearConfigured {
+                        TrackerMenu()
+                    } else {
+                        Image(systemName: "ticket")
+                            .foregroundStyle(.secondary)
+                    }
                     // Custom placeholder: macOS hides the built-in one as soon as the field
                     // is focused, and this field auto-focuses, so it was never visible.
                     TextField("", text: $input)
@@ -20,7 +24,7 @@ struct TicketInputBar: View {
                         .font(.title3)
                         .background(alignment: .leading) {
                             if input.isEmpty {
-                                Text("Jira key or link — e.g. PROJ-123")
+                                Text(placeholder)
                                     .font(.title3)
                                     .foregroundStyle(.tertiary)
                                     .allowsHitTesting(false)
@@ -61,6 +65,14 @@ struct TicketInputBar: View {
             Button("") { focused = true }
                 .keyboardShortcut("l", modifiers: .command)
                 .hidden()
+        }
+    }
+
+    private var placeholder: String {
+        switch settings.connectedTrackers {
+        case [.linear]: "Linear issue ID or link — e.g. ENG-123"
+        case [.jira, .linear]: "Jira or Linear key, or paste a link"
+        default: "Jira key or link — e.g. PROJ-123"
         }
     }
 
@@ -107,5 +119,28 @@ private struct ModeToggle: View {
                 .keyboardShortcut("m", modifiers: [.command, .shift])
                 .hidden()
         }
+    }
+}
+
+/// Picks where bare keys are looked up when both Jira and Linear are connected.
+private struct TrackerMenu: View {
+    @Environment(AppSettings.self) private var settings
+
+    var body: some View {
+        Menu {
+            ForEach(Tracker.allCases) { t in
+                Button { settings.defaultTracker = t } label: {
+                    Label(t.label, systemImage: settings.defaultTracker == t ? "checkmark" : t.icon)
+                }
+            }
+        } label: {
+            Text(settings.defaultTracker.label)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help("Bare keys are looked up in \(settings.defaultTracker.label). Pasted links are detected automatically.")
     }
 }

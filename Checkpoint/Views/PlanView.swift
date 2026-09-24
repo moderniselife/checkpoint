@@ -5,12 +5,14 @@ struct PlanView: View {
     let saved: SavedPlan
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
+    @Environment(TicketInspector.self) private var inspector
     @State private var filter: Filter = .todo
     @State private var copied = false
 
     enum Filter: String, CaseIterable { case todo = "To do", all = "All" }
 
     private var plan: TestPlan { saved.plan }
+    private var detailsOpen: Bool { inspector.currentKey == plan.ticket.key.uppercased() }
 
     private var visibleTasks: [TestPlan.Task] {
         filter == .all ? plan.tasks : plan.tasks.filter { !saved.done.contains($0.id) }
@@ -99,12 +101,14 @@ struct PlanView: View {
                     }
                 }
             }
+            .environment(\.ticketTracker, saved.tracker)
             .frame(maxWidth: 820, alignment: .leading)
             .padding(.horizontal, 28)
             .padding(.top, 92)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
+        .glassScrollIndicator()
         .toolbar {
             ToolbarItemGroup {
                 Button(copied ? "Copied" : "Copy as Markdown",
@@ -115,11 +119,17 @@ struct PlanView: View {
                     Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
                 }
                 Button("Re-run", systemImage: "arrow.clockwise") {
-                    store.analyze(saved.plan.ticket.key, mode: saved.mode, settings: settings)
+                    store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
                 }
-                if let url = URL(string: plan.ticket.url) {
-                    Link(destination: url) { Label("Open in Jira", systemImage: "arrow.up.right.square") }
+                if let url = URL(string: plan.ticket.url), url.scheme != nil {
+                    Button("Open in \(saved.tracker.label)", systemImage: "arrow.up.right.square") {
+                        NSWorkspace.shared.open(url)
+                    }
                 }
+                Button(detailsOpen ? "Hide ticket details" : "Show ticket details", systemImage: "sidebar.right") {
+                    withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
+                }
+                .keyboardShortcut("i", modifiers: .command)
             }
         }
     }
@@ -130,6 +140,16 @@ struct PlanView: View {
                 HStack(spacing: 8) {
                     TicketKeyButton(key: plan.ticket.key, font: .headline.monospaced())
                     ModeBadge(mode: saved.mode)
+                    if saved.tracker == .linear { Chip(text: "Linear", tint: .purple) }
+                    Spacer(minLength: 8)
+                    Button {
+                        withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
+                    } label: {
+                        Label(detailsOpen ? "Hide details" : "Ticket details", systemImage: "sidebar.right")
+                            .font(.callout.weight(.medium))
+                    }
+                    .buttonStyle(.glass)
+                    .help("Show everything on the ticket (⌘I)")
                     Chip(text: plan.ticket.type)
                     Chip(text: plan.ticket.status, tint: .blue)
                 }

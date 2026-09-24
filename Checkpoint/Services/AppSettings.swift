@@ -16,6 +16,19 @@ final class AppSettings {
     /// Display name after OAuth sign-in; nil when signed out.
     var atlassianUser: String? { didSet { UserDefaults.standard.set(atlassianUser, forKey: "atlassianUser") } }
 
+    enum LinearAuth: String, CaseIterable, Identifiable {
+        case oauth, apiKey
+        var id: Self { self }
+        var label: String { self == .oauth ? "Sign in with Linear" : "API key" }
+    }
+
+    var linearAuth: LinearAuth { didSet { UserDefaults.standard.set(linearAuth.rawValue, forKey: "linearAuth") } }
+    var linearAPIKey: String { didSet { Keychain.set(linearAPIKey, for: "linear-api-key") } }
+    /// Display name after Linear OAuth sign-in; nil when signed out.
+    var linearUser: String? { didSet { UserDefaults.standard.set(linearUser, forKey: "linearUser") } }
+    /// Used for bare keys when both trackers are connected (links are auto-detected).
+    var defaultTracker: Tracker { didSet { UserDefaults.standard.set(defaultTracker.rawValue, forKey: "defaultTracker") } }
+
     var anthropicKey: String { didSet { Keychain.set(anthropicKey, for: "anthropic") } }
     var atlassianEmail: String { didSet { UserDefaults.standard.set(atlassianEmail, forKey: "atlassianEmail") } }
     var atlassianToken: String { didSet { Keychain.set(atlassianToken, for: "atlassian") } }
@@ -38,7 +51,58 @@ final class AppSettings {
         mode = TestMode(rawValue: d.string(forKey: "mode") ?? "") ?? .dev
         qaEnvironment = d.string(forKey: "qaEnvironment") ?? ""
         atlassianAuth = AtlassianAuth(rawValue: d.string(forKey: "atlassianAuth") ?? "") ?? .oauth
-        atlassianUser = AtlassianOAuth.shared.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil
+        atlassianUser = MCPOAuth.atlassian.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil
+        linearAuth = LinearAuth(rawValue: d.string(forKey: "linearAuth") ?? "") ?? .oauth
+        linearAPIKey = Keychain.get("linear-api-key") ?? ""
+        linearUser = MCPOAuth.linear.isSignedIn ? d.string(forKey: "linearUser") ?? "Signed in" : nil
+        defaultTracker = Tracker(rawValue: d.string(forKey: "defaultTracker") ?? "") ?? .jira
+    }
+
+    var isLinearConfigured: Bool {
+        switch linearAuth {
+        case .oauth: linearUser != nil
+        case .apiKey: !linearAPIKey.isEmpty
+        }
+    }
+
+    func isConfigured(_ tracker: Tracker) -> Bool {
+        tracker == .jira ? isAtlassianConfigured : isLinearConfigured
+    }
+
+    var connectedTrackers: [Tracker] { Tracker.allCases.filter(isConfigured) }
+
+    /// Tracker for an input: link wins, else the only connected one, else the default.
+    func tracker(for input: String) -> Tracker {
+        if let t = Tracker.detect(in: input) { return t }
+        let connected = connectedTrackers
+        return connected.count == 1 ? connected[0] : defaultTracker
+    }
+
+    func makeMCPClient(for tracker: Tracker) -> MCPClient {
+        tracker == .jira ? makeMCPClient() : makeLinearClient()
+    }
+
+    /// Linear's read-only MCP endpoint: the server itself refuses any write.
+    private func makeLinearClient() -> MCPClient {
+        switch linearAuth {
+        case .apiKey:
+            let key = linearAPIKey
+            return MCPClient(endpoint: MCPClient.linearEndpoint, auth: { "Bearer " + key })
+        case .oauth:
+            return MCPClient(
+                endpoint: MCPClient.linearEndpoint,
+                auth: { "Bearer " + (try await MCPOAuth.linear.accessToken()) },
+                onUnauthorized: { try await MCPOAuth.linear.forceRefresh() }
+            )
+        }
+    }
+
+    /// Authorization header value for private Linear uploads (images in issues).
+    func linearUploadAuth() async -> String? {
+        switch linearAuth {
+        case .apiKey: return linearAPIKey.isEmpty ? nil : linearAPIKey
+        case .oauth: return (try? await MCPOAuth.linear.accessToken()).map { "Bearer " + $0 }
+        }
     }
 
     var isAtlassianConfigured: Bool {
@@ -48,7 +112,7 @@ final class AppSettings {
         }
     }
 
-    var isConfigured: Bool { !anthropicKey.isEmpty && isAtlassianConfigured }
+    var isConfigured: Bool { !anthropicKey.isEmpty && (isAtlassianConfigured || isLinearConfigured) }
 
     /// MCP client wired to whichever Atlassian auth method is selected.
     func makeMCPClient() -> MCPClient {
@@ -59,8 +123,8 @@ final class AppSettings {
         case .oauth:
             return MCPClient(
                 endpoint: MCPClient.oauthEndpoint,
-                auth: { "Bearer " + (try await AtlassianOAuth.shared.accessToken()) },
-                onUnauthorized: { try await AtlassianOAuth.shared.forceRefresh() }
+                auth: { "Bearer " + (try await MCPOAuth.atlassian.accessToken()) },
+                onUnauthorized: { try await MCPOAuth.atlassian.forceRefresh() }
             )
         }
     }
