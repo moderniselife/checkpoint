@@ -2,6 +2,9 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(PlanStore.self) private var store
+    @Environment(TicketInspector.self) private var inspector
+    @AppStorage("panelWidth") private var panelWidth = 460.0
+    @State private var dragStartWidth: Double?
 
     var body: some View {
         @Bindable var store = store
@@ -9,8 +12,41 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
+            HStack(spacing: 0) {
+                main
+                if inspector.isOpen {
+                    TicketPanel()
+                        .frame(width: panelWidth)
+                        .padding(.vertical, 12)
+                        .padding(.trailing, 12)
+                        .overlay(alignment: .leading) { resizeHandle }
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .background { Backdrop() }
+            .animation(.smooth(duration: 0.35), value: inspector.isOpen)
+        }
+    }
+
+    /// Drag the panel's leading edge to resize it.
+    private var resizeHandle: some View {
+        Rectangle()
+            .fill(.clear)
+            .frame(width: 10)
+            .contentShape(.rect)
+            .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { value in
+                    let start = dragStartWidth ?? panelWidth
+                    dragStartWidth = start
+                    panelWidth = min(820, max(360, start - value.translation.width))
+                }
+                .onEnded { _ in dragStartWidth = nil })
+            .offset(x: -5)
+    }
+
+    private var main: some View {
             ZStack(alignment: .top) {
-                Backdrop()
 
                 Group {
                     if store.isRunning {
@@ -36,7 +72,26 @@ struct ContentView: View {
                 }
             }
             .animation(.smooth, value: store.error)
+    }
+}
+
+/// A Jira key that opens the ticket side panel when clicked.
+struct TicketKeyButton: View {
+    let key: String
+    var font: Font = .callout.monospaced().weight(.semibold)
+    @Environment(TicketInspector.self) private var inspector
+    @State private var hovering = false
+
+    var body: some View {
+        Button { inspector.open(key) } label: {
+            Text(key)
+                .font(font)
+                .underline(hovering)
+                .foregroundStyle(hovering ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
         }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Show \(key) details")
     }
 }
 

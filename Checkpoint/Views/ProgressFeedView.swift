@@ -36,6 +36,7 @@ struct ProgressFeedView: View {
 private struct FeedRow: View {
     let item: FeedItem
     @State private var expanded = false
+    @Environment(TicketInspector.self) private var inspector
 
     var body: some View {
         switch item.kind {
@@ -44,21 +45,11 @@ private struct FeedRow: View {
                 .foregroundStyle(.secondary)
                 .font(.callout)
         case .tool:
-            HStack(spacing: 10) {
-                Image(systemName: "arrow.down.doc")
-                    .foregroundStyle(.tint)
-                Text(item.title)
-                if !item.detail.isEmpty {
-                    Text(item.detail)
-                        .font(.callout.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .glassEffect(.regular, in: .capsule)
+            let key = PlanStore.extractKey(item.detail).flatMap { $0 == item.detail.uppercased() ? $0 : nil }
+            Button { if let key { inspector.open(key) } } label: { toolChip(key: key) }
+                .buttonStyle(.plain)
+                .disabled(key == nil)
+                .help(key.map { "Show \($0) details" } ?? "")
         case .thinking:
             VStack(alignment: .leading, spacing: 6) {
                 Label(item.title, systemImage: "brain")
@@ -75,5 +66,26 @@ private struct FeedRow: View {
             .contentShape(.rect)
             .onTapGesture { withAnimation(.smooth) { expanded.toggle() } }
         }
+    }
+
+    private func toolChip(key: String?) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.doc")
+                .foregroundStyle(.tint)
+            Text(item.title)
+            if !item.detail.isEmpty {
+                Text(item.detail)
+                    .font(.callout.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            if key != nil {
+                Image(systemName: "sidebar.right").font(.caption).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .glassEffect(key != nil ? .regular.interactive() : .regular, in: .capsule)
     }
 }

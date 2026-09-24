@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(PlanStore.self) private var store
+    @Environment(TicketInspector.self) private var inspector
 
     var body: some View {
         @Bindable var store = store
@@ -19,6 +20,7 @@ struct SidebarView: View {
                     SidebarRow(saved: saved)
                         .tag(saved.id)
                         .contextMenu {
+                            Button("Show ticket details") { inspector.open(saved.id) }
                             Button("Re-run") { rerun(saved) }
                             if let url = URL(string: saved.plan.ticket.url) {
                                 Link("Open in Jira", destination: url)
