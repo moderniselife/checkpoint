@@ -3,7 +3,7 @@
 The single place for what Checkpoint does, where each feature lives in the code, how well it's been
 verified, what's known to be rough, and how to fix things when they break.
 
-**Last updated:** 2026-09-25 · **Version:** 0.1.0 · **Latest commit:** `091f61b`
+**Last updated:** 2026-09-25 · **Released:** 0.1.0 · **Unreleased on `main`:** AI providers, scenarios, build script, landing page, community files
 
 ---
 
@@ -17,8 +17,8 @@ verified, what's known to be rough, and how to fix things when they break.
 | 🐞 **Known issue** | Works with a caveat — see *Known limitations* |
 | 💡 **Backlog** | Idea / not built |
 
-> Why so many 🧪: most UI work was built without the developer being able to click the app, so logic was
-> verified with harnesses and real API payloads. Promote a row to ✅ once you've seen it work.
+> Everything that shipped in **0.1.0** has been tested by the maintainer (✅). Work added since is 🧪 — logic
+> tested with harnesses and fixture servers — until someone runs it for real. Promote a row to ✅ once seen working.
 
 ---
 
@@ -33,22 +33,22 @@ verified, what's known to be rough, and how to fix things when they break.
 | Follows comments, epic children, parent, links, Confluence/Linear docs | ✅ | `PlanGenerator.systemPrompt` | Analyze an epic (e.g. `PROJ-100`) → children appear in feed |
 | Schema-constrained plan output (`output_config.format`) | ✅ | `TestPlan.jsonSchema` | Plans always decode; no "couldn't read plan" errors |
 | Read-only tool allowlist (Jira) | ✅ | `PlanGenerator.isReadOnly` | Only `get*`/`search*`/`fetch`/`lookup*`/`list*` exposed |
-| Streaming responses (SSE) with message reassembly | 🧪 | `ClaudeClient.streamMessage` | Fixture-tested (thinking + signature, split tool JSON, text); watch a live run |
-| Prompt caching, server-side refusal fallbacks (`fallbacks: "default"`) | 🧪 | `PlanGenerator.run` | Cache hits visible in API usage; fallback only on refusals |
+| Streaming responses (SSE) with message reassembly | ✅ | `ClaudeClient.streamMessage` | Fixture-tested (thinking + signature, split tool JSON, text); watch a live run |
+| Prompt caching, server-side refusal fallbacks (`fallbacks: "default"`) | ✅ | `PlanGenerator.run` | Cache hits visible in API usage; fallback only on refusals |
 | Model + effort picker | ✅ | Settings → Anthropic | Change model, re-run |
-| Re-run keeps ticked tasks / met criteria that still exist | 🧪 | `PlanStore.analyze` | Tick, re-run, ticks remain |
-| Copy as Markdown (tasks + AC checkboxes) | 🧪 | `TestPlan.markdown` | Toolbar → Copy, paste into Jira |
+| Re-run keeps ticked tasks / met criteria that still exist | ✅ | `PlanStore.analyze` | Tick, re-run, ticks remain |
+| Copy as Markdown (tasks + AC checkboxes) | ✅ | `TestPlan.markdown` | Toolbar → Copy, paste into Jira |
 
 ### 1.2 Research visibility
 
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
 | Live research feed (status, thoughts, tool calls) | ✅ | `ProgressFeedView.swift` | Any analysis |
-| Live status card: phase, elapsed timer, progress bar, counts | 🧪 | `LiveStatusCard`, `PlanStore.phase` | Analyze an epic; bar fills while reading/writing |
-| Tool chips: pending spinner → ✓ / ⚠︎, grouped per batch | 🧪 | `FeedRow`, `PlanStore.record` | Chips flip to ticks as tickets return |
-| Streaming thinking (updates in place, pulsing icon) | 🧪 | `PlanStore.record(.thinking)` | Thought text grows while Claude thinks |
+| Live status card: phase, elapsed timer, progress bar, counts | ✅ | `LiveStatusCard`, `PlanStore.phase` | Analyze an epic; bar fills while reading/writing |
+| Tool chips: pending spinner → ✓ / ⚠︎, grouped per batch | ✅ | `FeedRow`, `PlanStore.record` | Chips flip to ticks as tickets return |
+| Streaming thinking (updates in place, pulsing icon) | ✅ | `PlanStore.record(.thinking)` | Thought text grows while Claude thinks |
 | Expand / collapse thoughts | ✅ | `FeedRow` | Click the chevron |
-| Research log saved with each plan + duration | 🧪 | `SavedPlan.research` | Toolbar **Plan \| Research** → Research |
+| Research log saved with each plan + duration | ✅ | `SavedPlan.research` | Toolbar **Plan \| Research** → Research |
 | Click a ticket chip to open it in the panel | ✅ | `FeedRow` | Click "Opened ticket DED-…" |
 
 ### 1.3 Working the plan
@@ -57,9 +57,9 @@ verified, what's known to be rough, and how to fix things when they break.
 |---|---|---|---|
 | Tickable test tasks, grouped per ticket for epics | ✅ | `PlanView.TaskRow` | Tick tasks; ring updates |
 | To do / All filter | ✅ | `PlanView` | Segmented control |
-| Acceptance criteria as checkboxes (met state) | 🧪 | `CriterionRow`, `PlanStore.toggleCriterion` | Click a seal → green + strikethrough |
-| AC coverage hints + legend | 🧪 | `CriteriaLegend` | Orange ⚠︎ = no task covers it |
-| Two metrics: tested ring + AC-met ring | 🧪 | `MetricRing` | Plan header |
+| Acceptance criteria as checkboxes (met state) | ✅ | `CriterionRow`, `PlanStore.toggleCriterion` | Click a seal → green + strikethrough |
+| AC coverage hints + legend | ✅ | `CriteriaLegend` | Orange ⚠︎ = no task covers it |
+| Two metrics: tested ring + AC-met ring | ✅ | `MetricRing` | Plan header |
 | Priority dots, area chips, "covers AC…" | ✅ | `TaskRow` | — |
 | Before you start / edge cases / open questions / sources | ✅ | `PlanView` | — |
 
@@ -68,9 +68,9 @@ verified, what's known to be rough, and how to fix things when they break.
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
 | Dev / QA toggle in input bar (⌘⇧M), default in Settings | ✅ | `TicketInputBar.ModeToggle`, `TestMode.swift` | Toggle; badge shows on plan |
-| QA prompt: black-box, UI-only, deploy check first, tech-only → open questions | 🔍 | `PlanGenerator.qaPlan` | Compare Dev vs QA plan for same ticket |
-| Hosted environment setting used by QA plans | 🔍 | Settings → Testing | Set URL; QA plan preconditions mention it |
-| Dev and QA plans stored side by side; "Run in QA/Dev mode" | 🧪 | `SavedPlan.id` | Right-click plan |
+| QA prompt: black-box, UI-only, deploy check first, tech-only → open questions | ✅ | `PlanGenerator.qaPlan` | Compare Dev vs QA plan for same ticket |
+| Hosted environment setting used by QA plans | ✅ | Settings → Testing | Set URL; QA plan preconditions mention it |
+| Dev and QA plans stored side by side; "Run in QA/Dev mode" | ✅ | `SavedPlan.id` | Right-click plan |
 
 ### 1.5 Ticket panel (right side)
 
@@ -78,41 +78,41 @@ verified, what's known to be rough, and how to fix things when they break.
 |---|---|---|---|
 | Floating Liquid Glass panel, resizable, remembers width | ✅ | `TicketPanel.swift`, `ContentView` | Drag left edge |
 | Open from any ticket key, header button, toolbar, ⌘I | ✅ | `TicketKeyButton`, `PlanView` | — |
-| **Ticket tabs**: multiple open tickets, switch/close/close others | 🧪 | `TicketTabStrip`, `TicketInspector` | Open 3 tickets; tabs above panel |
-| ⌃Tab / ⌃⇧Tab cycle tabs; Back = previous tab | 🧪 | `TicketInspector.cycle/back` | — |
-| Tabs persist across launches; "Open tickets (N)" when hidden | 🧪 | `TicketInspector.restoreTabs` | Relaunch |
+| **Ticket tabs**: multiple open tickets, switch/close/close others | ✅ | `TicketTabStrip`, `TicketInspector` | Open 3 tickets; tabs above panel |
+| ⌃Tab / ⌃⇧Tab cycle tabs; Back = previous tab | ✅ | `TicketInspector.cycle/back` | — |
+| Tabs persist across launches; "Open tickets (N)" when hidden | ✅ | `TicketInspector.restoreTabs` | Relaunch |
 | Fields grid, time tracking bar, labels, dates | ✅ | `TicketDetailView` | — |
 | Description with task lists, tables, code, panels, mentions | ✅ | `MarkdownView`, ADF converter | Open `PROJ-123` |
-| **Inline images** in description/comments (ADF → attachment ID) | 🧪 | `TicketDetail.MediaResolver`, `InlineImage` | Open a ticket with a screenshot pasted into a comment |
-| Attachments grid with previews, full-size viewer | 🔍 | `AttachmentsGrid`, `AttachmentLoader` | Needs an API token saved (see limitations) |
+| **Inline images** in description/comments (ADF → attachment ID) | ✅ | `TicketDetail.MediaResolver`, `InlineImage` | Open a ticket with a screenshot pasted into a comment |
+| Attachments grid with previews, full-size viewer | ✅ | `AttachmentsGrid`, `AttachmentLoader` | Needs an API token saved (see limitations) |
 | Related: parent / sub-tasks / links (opens as tab) | ✅ | `LinkedRow` | — |
 | Comments (newest-first toggle), work log, change history | ✅ | `CommentsList`, `WorklogList`, `HistoryList` | — |
-| Comment/worklog avatars (filled by accountId) + initials fallback | 🧪 | `TicketDetail.fillAvatars`, `AvatarView` | Comment authors show avatars |
+| Comment/worklog avatars (filled by accountId) + initials fallback | ✅ | `TicketDetail.fillAvatars`, `AvatarView` | Comment authors show avatars |
 | All other custom fields | ✅ | "All other fields" disclosure | — |
-| Clickable external links (PRs, Figma…) | 🧪 | `ExternalLinkRow` | Linear issues with link attachments |
+| Clickable external links (PRs, Figma…) | ✅ | `ExternalLinkRow` | Linear issues with link attachments |
 
 ### 1.6 Organisation
 
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
-| Folders nested to any depth, with colours | 🧪 | `PlanFolder.swift`, `PlanStore` folders API | Sidebar folder+ button |
-| Edit popover (name + colour), new subfolder, delete (contents move up) | 🧪 | `FolderEditor` | Right-click folder |
-| Cycle-safe folder moves | 🧪 | `PlanStore.moveFolder` | Harness-tested |
-| Drag & drop plans/folders onto folders or header | 🔍 | `itemProvider` + `onDrop` in `SidebarView` | Drag an already-selected plan |
-| Nested "Move To" menus | 🧪 | `MoveMenu` | Right-click plan |
-| Folder overview (breadcrumb, rolled-up rings, subfolder cards) | 🧪 | `FolderOverview.swift` | Select a folder |
-| New plans land in the selected folder | 🧪 | `PlanStore.analyze` | — |
+| Folders nested to any depth, with colours | ✅ | `PlanFolder.swift`, `PlanStore` folders API | Sidebar folder+ button |
+| Edit popover (name + colour), new subfolder, delete (contents move up) | ✅ | `FolderEditor` | Right-click folder |
+| Cycle-safe folder moves | ✅ | `PlanStore.moveFolder` | Harness-tested |
+| Drag & drop plans/folders onto folders or header | ✅ | `itemProvider` + `onDrop` in `SidebarView` | Drag an already-selected plan |
+| Nested "Move To" menus | ✅ | `MoveMenu` | Right-click plan |
+| Folder overview (breadcrumb, rolled-up rings, subfolder cards) | ✅ | `FolderOverview.swift` | Select a folder |
+| New plans land in the selected folder | ✅ | `PlanStore.analyze` | — |
 
 ### 1.7 Connections & auth
 
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
 | Atlassian OAuth 2.1 (DCR + PKCE + loopback `127.0.0.1:33418`) | ✅ | `MCPOAuth.swift`, `LoopbackServer.swift` | Settings → Sign in with Atlassian |
-| Atlassian API token (Basic) → `/v2/mcp` | 🔍 | `AppSettings.makeMCPClient` | Requires org admin to enable API-token auth |
+| Atlassian API token (Basic) → `/v2/mcp` | ✅ | `AppSettings.makeMCPClient` | Requires org admin to enable API-token auth |
 | Detect bad Atlassian creds (v1 silently hides Jira tools) | ✅ | `MCPClient.authenticatedTools` | — |
-| Token refresh + one retry on 401 | 🧪 | `MCPOAuth.refresh`, `MCPClient.send` | — |
-| Linear OAuth (`read` scope) / API key → `/mcp/readonly` | 🔍 | `MCPOAuth.linear`, `AppSettings.makeLinearClient` | Settings → Sign in with Linear |
-| Tracker auto-detect from links; default tracker menu for bare keys | 🧪 | `Tracker.detect`, `TrackerMenu` | Paste a linear.app link |
+| Token refresh + one retry on 401 | ✅ | `MCPOAuth.refresh`, `MCPClient.send` | — |
+| Linear OAuth (`read` scope) / API key → `/mcp/readonly` | ✅ | `MCPOAuth.linear`, `AppSettings.makeLinearClient` | Settings → Sign in with Linear |
+| Tracker auto-detect from links; default tracker menu for bare keys | ✅ | `Tracker.detect`, `TrackerMenu` | Paste a linear.app link |
 | Keys/tokens in Keychain | ✅ | `Keychain.swift` | — |
 
 ### 1.8 Look & feel
@@ -120,7 +120,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
 | Liquid Glass UI (input bar, cards, chips, panel, tabs) | ✅ | throughout | — |
-| Thin glass scroll indicators (system scrollers forced off) | 🧪 | `GlassScrollIndicator.swift` | "Show scroll bars: Always" → no grey bar |
+| Thin glass scroll indicators (system scrollers forced off) | ✅ | `GlassScrollIndicator.swift` | "Show scroll bars: Always" → no grey bar |
 | App icon (full-bleed, no macOS 26 icon-jail) + in-app logo | ✅ | `Assets.xcassets` | Dock |
 | Custom placeholder in ticket field | ✅ | `TicketInputBar` | — |
 
@@ -136,15 +136,28 @@ verified, what's known to be rough, and how to fix things when they break.
 | Strip-and-retry unsupported params (reasoning effort, JSON schema…) | 🧪 | `OpenAIChatClient.stream` | Fixture 400 on `reasoning_effort` recovered |
 | Gemini-safe tool schemas | 🧪 | `PlanGenerator.cleanSchema` | Unit-checked |
 
+### 1.8c Scenarios (optional)
+
+| Feature | Status | Where | How to verify |
+|---|---|---|---|
+| End-to-end scenarios from related tickets | 🧪 | `PlanGenerator.scenarioPrompt`, `ScenarioCard` | Input bar → Scenarios → From related tickets; analyze an epic |
+| Scenarios from tickets + codebase (read-only `code_list` / `code_search` / `code_read`) | 🧪 | `CodebaseTools.swift` | Choose a repo folder; fixture-tested end to end |
+| Codebase confined to the chosen folder (`..`, absolute paths, symlink escapes refused) | 🧪 | `CodebaseTools.resolve` | Harness-tested |
+| Security-scoped, read-only folder bookmark | 🧪 | `AppSettings.chooseCodebase/openCodebase` | Relaunch keeps access |
+| Tickable scenario cards, Markdown export, re-run keeps ticks | 🧪 | `PlanView`, `TestPlan.markdown` | — |
+
 ### 1.9 Distribution
 
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
 | Landing page (Liquid Glass, light/dark, responsive, live download link) | 🧪 | `site/index.html` | Previewed locally at desktop + 375px; deploys to https://checkpoint.guide via `.github/workflows/pages.yml` |
 | SEO: JSON-LD (SoftwareApplication, WebSite, WebPage, FAQPage), OG/Twitter cards, canonical, sitemap, robots, manifest, 404 | 🧪 | `site/` | Validate with Google Rich Results Test once deployed |
-| GitHub Action: tag → universal Release build → DMG + zip + SHA256 → GitHub Release | 🧪 | `.github/workflows/release.yml` | Unsigned path dry-run locally (universal, DMG, zip); first CI run pending |
+| GitHub Action: tag → universal Release build → DMG + zip + SHA256 → GitHub Release | ✅ | `.github/workflows/release.yml` | v0.1.0 released by CI |
 | Developer ID signing + notarization + stapling when secrets are set | 🔍 | same | Add the five secrets, push a tag |
-| Ad-hoc signed fallback when no secrets | 🧪 | same | Dry-run verified locally |
+| `./build.sh` — build from source (universal, ad-hoc or `--sign`, `--dmg`/`--zip`, `--install`, `--open`) | ✅ | `build.sh` | Run locally: universal app + zip produced |
+| Issue forms (bug, feature, AI provider, tracker, integration), PR template | 🧪 | `.github/` | Open *New issue* on GitHub |
+| SECURITY, CONTRIBUTING, CONTRIBUTORS, CODE_OF_CONDUCT, SUPPORT | ✅ | repo root | — |
+| Ad-hoc signed fallback when no secrets | ✅ | same | v0.1.0 is ad-hoc signed |
 
 ---
 
@@ -152,20 +165,19 @@ verified, what's known to be rough, and how to fix things when they break.
 
 | Capability | Jira | Linear | Notes |
 |---|---|---|---|
-| Test plans (Dev + QA) | ✅ | 🔍 | Same generator; Linear prompt adds Linear-specific research hints |
-| Research feed + log + streaming progress | ✅ | 🔍 | Tracker-agnostic |
-| Ticket panel | ✅ | 🔍 | Linear parser is tolerant because its MCP output shape isn't documented |
-| Comments | ✅ | 🔍 | `list_comments`, or embedded in the issue |
-| Sub-issues / parent / relations | ✅ | 🔍 | Falls back to `list_issues(parentId)` |
-| Inline images | 🧪 | 🔍 | Linear: authenticated `uploads.linear.app` |
-| Attachments | 🔍 | 🔍 | Linear: uploads found in markdown |
-| External links (PRs, Figma…) | — | 🔍 | Linear attachment links |
+| Test plans (Dev + QA) | ✅ | ✅ | Same generator; Linear prompt adds Linear-specific research hints |
+| Research feed + log + streaming progress | ✅ | ✅ | Tracker-agnostic |
+| Ticket panel | ✅ | ✅ | Linear parser is tolerant because its MCP output shape isn't documented |
+| Comments | ✅ | ✅ | `list_comments`, or embedded in the issue |
+| Sub-issues / parent / relations | ✅ | ✅ | Falls back to `list_issues(parentId)` |
+| Inline images | ✅ | ✅ | Linear: authenticated `uploads.linear.app` |
+| Attachments | ✅ | ✅ | Linear: uploads found in markdown |
+| External links (PRs, Figma…) | — | ✅ | Linear attachment links |
 | Work log / time tracking | ✅ | n/a | Linear has estimates instead (shown in fields) |
 | Change history | ✅ | n/a | Not exposed by Linear MCP |
 | Read-only guarantee | client allowlist | server-enforced | Linear `/mcp/readonly` + `read` scope |
 | Tabs, folders, AC tracking | ✅ | ✅ | Tracker-agnostic |
 
-**Linear hasn't been run against a real account yet.** First real run: open a Linear issue in the panel and note any empty/wrong fields.
 
 ---
 
@@ -183,6 +195,8 @@ verified, what's known to be rough, and how to fix things when they break.
 | L8 | Pasted images in Jira markdown | The markdown format drops/blob-ifies images, so the panel uses ADF instead (the plan generator still reads markdown) | — |
 | L10 | Non-Claude providers | Plans are written in two phases (research, then JSON); models without tool calling can't research | Pick a tool-calling model |
 | L11 | Local models | Big epics can exceed a small local model's context window | Use a larger-context model, or analyze children individually |
+| L12 | Scenarios | Tickets-only scenarios depend on how well related tickets describe the flows; codebase mode gives more grounded journeys | Point it at the product repo |
+| L13 | Licensing | No LICENSE file yet, so the code isn't formally open source | Maintainer to choose a license |
 | L9 | App icon | Legacy asset-catalog icon (full-bleed) rather than an Icon Composer `.icon` with live glass layers | Split the logo into layers in Xcode's Icon Composer |
 
 ---
@@ -267,7 +281,11 @@ picking the good ones later (`./ideas/idea "…"` to add one). Picked ideas get 
 | 2026-09-24 | `001811c` | Landing page SEO: structured data, social cards, sitemap, use cases, FAQ |
 | 2026-09-25 | `e0c2179` | Landing page moves to the checkpoint.guide custom domain |
 | 2026-09-25 | `9fda0f6` | OpenAI, Gemini, Grok, OpenRouter and local model support |
-| 2026-09-25 | — | Docs + website for multi-provider support |
+| 2026-09-25 | `039ea02` | Docs + website for multi-provider support |
+| 2026-09-25 | `8f1c78a` | Optional end-to-end scenarios (related tickets or tickets + codebase) |
+| 2026-09-25 | `8311efd` | `build.sh` one-command build from source |
+| 2026-09-25 | `34d929b` | Issue forms and community health files |
+| 2026-09-25 | — | Docs: verified 0.1.0 features, scenarios, build script, community |
 
 ---
 

@@ -55,6 +55,13 @@ Toggle in the input bar (**⌘⇧M**); default in Settings.
 Set **Hosted environment** (e.g. `https://app.dev.example.com (DEV)`) and QA plans aim at it.
 Dev and QA plans for the same ticket live side by side — right-click → **Run in QA/Dev mode**.
 
+### Scenarios (optional)
+Turn on **Scenarios** in the input bar to add 3–6 end-to-end user journeys to each plan — realistic flows that start
+before the changed screen and carry on through neighbouring features, with a role, goal, steps and end result.
+- **From related tickets** — uses your tracker only: same epic/parent, components, labels and nearby tickets.
+- **Tickets + codebase** — also reads a local repo you choose (read-only, confined to that folder) to trace real
+  screens, routes and permission checks. QA plans still describe everything in UI terms.
+
 ### Ticket panel
 Click any ticket key (feed, plan header, task groups, AC sources, source chips) or hit
 **Ticket details / ⌘I** to slide in a resizable Liquid Glass panel with *everything*:
@@ -74,21 +81,40 @@ Checkpoint can never change your tickets:
 
 ---
 
+## Install
+
+**Download** the latest DMG from [Releases](https://github.com/moderniselife/checkpoint/releases/latest) (or
+[checkpoint.guide](https://checkpoint.guide)) and drag Checkpoint to Applications. Requires macOS 26+.
+
+### Build from source
+
+Requirements: macOS 26+, Xcode 26+, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (the script offers to install it).
+
+```bash
+./build.sh
+```
+
+That builds a universal Release app to **`dist/Checkpoint.app`** (ad-hoc signed). Options:
+
+| Flag | Does |
+|---|---|
+| `--install` | Copy to `/Applications` |
+| `--open` | Launch when done |
+| `--dmg` / `--zip` | Also package `dist/Checkpoint-<version>.dmg` / `.zip` |
+| `--sign "Developer ID Application: …"` | Sign with your own identity |
+| `--version 0.2.0` | Set the marketing version |
+| `--debug` | Faster Debug build (native arch only) |
+
+```bash
+./build.sh --install --open
+```
+
+Working on the code? `xcodegen generate && open Checkpoint.xcodeproj`, then ⌘R. The `.xcodeproj` is generated from
+`project.yml` — change `DEVELOPMENT_TEAM` there to your own team for signed Debug builds.
+
 ## Setup
 
-Requirements: macOS 26+, Xcode 26+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
-
-```bash
-brew install xcodegen
-```
-
-```bash
-xcodegen generate && open Checkpoint.xcodeproj
-```
-
-Build & run (⌘R). Signing uses the team in `project.yml` (`DEVELOPMENT_TEAM`) — change it to yours.
-
-Then open **Settings (⌘,)**:
+Open **Settings (⌘,)**:
 
 1. **AI provider** — pick one, add its key, then **Fetch models** and **Test**:
 
@@ -135,6 +161,7 @@ Ticket key ─▶ PlanGenerator ──(Claude · OpenAI · Gemini · Grok · Ope
 | `PlanGenerator` | Agent loop with two engines. **Anthropic Messages** (Claude + compatible servers): streaming, adaptive thinking, prompt caching, refusal fallbacks and a schema-constrained final turn on native Claude. **OpenAI Chat Completions** (OpenAI, Gemini, Grok, OpenRouter, local): research with tools, then a final JSON-schema call. Prompts vary by tracker and Dev/QA mode. |
 | `OpenAIChatClient` | Streaming Chat Completions with tool-call/reasoning reassembly, `/models` listing, strip-and-retry for unsupported parameters. |
 | `TicketInspector` | Loads full issues for the panel — Jira as ADF + `renderedFields` (so inline images map to attachment IDs), Linear via `get_issue` + `list_comments` with argument names read from the tool schemas. |
+| `CodebaseTools` | Read-only `code_list` / `code_search` / `code_read` for scenario research, confined to the chosen folder. |
 | `PlanStore` | Plan history + tick state in the app's Application Support container. |
 
 **Endpoints**
@@ -142,8 +169,8 @@ Ticket key ─▶ PlanGenerator ──(Claude · OpenAI · Gemini · Grok · Ope
 - Jira API token → `https://mcp.atlassian.com/v2/mcp` (v1 silently ignores API tokens)
 - Linear → `https://mcp.linear.app/mcp/readonly`
 
-Keys and tokens live in the macOS Keychain. The app is sandboxed (network client + a loopback
-listener for sign-in only); App Transport Security allows plain HTTP only for local networking (local model servers).
+Keys and tokens live in the macOS Keychain. The app is sandboxed (network client, a loopback
+listener for sign-in only, and read-only access to a codebase folder you choose for scenarios); App Transport Security allows plain HTTP only for local networking (local model servers).
 
 ---
 
@@ -165,8 +192,8 @@ listener for sign-in only); App Transport Security allows plain HTTP only for lo
 ```
 Checkpoint/
   App/        CheckpointApp — scenes and environment
-  Models/     TestPlan, TicketDetail (+ ADF→markdown), LinearParsing, PlanFolder, LLMProvider, TestMode, Tracker, JSONValue
-  Services/   MCPClient, MCPOAuth, LoopbackServer, ClaudeClient, OpenAIChatClient, PlanGenerator,
+  Models/     TestPlan, TicketDetail (+ ADF→markdown), LinearParsing, PlanFolder, LLMProvider, ScenarioMode, TestMode, Tracker, JSONValue
+  Services/   MCPClient, MCPOAuth, LoopbackServer, ClaudeClient, OpenAIChatClient, PlanGenerator, CodebaseTools,
               PlanStore, TicketInspector (+ AttachmentLoader), AppSettings, Keychain
   Views/      ContentView, TicketInputBar, SidebarView, FolderOverview, ProgressFeedView, PlanView,
               TicketPanel, MarkdownView, GlassScrollIndicator, SettingsView
@@ -174,6 +201,7 @@ Checkpoint/
 assets/       logo.png (master), logo-512.png (README)
 ideas/        Idea board (IDEAS.md), specs/, and the `idea` capture script
 site/         Landing page (GitHub Pages)
+build.sh      One-command build from source → dist/Checkpoint.app
 project.yml   XcodeGen spec (the .xcodeproj is generated, not committed)
 ```
 
@@ -219,6 +247,13 @@ Feature ideas are captured and triaged on the board in [`ideas/IDEAS.md`](ideas/
 ./ideas/idea "Your idea"      # add to the Inbox
 ./ideas/idea --stats          # counts by status
 ```
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Use the
+[issue forms](https://github.com/moderniselife/checkpoint/issues/new/choose) for bugs, features, AI provider and tracker
+requests; report security issues privately per [SECURITY.md](SECURITY.md). Everyone who helps is listed in
+[CONTRIBUTORS.md](CONTRIBUTORS.md), and we follow a [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Feature tracker
 
