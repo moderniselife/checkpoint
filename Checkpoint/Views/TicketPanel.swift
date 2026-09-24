@@ -170,6 +170,7 @@ private struct TicketDetailView: View {
             }
             .padding(18)
         }
+        .environment(\.ticketAttachments, Dictionary(detail.attachments.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }))
         .environment(\.openURL, OpenURLAction { url in
             // Jira browse links inside descriptions/comments open in the panel.
             if url.path.hasPrefix("/browse/"), let key = PlanStore.extractKey(url.lastPathComponent) {
