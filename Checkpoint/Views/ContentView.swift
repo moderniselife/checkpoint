@@ -149,7 +149,7 @@ struct EmptyStateView: View {
                 .frame(maxWidth: 420)
             if !settings.isConfigured {
                 SettingsLink {
-                    Label("Connect Anthropic + Atlassian", systemImage: "key.fill")
+                    Label("Connect an AI provider + your tracker", systemImage: "key.fill")
                 }
                 .buttonStyle(.glassProminent)
                 .padding(.top, 8)

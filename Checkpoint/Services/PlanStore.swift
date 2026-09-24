@@ -238,8 +238,8 @@ final class PlanStore {
             error = "That doesn't look like a Jira key (e.g. PROJ-1234)."
             return
         }
-        guard !settings.anthropicKey.isEmpty else {
-            error = "Add your Anthropic API key in Settings (⌘,)."
+        guard settings.isLLMConfigured else {
+            error = "Set up an AI provider in Settings (⌘,) — \(settings.provider.label) needs \(settings.provider.requiresKey ? "an API key and " : "")a model."
             return
         }
         guard settings.isConfigured(tracker) else {
@@ -260,10 +260,8 @@ final class PlanStore {
         selection = nil
 
         let generator = PlanGenerator(
-            claude: ClaudeClient(apiKey: settings.anthropicKey),
+            llm: settings.llmConfig,
             mcp: settings.makeMCPClient(for: tracker),
-            model: settings.model,
-            effort: settings.effort,
             site: settings.siteHost,
             mode: mode,
             tracker: tracker,

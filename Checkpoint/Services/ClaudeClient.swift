@@ -19,8 +19,36 @@ nonisolated struct ClaudeClient: Sendable {
     }
 
     let apiKey: String
-    /// Overridable for tests; defaults to the Messages API.
+    /// Messages endpoint; points elsewhere for Anthropic-compatible servers (and tests).
     var url = URL(string: "https://api.anthropic.com/v1/messages")!
+    /// Anthropic-compatible proxies often expect a Bearer token instead of x-api-key.
+    var sendBearer = false
+
+    /// Client for an Anthropic or Anthropic-compatible base URL (e.g. http://localhost:4000).
+    init(apiKey: String, baseURL: String = "https://api.anthropic.com", sendBearer: Bool = false) {
+        self.apiKey = apiKey
+        let root = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
+        self.url = URL(string: root + (root.hasSuffix("/v1") ? "/messages" : "/v1/messages"))!
+        self.sendBearer = sendBearer
+    }
+
+    private func authorize(_ req: inout URLRequest) {
+        guard !apiKey.isEmpty else { return }
+        req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        if sendBearer { req.setValue("Bearer " + apiKey, forHTTPHeaderField: "Authorization") }
+    }
+
+    /// Model ids from `GET /v1/models`.
+    func listModels() async throws -> [String] {
+        var req = URLRequest(url: url.deletingLastPathComponent().appending(path: "models"))
+        authorize(&req)
+        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        let (data, response) = try await Self.session.data(for: req)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw ClaudeError.http(status, String(decoding: data, as: UTF8.self)) }
+        let json = try JSONCoding.decoder.decode(JSONValue.self, from: data)
+        return (json["data"]?.arrayValue ?? []).compactMap { $0["id"]?.stringValue }.sorted()
+    }
     private static let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
         c.timeoutIntervalForRequest = 600
@@ -33,7 +61,7 @@ nonisolated struct ClaudeClient: Sendable {
         req.httpMethod = "POST"
         req.httpBody = try JSONCoding.encoder.encode(body)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        authorize(&req)
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         if !betas.isEmpty { req.setValue(betas.joined(separator: ","), forHTTPHeaderField: "anthropic-beta") }
 
@@ -82,7 +110,7 @@ nonisolated struct ClaudeClient: Sendable {
         req.httpBody = try JSONCoding.encoder.encode(streamingBody)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        authorize(&req)
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         if !betas.isEmpty { req.setValue(betas.joined(separator: ","), forHTTPHeaderField: "anthropic-beta") }
 

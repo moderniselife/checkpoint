@@ -1,14 +1,16 @@
 import Foundation
 
-/// Runs the agent loop: Claude decides which Atlassian MCP tools to call,
-/// the app executes them against the MCP server, and the final turn is a
-/// schema-constrained `TestPlan`.
+/// Runs the agent loop: the model decides which tracker MCP tools to call, the
+/// app executes them against the MCP server, and the final turn is a `TestPlan`.
+/// Two engines share everything but the wire format: Anthropic Messages
+/// (Claude + Anthropic-compatible) and OpenAI Chat Completions (OpenAI, Gemini,
+/// Grok, OpenRouter, local OpenAI-compatible servers).
 nonisolated struct PlanGenerator: Sendable {
     enum Event: Sendable {
         case status(String)
-        /// A request to Claude started (turn is 1-based).
+        /// A request to the model started (turn is 1-based).
         case waiting(turn: Int)
-        /// Live summarised thinking for one content block of a turn.
+        /// Live reasoning / thinking summary for one block of a turn.
         case thinking(turn: Int, index: Int, text: String)
         /// Characters of the final answer (the plan JSON) streamed so far.
         case writing(characters: Int)
@@ -24,18 +26,16 @@ nonisolated struct PlanGenerator: Sendable {
 
         var errorDescription: String? {
             switch self {
-            case .refused(let why): return "Claude declined this request. \(why)"
+            case .refused(let why): return "The model declined this request. \(why)"
             case .truncated: return "The plan was cut off (max tokens). Try again, or lower effort."
             case .tooManyTurns: return "Gave up after too many research steps. Try a narrower ticket."
-            case .badOutput(let why): return "Couldn't read the plan Claude returned: \(why)"
+            case .badOutput(let why): return "Couldn't read the plan the model returned: \(why)"
             }
         }
     }
 
-    let claude: ClaudeClient
+    let llm: LLMConfig
     let mcp: MCPClient
-    let model: String
-    let effort: String
     let site: String
     let mode: TestMode
     let tracker: Tracker
@@ -45,10 +45,23 @@ nonisolated struct PlanGenerator: Sendable {
     private static let maxTurns = 30
     private static let maxToolResultChars = 120_000
 
-    /// Only read-only Atlassian tools are exposed — Claude can never edit tickets from this app.
+    /// Only read-only Atlassian tools are exposed — the model can never edit tickets from this app.
     static func isReadOnly(_ name: String) -> Bool {
         let n = name.lowercased()
         return ["get", "search", "fetch", "lookup", "list", "atlassianuserinfo"].contains { n.hasPrefix($0) }
+    }
+
+    /// A tool call in engine-neutral form.
+    struct Call: Sendable {
+        let id: String
+        let name: String
+        let input: JSONValue
+    }
+
+    struct CallResult: Sendable {
+        let id: String
+        let text: String
+        let isError: Bool
     }
 
     func run(ticketKey: String, onEvent: @Sendable (Event) async -> Void) async throws -> TestPlan {
@@ -59,11 +72,6 @@ nonisolated struct PlanGenerator: Sendable {
         let tools = listed
             .filter { tracker == .linear || Self.isReadOnly($0.name) }
             .sorted { $0.name < $1.name }
-        let toolDefs: [JSONValue] = tools.map {
-            var schema = $0.inputSchema
-            if case .object(var o) = schema { o["$schema"] = nil; schema = .object(o) }
-            return ["name": .string($0.name), "description": .string($0.description), "input_schema": schema]
-        }
 
         let siteLine: String
         switch tracker {
@@ -78,35 +86,51 @@ nonisolated struct PlanGenerator: Sendable {
         if mode == .qa, !environment.isEmpty {
             request += "\nHosted environment under test: \(environment). Unless the tickets say otherwise, write the plan for this environment."
         }
-        var messages: [JSONValue] = [["role": "user", "content": .string(request)]]
 
-        let usesFallbacks = model.hasPrefix("claude-opus") || model.hasPrefix("claude-fable")
-        await onEvent(.status("Reading \(ticketKey)…"))
+        await onEvent(.status("Reading \(ticketKey) with \(llm.provider.shortLabel)…"))
+        switch llm.provider.style {
+        case .anthropic: return try await runAnthropic(tools: tools, request: request, onEvent: onEvent)
+        case .openAIChat: return try await runOpenAI(tools: tools, request: request, onEvent: onEvent)
+        }
+    }
+
+    // MARK: - Anthropic Messages engine
+
+    private func runAnthropic(tools: [MCPClient.Tool], request: String,
+                              onEvent: @Sendable (Event) async -> Void) async throws -> TestPlan {
+        let native = llm.provider == .anthropic
+        let claude = ClaudeClient(apiKey: llm.apiKey, baseURL: llm.baseURL, sendBearer: !native)
+        let toolDefs: [JSONValue] = tools.map {
+            ["name": .string($0.name), "description": .string($0.description), "input_schema": Self.cleanSchema($0.inputSchema, strict: false)]
+        }
+        // Compatible servers may not support Claude-only features, so ask for JSON in the prompt instead.
+        let system = Self.systemPrompt(for: mode, tracker: tracker) + (native ? "" : Self.jsonInstruction)
+        var messages: [JSONValue] = [["role": "user", "content": .string(request)]]
+        let usesFallbacks = native && (llm.model.hasPrefix("claude-opus") || llm.model.hasPrefix("claude-fable"))
 
         for turn in 1...Self.maxTurns {
             try Task.checkCancellation()
             await onEvent(.waiting(turn: turn))
-            var body: JSONValue = [
-                "model": .string(model),
+            var body: [String: JSONValue] = [
+                "model": .string(llm.model),
                 "max_tokens": 32000,
-                "system": .string(Self.systemPrompt(for: mode, tracker: tracker)),
-                "thinking": ["type": "adaptive", "display": "summarized"],
-                "output_config": [
-                    "effort": .string(effort),
-                    "format": ["type": "json_schema", "schema": TestPlan.jsonSchema],
-                ],
+                "system": .string(system),
                 "tools": .array(toolDefs),
-                "cache_control": ["type": "ephemeral"],
                 "messages": .array(messages),
             ]
-            if usesFallbacks, case .object(var o) = body {
-                o["fallbacks"] = "default"
-                body = .object(o)
+            if native {
+                body["thinking"] = ["type": "adaptive", "display": "summarized"]
+                body["output_config"] = [
+                    "effort": .string(llm.effort),
+                    "format": ["type": "json_schema", "schema": TestPlan.jsonSchema],
+                ]
+                body["cache_control"] = ["type": "ephemeral"]
+                if usesFallbacks { body["fallbacks"] = "default" }
             }
 
             // Streamed so thinking and plan-writing progress show live on long epics.
             let response = try await claude.streamMessage(
-                body, betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : []
+                .object(body), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : []
             ) { event in
                 switch event {
                 case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
@@ -123,65 +147,151 @@ nonisolated struct PlanGenerator: Sendable {
                 throw GeneratorError.truncated
             case "tool_use":
                 messages.append(["role": "assistant", "content": .array(content)])
-                let calls = content.filter { $0["type"]?.stringValue == "tool_use" }
-                for call in calls {
-                    await onEvent(.toolCall(id: call["id"]?.stringValue ?? "", name: call["name"]?.stringValue ?? "?",
-                                            detail: Self.describe(call["input"])))
+                let calls = content.filter { $0["type"]?.stringValue == "tool_use" }.map {
+                    Call(id: $0["id"]?.stringValue ?? "", name: $0["name"]?.stringValue ?? "", input: $0["input"] ?? [:])
                 }
                 let results = await executeAll(calls, onEvent: onEvent)
-                messages.append(["role": "user", "content": .array(results)])
+                messages.append(["role": "user", "content": .array(results.map {
+                    ["type": "tool_result", "tool_use_id": .string($0.id), "content": .string($0.text), "is_error": .bool($0.isError)]
+                })])
             default:
                 await onEvent(.status("Writing your test plan…"))
                 let text = content
                     .filter { $0["type"]?.stringValue == "text" }
                     .compactMap { $0["text"]?.stringValue }
                     .joined()
-                do {
-                    return try JSONCoding.decoder.decode(TestPlan.self, from: Data(text.utf8))
-                } catch {
-                    throw GeneratorError.badOutput(error.localizedDescription)
-                }
+                return try Self.decodePlan(text)
             }
         }
         throw GeneratorError.tooManyTurns
     }
 
-    /// Runs every tool call from one assistant turn concurrently and returns
-    /// all results together (one user message keeps parallel tool use working).
-    private func executeAll(_ calls: [JSONValue], onEvent: @Sendable (Event) async -> Void) async -> [JSONValue] {
-        let results = await withTaskGroup(of: (Int, JSONValue).self) { group in
+    // MARK: - OpenAI Chat Completions engine
+
+    /// Research with tools until the model stops calling them, then one final
+    /// call (no tools) that writes the plan as JSON. Splitting the phases keeps
+    /// this portable: not every provider/model handles tools + a JSON schema at once.
+    private func runOpenAI(tools: [MCPClient.Tool], request: String,
+                           onEvent: @Sendable (Event) async -> Void) async throws -> TestPlan {
+        let client = OpenAIChatClient(provider: llm.provider, apiKey: llm.apiKey, baseURL: llm.baseURL)
+        let strictSchemas = llm.provider == .gemini
+        let toolDefs: [JSONValue] = tools.map {
+            ["type": "function", "function": [
+                "name": .string($0.name),
+                "description": .string(String($0.description.prefix(1024))),
+                "parameters": Self.cleanSchema($0.inputSchema, strict: strictSchemas),
+            ]]
+        }
+        let researchSystem = Self.systemPrompt(for: mode, tracker: tracker) + """
+
+
+        Work in two steps. First, research: call the tools as much as you need (in parallel where you can). \
+        When you have everything, reply with a short summary of what you found — don't write the plan yet; \
+        you'll be asked for it next.
+        """
+        var messages: [JSONValue] = [
+            ["role": "system", "content": .string(researchSystem)],
+            ["role": "user", "content": .string(request)],
+        ]
+
+        func body(tools: Bool, final: Bool) -> JSONValue {
+            var b: [String: JSONValue] = ["model": .string(llm.model), "messages": .array(messages)]
+            if tools { b["tools"] = .array(toolDefs); b["parallel_tool_calls"] = true }
+            switch llm.provider {
+            case .openai: b["max_completion_tokens"] = 32000
+            case .openAICompatible: break   // local servers: let the model's own context limit apply
+            default: b["max_tokens"] = 32000
+            }
+            let effort = llm.effort == "xhigh" ? "high" : llm.effort
+            switch llm.provider {
+            case .openai, .gemini, .xai: b["reasoning_effort"] = .string(effort)
+            case .openrouter: b["reasoning"] = ["effort": .string(effort)]
+            default: break
+            }
+            if final {
+                b["response_format"] = ["type": "json_schema", "json_schema": [
+                    "name": "test_plan", "strict": true,
+                    "schema": strictSchemas ? Self.cleanSchema(TestPlan.jsonSchema, strict: true) : TestPlan.jsonSchema,
+                ]]
+            }
+            return .object(b)
+        }
+
+        for turn in 1...Self.maxTurns {
+            try Task.checkCancellation()
+            await onEvent(.waiting(turn: turn))
+            let reply = try await client.stream(body(tools: true, final: false)) { event in
+                if case .reasoning(let text) = event { await onEvent(.thinking(turn: turn, index: 0, text: text)) }
+            }
+            if reply.finishReason == "content_filter" { throw GeneratorError.refused("The provider's content filter blocked it.") }
+
+            guard !reply.toolCalls.isEmpty else {
+                // Research done — ask for the plan.
+                messages.append(["role": "assistant", "content": .string(reply.text.isEmpty ? "Research complete." : reply.text)])
+                messages.append(["role": "user", "content": .string("Now write the test plan." + Self.jsonInstruction)])
+                await onEvent(.status("Writing your test plan…"))
+                await onEvent(.waiting(turn: turn + 1))
+                let final = try await client.stream(body(tools: false, final: true)) { event in
+                    switch event {
+                    case .reasoning(let text): await onEvent(.thinking(turn: turn + 1, index: 0, text: text))
+                    case .writing(let n): await onEvent(.writing(characters: n))
+                    }
+                }
+                if final.finishReason == "length" { throw GeneratorError.truncated }
+                return try Self.decodePlan(final.text)
+            }
+
+            messages.append(["role": "assistant",
+                             "content": reply.text.isEmpty ? .null : .string(reply.text),
+                             "tool_calls": .array(reply.toolCalls.map {
+                                 ["id": .string($0.id), "type": "function",
+                                  "function": ["name": .string($0.name), "arguments": .string($0.arguments.isEmpty ? "{}" : $0.arguments)]]
+                             })])
+            let calls = reply.toolCalls.map { tc -> Call in
+                let input = (try? JSONCoding.decoder.decode(JSONValue.self, from: Data((tc.arguments.isEmpty ? "{}" : tc.arguments).utf8))) ?? [:]
+                return Call(id: tc.id, name: tc.name, input: input)
+            }
+            for r in await executeAll(calls, onEvent: onEvent) {
+                messages.append(["role": "tool", "tool_call_id": .string(r.id),
+                                 "content": .string(r.isError ? "ERROR: " + r.text : r.text)])
+            }
+        }
+        throw GeneratorError.tooManyTurns
+    }
+
+    // MARK: - Shared
+
+    /// Runs every tool call from one turn concurrently.
+    private func executeAll(_ calls: [Call], onEvent: @Sendable (Event) async -> Void) async -> [CallResult] {
+        for call in calls {
+            await onEvent(.toolCall(id: call.id, name: call.name, detail: Self.describe(call.input)))
+        }
+        return await withTaskGroup(of: (Int, CallResult).self) { group in
             for (i, call) in calls.enumerated() {
                 group.addTask {
-                    let id = call["id"]?.stringValue ?? ""
-                    let name = call["name"]?.stringValue ?? ""
-                    guard tracker == .linear || Self.isReadOnly(name) else {
-                        return (i, Self.toolResult(id, "Tool \(name) is not available (read-only app).", isError: true))
+                    guard tracker == .linear || Self.isReadOnly(call.name) else {
+                        return (i, CallResult(id: call.id, text: "Tool \(call.name) is not available (read-only app).", isError: true))
                     }
                     do {
-                        let r = try await mcp.callTool(name, arguments: call["input"] ?? [:])
+                        let r = try await mcp.callTool(call.name, arguments: call.input)
                         var text = r.text
                         if text.count > Self.maxToolResultChars {
                             text = String(text.prefix(Self.maxToolResultChars))
                                 + "\n\n[Result truncated at \(Self.maxToolResultChars) characters — request fewer fields or narrower results if more is needed.]"
                         }
-                        return (i, Self.toolResult(id, text.isEmpty ? "(empty result)" : text, isError: r.isError))
+                        return (i, CallResult(id: call.id, text: text.isEmpty ? "(empty result)" : text, isError: r.isError))
                     } catch {
-                        return (i, Self.toolResult(id, error.localizedDescription, isError: true))
+                        return (i, CallResult(id: call.id, text: error.localizedDescription, isError: true))
                     }
                 }
             }
-            var out = [(Int, JSONValue)]()
+            var out = [(Int, CallResult)]()
             for await r in group {
                 out.append(r)
-                await onEvent(.toolDone(id: r.1["tool_use_id"]?.stringValue ?? "", ok: r.1["is_error"]?.boolValue != true))
+                await onEvent(.toolDone(id: r.1.id, ok: !r.1.isError))
             }
             return out.sorted { $0.0 < $1.0 }.map(\.1)
         }
-        return results
-    }
-
-    private static func toolResult(_ id: String, _ text: String, isError: Bool) -> JSONValue {
-        ["type": "tool_result", "tool_use_id": .string(id), "content": .string(text), "is_error": .bool(isError)]
     }
 
     /// Short human label for the progress feed, e.g. "PROJ-123" or a JQL / CQL query.
@@ -190,6 +300,62 @@ nonisolated struct PlanGenerator: Sendable {
             if let v = input?[key]?.stringValue { return v }
         }
         return ""
+    }
+
+    /// Appended when the provider can't enforce the schema itself.
+    static let jsonInstruction = """
+
+
+    Respond with ONLY a single JSON object (no prose, no code fences) that matches this JSON Schema exactly:
+    \(TestPlan.jsonSchema.compactString)
+    """
+
+    /// Decodes a plan, tolerating code fences or prose around the JSON object.
+    static func decodePlan(_ text: String) throws -> TestPlan {
+        if let plan = try? JSONCoding.decoder.decode(TestPlan.self, from: Data(text.utf8)) { return plan }
+        guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end else {
+            throw GeneratorError.badOutput(text.isEmpty ? "the reply was empty." : "no JSON object in the reply.")
+        }
+        do {
+            return try JSONCoding.decoder.decode(TestPlan.self, from: Data(text[start...end].utf8))
+        } catch {
+            throw GeneratorError.badOutput(error.localizedDescription)
+        }
+    }
+
+    /// Removes `$schema` everywhere; with `strict` (Gemini) keeps only the OpenAPI-style
+    /// subset its function calling accepts and turns `["x","null"]` types into `nullable`.
+    static func cleanSchema(_ v: JSONValue, strict: Bool) -> JSONValue {
+        switch v {
+        case .object(var o):
+            o["$schema"] = nil
+            if strict {
+                let allowed: Set<String> = ["type", "properties", "required", "items", "enum", "description",
+                                            "nullable", "anyOf", "minimum", "maximum", "minItems", "maxItems", "format"]
+                o = o.filter { allowed.contains($0.key) }
+                if case .array(let types) = o["type"] ?? .null {
+                    let real = types.compactMap(\.stringValue).filter { $0 != "null" }
+                    o["type"] = .string(real.first ?? "string")
+                    if real.count < types.count { o["nullable"] = true }
+                }
+                if let f = o["format"]?.stringValue, !["enum", "date-time"].contains(f) { o["format"] = nil }
+            }
+            var out: [String: JSONValue] = [:]
+            for (k, val) in o {
+                if k == "properties", case .object(let props) = val {
+                    out[k] = .object(props.mapValues { cleanSchema($0, strict: strict) })
+                } else if k == "enum" || k == "required" {
+                    out[k] = val
+                } else {
+                    out[k] = cleanSchema(val, strict: strict)
+                }
+            }
+            return .object(out)
+        case .array(let a):
+            return .array(a.map { cleanSchema($0, strict: strict) })
+        default:
+            return v
+        }
     }
 
     static func systemPrompt(for mode: TestMode, tracker: Tracker) -> String {
