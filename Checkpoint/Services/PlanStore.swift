@@ -267,15 +267,23 @@ final class PlanStore {
             tracker: tracker,
             environment: settings.qaEnvironment
         )
+        // Codebase access (read-only, security-scoped) only for "tickets + codebase" scenarios.
+        var generatorWithScenarios = generator
+        generatorWithScenarios.scenarios = settings.scenarioMode
+        let codebaseURL = settings.scenarioMode == .ticketsAndCode ? settings.openCodebase() : nil
+        if let codebaseURL { generatorWithScenarios.codebase = CodebaseTools(root: codebaseURL) }
+        let runGenerator = generatorWithScenarios
         task = Task {
             do {
-                let plan = try await generator.run(ticketKey: key) { event in
+                defer { codebaseURL?.stopAccessingSecurityScopedResource() }
+                let plan = try await runGenerator.run(ticketKey: key) { event in
                     await MainActor.run { self.record(event) }
                 }
                 let id = SavedPlan.id(plan.ticket.key, mode, tracker)
                 let previous = plans.first { $0.id == id }
                 // Keep ticks for tasks that survived a re-run.
-                let kept = previous?.done.intersection(plan.tasks.map(\.id)) ?? []
+                let keepable = Set(plan.tasks.map(\.id) + plan.scenarios.map { "scenario:" + $0.id })
+                let kept = previous?.done.intersection(keepable) ?? []
                 var saved = SavedPlan(plan: plan, mode: mode, tracker: tracker, createdAt: .now, done: kept)
                 saved.metCriteria = previous?.metCriteria.intersection(plan.acceptanceCriteria.map(\.id)) ?? []
                 saved.folderID = previous?.folderID ?? targetFolder
@@ -367,6 +375,9 @@ final class PlanStore {
         case "get_project": "Read project"
         case "get_document", "list_documents": "Read document"
         case "search_documentation": "Searched Linear docs"
+        case "code_search": "Searched code"
+        case "code_read": "Read file"
+        case "code_list": "Listed folder"
         default: tool
         }
     }

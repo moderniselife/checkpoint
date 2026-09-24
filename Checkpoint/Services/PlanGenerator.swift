@@ -41,6 +41,19 @@ nonisolated struct PlanGenerator: Sendable {
     let tracker: Tracker
     /// Hosted app URL/name QA tests against (optional).
     let environment: String
+    /// Optional end-to-end scenarios; `.ticketsAndCode` needs `codebase`.
+    var scenarios: ScenarioMode = .off
+    /// Read-only local codebase for scenario research.
+    var codebase: CodebaseTools? = nil
+
+    /// Scenario mode actually used (falls back to tickets when no codebase is available).
+    private var effectiveScenarios: ScenarioMode {
+        scenarios == .ticketsAndCode && codebase == nil ? .tickets : scenarios
+    }
+
+    private var prompt: String {
+        Self.systemPrompt(for: mode, tracker: tracker) + Self.scenarioPrompt(effectiveScenarios, mode: mode)
+    }
 
     private static let maxTurns = 30
     private static let maxToolResultChars = 120_000
@@ -69,9 +82,13 @@ nonisolated struct PlanGenerator: Sendable {
         let listed = tracker == .jira ? try await mcp.authenticatedTools() : try await mcp.listTools()
         // Jira: expose only read tools. Linear: the /mcp/readonly endpoint only lists
         // read tools and the server rejects writes, so keep everything it offers.
-        let tools = listed
+        var tools = listed
             .filter { tracker == .linear || Self.isReadOnly($0.name) }
             .sorted { $0.name < $1.name }
+        if effectiveScenarios == .ticketsAndCode { tools += CodebaseTools.tools }
+        if scenarios == .ticketsAndCode && codebase == nil {
+            await onEvent(.status("No codebase folder set — building scenarios from tickets only."))
+        }
 
         let siteLine: String
         switch tracker {
@@ -104,7 +121,7 @@ nonisolated struct PlanGenerator: Sendable {
             ["name": .string($0.name), "description": .string($0.description), "input_schema": Self.cleanSchema($0.inputSchema, strict: false)]
         }
         // Compatible servers may not support Claude-only features, so ask for JSON in the prompt instead.
-        let system = Self.systemPrompt(for: mode, tracker: tracker) + (native ? "" : Self.jsonInstruction)
+        let system = prompt + (native ? "" : Self.jsonInstruction)
         var messages: [JSONValue] = [["role": "user", "content": .string(request)]]
         let usesFallbacks = native && (llm.model.hasPrefix("claude-opus") || llm.model.hasPrefix("claude-fable"))
 
@@ -182,7 +199,7 @@ nonisolated struct PlanGenerator: Sendable {
                 "parameters": Self.cleanSchema($0.inputSchema, strict: strictSchemas),
             ]]
         }
-        let researchSystem = Self.systemPrompt(for: mode, tracker: tracker) + """
+        let researchSystem = prompt + """
 
 
         Work in two steps. First, research: call the tools as much as you need (in parallel where you can). \
@@ -269,6 +286,11 @@ nonisolated struct PlanGenerator: Sendable {
         return await withTaskGroup(of: (Int, CallResult).self) { group in
             for (i, call) in calls.enumerated() {
                 group.addTask {
+                    // Codebase tools run locally, read-only, inside the chosen folder.
+                    if CodebaseTools.toolNames.contains(call.name), let codebase {
+                        let r = codebase.call(call.name, call.input)
+                        return (i, CallResult(id: call.id, text: r.text, isError: r.isError))
+                    }
                     guard tracker == .linear || Self.isReadOnly(call.name) else {
                         return (i, CallResult(id: call.id, text: "Tool \(call.name) is not available (read-only app).", isError: true))
                     }
@@ -296,7 +318,7 @@ nonisolated struct PlanGenerator: Sendable {
 
     /// Short human label for the progress feed, e.g. "PROJ-123" or a JQL / CQL query.
     private static func describe(_ input: JSONValue?) -> String {
-        for key in ["issueIdOrKey", "identifier", "issueId", "jql", "cql", "query", "pageId", "id", "url"] {
+        for key in ["issueIdOrKey", "identifier", "issueId", "jql", "cql", "query", "pageId", "id", "url", "path"] {
             if let v = input?[key]?.stringValue { return v }
         }
         return ""
@@ -355,6 +377,42 @@ nonisolated struct PlanGenerator: Sendable {
             return .array(a.map { cleanSchema($0, strict: strict) })
         default:
             return v
+        }
+    }
+
+    /// Extra instructions for the optional scenarios section.
+    static func scenarioPrompt(_ scenarios: ScenarioMode, mode: TestMode) -> String {
+        switch scenarios {
+        case .off:
+            return "\n\n- scenarios: return an empty array."
+        case .tickets, .ticketsAndCode:
+            var p = """
+
+
+            Also write scenarios — 3 to 6 end-to-end journeys a real user would take that exercise this change \
+            in context: start before the changed screen and carry on past it, through the neighbouring features \
+            the flow naturally touches. Each has a concrete role/persona, a goal, numbered steps and one \
+            observable end result. Include at least one journey that combines the change with a neighbouring \
+            feature and one unhappy path (wrong role, bad data, interruption). They complement the tasks — don't \
+            just repeat them.
+            To understand the surrounding flows, look beyond this ticket: search for related tickets (same \
+            epic/parent, same components or labels, and recent tickets mentioning the same screens or features) \
+            and read a few of the most relevant — don't crawl. List the keys that informed each scenario in \
+            relatedTickets.
+            """
+            if scenarios == .ticketsAndCode {
+                p += """
+
+                You also have read-only access to the product's codebase via code_list, code_search and code_read. \
+                Use it to find the feature's entry points, routes/screens, permission checks, validations and the \
+                neighbouring features the flow passes through, so the journeys match how the product really works.
+                """
+                if mode == .qa {
+                    p += " The reader still can't see code: write every scenario in UI terms (screens, buttons, messages), never file or function names."
+                }
+            }
+            p += "\n- basis: \"tickets\", \"codebase\" or \"tickets+codebase\" — whatever the scenario is actually grounded in."
+            return p
         }
     }
 

@@ -88,6 +88,18 @@ struct PlanView: View {
                         }
                     }
 
+                    if !plan.scenarios.isEmpty {
+                        Section(title: "Scenarios", icon: "theatermasks") {
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(plan.scenarios) { sc in
+                                    ScenarioCard(scenario: sc, isDone: saved.done.contains("scenario:" + sc.id)) {
+                                        withAnimation(.smooth) { store.toggle("scenario:" + sc.id, in: saved.id) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if !plan.edgeCases.isEmpty {
                         Section(title: "Edge cases worth poking", icon: "exclamationmark.triangle") {
                             BulletList(items: plan.edgeCases)
@@ -609,5 +621,65 @@ private struct CriteriaLegend: View {
         .font(.caption2)
         .foregroundStyle(.secondary)
         .labelStyle(.titleAndIcon)
+    }
+}
+
+/// One end-to-end journey: role, goal, steps and the end result. Tickable.
+private struct ScenarioCard: View {
+    let scenario: TestPlan.Scenario
+    let isDone: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Button(action: toggle) {
+                Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundStyle(isDone ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .help(isDone ? "Mark not run" : "Mark run")
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(scenario.title).font(.body.weight(.semibold)).strikethrough(isDone)
+                        .foregroundStyle(isDone ? .secondary : .primary)
+                    Spacer(minLength: 8)
+                    Chip(text: scenario.basis == "tickets" ? "from tickets" : scenario.basis == "codebase" ? "from code" : "tickets + code",
+                         tint: scenario.basis == "tickets" ? .blue : .purple)
+                }
+                Label(scenario.role, systemImage: "person.fill").font(.caption).foregroundStyle(.secondary)
+                if !isDone {
+                    Text(scenario.goal).font(.callout).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(Array(scenario.steps.enumerated()), id: \.offset) { i, step in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text("\(i + 1).").font(.callout.monospacedDigit()).foregroundStyle(.tertiary)
+                                    .frame(width: 20, alignment: .trailing)
+                                Text(step).font(.callout)
+                            }
+                        }
+                    }
+                    .textSelection(.enabled)
+                    Label { Text(scenario.expected).font(.callout) } icon: {
+                        Image(systemName: "flag.checkered").foregroundStyle(.purple)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(.purple.opacity(0.08), in: .rect(cornerRadius: 10))
+                    .textSelection(.enabled)
+                    if !scenario.relatedTickets.isEmpty {
+                        HStack(spacing: 6) {
+                            Text("Based on").font(.caption).foregroundStyle(.tertiary)
+                            ForEach(scenario.relatedTickets, id: \.self) { key in
+                                TicketKeyButton(key: key, font: .caption.monospaced())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(.background.opacity(isDone ? 0.2 : 0.6), in: .rect(cornerRadius: 14))
     }
 }

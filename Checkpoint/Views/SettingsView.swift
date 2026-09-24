@@ -91,6 +91,30 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("Scenarios", selection: $settings.scenarioMode) {
+                    ForEach(ScenarioMode.allCases) { Text($0.label).tag($0) }
+                }
+                HStack {
+                    if let path = settings.codebasePath {
+                        Label((path as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Button("Change…") { settings.chooseCodebase() }
+                        Button("Remove", role: .destructive) { settings.clearCodebase() }
+                    } else {
+                        Text("No codebase").foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Choose Codebase…") { settings.chooseCodebase() }
+                    }
+                }
+            } header: {
+                Text("Scenarios (optional)")
+            } footer: {
+                Text("Adds 3–6 end-to-end user journeys to each plan. From related tickets uses your tracker only; tickets + codebase also reads a local repo — read-only, and only the folder you choose.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 TextField("Jira site", text: $settings.site, prompt: Text("yourcompany.atlassian.net"))
                 Picker("Connect with", selection: $settings.atlassianAuth) {
                     ForEach(AppSettings.AtlassianAuth.allCases) { Text($0.label).tag($0) }
