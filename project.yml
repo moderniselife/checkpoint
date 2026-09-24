@@ -24,6 +24,9 @@ targets:
       properties:
         CFBundleDisplayName: Checkpoint
         LSApplicationCategoryType: public.app-category.developer-tools
+        # Local model servers (Ollama, LM Studio…) are plain http://localhost; remote stays HTTPS-only.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         NSHumanReadableCopyright: ""
     entitlements:
       path: Checkpoint/Checkpoint.entitlements

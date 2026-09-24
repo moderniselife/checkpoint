@@ -6,6 +6,9 @@ struct SettingsView: View {
     @State private var signingIn = false
     @State private var linearState: TestState = .idle
     @State private var linearSigningIn = false
+    @State private var llmState: TestState = .idle
+    @State private var fetchedModels: [String] = []
+    @State private var fetchingModels = false
 
     enum TestState: Equatable { case idle, testing, ok(String, Int), failed(String) }
 
@@ -13,18 +16,64 @@ struct SettingsView: View {
         @Bindable var settings = settings
         Form {
             Section {
-                SecureField("API key", text: $settings.anthropicKey, prompt: Text("sk-ant-…"))
-                Picker("Model", selection: $settings.model) {
-                    ForEach(AppSettings.models, id: \.self) { Text($0) }
+                Picker("Provider", selection: $settings.provider) {
+                    ForEach(LLMProvider.allCases) { Text($0.label).tag($0) }
                 }
+                .onChange(of: settings.provider) { llmState = .idle; fetchedModels = [] }
+
+                if settings.provider.hasEditableBaseURL {
+                    TextField("Base URL", text: $settings.llmBaseURL, prompt: Text(settings.provider.defaultBaseURL))
+                        .font(.body.monospaced())
+                }
+                SecureField(settings.provider.requiresKey ? "API key" : "API key (optional)",
+                            text: $settings.llmKey, prompt: Text(settings.provider.keyPrompt))
+
+                HStack {
+                    TextField("Model", text: $settings.model, prompt: Text(settings.provider.defaultModel))
+                        .font(.body.monospaced())
+                    Menu {
+                        let options = fetchedModels.isEmpty && settings.provider == .anthropic
+                            ? AppSettings.claudeModels : fetchedModels
+                        if options.isEmpty {
+                            Text("Fetch models to see what's available")
+                        }
+                        ForEach(options, id: \.self) { m in
+                            Button(m) { settings.model = m }
+                        }
+                        Divider()
+                        Button("Fetch models from \(settings.provider.shortLabel)", systemImage: "arrow.down.circle", action: fetchModels)
+                    } label: {
+                        if fetchingModels { ProgressView().controlSize(.small) } else { Image(systemName: "list.bullet") }
+                    }
+                    .menuStyle(.button)
+                    .fixedSize()
+                    .help("Pick a model")
+                }
+
                 Picker("Effort", selection: $settings.effort) {
                     ForEach(AppSettings.efforts, id: \.self) { Text($0.capitalized) }
                 }
+
+                HStack {
+                    Button("Test", action: testLLM)
+                        .disabled(!settings.isLLMConfigured || llmState == .testing)
+                    switch llmState {
+                    case .idle: EmptyView()
+                    case .testing: ProgressView().controlSize(.small)
+                    case .ok(let msg, _): Label(msg, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    case .failed(let msg): Text(msg).foregroundStyle(.red).font(.caption).lineLimit(3)
+                    }
+                }
             } header: {
-                Text("Anthropic")
+                Text("AI provider")
             } footer: {
-                Link("Get an API key", destination: URL(string: "https://platform.claude.com/settings/keys")!)
-                    .font(.caption)
+                VStack(alignment: .leading, spacing: 4) {
+                    if let url = settings.provider.keyURL {
+                        Link("Get a \(settings.provider.shortLabel) API key", destination: url)
+                    }
+                    Text(providerNote).foregroundStyle(.secondary)
+                }
+                .font(.caption)
             }
 
             Section {
@@ -160,6 +209,69 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 500)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var providerNote: String {
+        switch settings.provider {
+        case .anthropic: "Claude gets adaptive thinking, schema-enforced plans and automatic refusal fallbacks."
+        case .openAICompatible: "Ollama, LM Studio, vLLM, llama.cpp… Use a model with tool calling. Plans need a large context window — big epics can exceed small local models."
+        case .anthropicCompatible: "Any server speaking the Anthropic Messages API (e.g. LiteLLM or a gateway). Tool calling required."
+        case .openrouter: "Any OpenRouter model with tool calling works, e.g. anthropic/…, openai/…, google/…"
+        default: "Plans are written with tool calling, then a JSON-schema answer. Pick a model that supports tools."
+        }
+    }
+
+    private func fetchModels() {
+        fetchingModels = true
+        let config = settings.llmConfig
+        Task {
+            defer { fetchingModels = false }
+            do {
+                let models: [String]
+                switch config.provider.style {
+                case .anthropic:
+                    models = try await ClaudeClient(apiKey: config.apiKey, baseURL: config.baseURL,
+                                                    sendBearer: config.provider != .anthropic).listModels()
+                case .openAIChat:
+                    models = try await OpenAIChatClient(provider: config.provider, apiKey: config.apiKey,
+                                                        baseURL: config.baseURL).listModels()
+                }
+                fetchedModels = models
+                llmState = .ok("\(models.count) models available", 0)
+            } catch {
+                llmState = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Sends a tiny prompt to prove the key, URL and model all work.
+    private func testLLM() {
+        llmState = .testing
+        let config = settings.llmConfig
+        Task {
+            do {
+                let reply: String
+                switch config.provider.style {
+                case .anthropic:
+                    let client = ClaudeClient(apiKey: config.apiKey, baseURL: config.baseURL, sendBearer: config.provider != .anthropic)
+                    let r = try await client.createMessage([
+                        "model": .string(config.model), "max_tokens": 64,
+                        "messages": [["role": "user", "content": "Reply with just: OK"]],
+                    ], betas: [])
+                    reply = (r["content"]?.arrayValue ?? []).compactMap { $0["text"]?.stringValue }.joined()
+                case .openAIChat:
+                    let client = OpenAIChatClient(provider: config.provider, apiKey: config.apiKey, baseURL: config.baseURL)
+                    reply = try await client.stream([
+                        "model": .string(config.model),
+                        "messages": [["role": "user", "content": "Reply with just: OK"]],
+                    ]) { _ in }.text
+                }
+                let short = reply.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40)
+                llmState = .ok("\(config.model) replied “\(short.isEmpty ? "…" : short)”", 0)
+            } catch {
+                llmState = .failed(error.localizedDescription)
+            }
+        }
     }
 
     private func signIn() {

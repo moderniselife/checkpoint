@@ -3,7 +3,8 @@ import Observation
 
 @Observable
 final class AppSettings {
-    static let models = ["claude-opus-5", "claude-opus-5-5", "claude-sonnet-5", "claude-fable-5-1"]
+    /// Suggested Claude models (other providers list theirs via "Fetch models").
+    static let claudeModels = ["claude-opus-5", "claude-opus-5-5", "claude-sonnet-5", "claude-fable-5-1", "claude-haiku-4-5"]
     static let efforts = ["low", "medium", "high", "xhigh"]
 
     enum AtlassianAuth: String, CaseIterable, Identifiable {
@@ -29,12 +30,46 @@ final class AppSettings {
     /// Used for bare keys when both trackers are connected (links are auto-detected).
     var defaultTracker: Tracker { didSet { UserDefaults.standard.set(defaultTracker.rawValue, forKey: "defaultTracker") } }
 
-    var anthropicKey: String { didSet { Keychain.set(anthropicKey, for: "anthropic") } }
+    // MARK: AI provider
+
+    var provider: LLMProvider { didSet { UserDefaults.standard.set(provider.rawValue, forKey: "llmProvider") } }
+    /// Per-provider API keys (Keychain), models and base URLs, so switching providers keeps each one's setup.
+    private var llmKeys: [LLMProvider: String] = [:]
+    private var llmModels: [String: String] { didSet { UserDefaults.standard.set(llmModels, forKey: "llmModels") } }
+    private var llmBaseURLs: [String: String] { didSet { UserDefaults.standard.set(llmBaseURLs, forKey: "llmBaseURLs") } }
+
+    /// API key for the selected provider.
+    var llmKey: String {
+        get { llmKeys[provider] ?? "" }
+        set { llmKeys[provider] = newValue; Keychain.set(newValue, for: provider.keychainAccount) }
+    }
+
+    /// Model id for the selected provider.
+    var model: String {
+        get { llmModels[provider.rawValue] ?? provider.defaultModel }
+        set { llmModels[provider.rawValue] = newValue }
+    }
+
+    /// Base URL for the selected provider (editable for local/compatible servers).
+    var llmBaseURL: String {
+        get { provider.hasEditableBaseURL ? (llmBaseURLs[provider.rawValue] ?? provider.defaultBaseURL) : provider.defaultBaseURL }
+        set { llmBaseURLs[provider.rawValue] = newValue }
+    }
+
+    var isLLMConfigured: Bool {
+        !model.trimmingCharacters(in: .whitespaces).isEmpty
+            && (!provider.requiresKey || !llmKey.isEmpty)
+            && URL(string: llmBaseURL)?.scheme != nil
+    }
+
+    var llmConfig: LLMConfig {
+        LLMConfig(provider: provider, apiKey: llmKey, baseURL: llmBaseURL,
+                  model: model.trimmingCharacters(in: .whitespaces), effort: effort)
+    }
     var atlassianEmail: String { didSet { UserDefaults.standard.set(atlassianEmail, forKey: "atlassianEmail") } }
     var atlassianToken: String { didSet { Keychain.set(atlassianToken, for: "atlassian") } }
     /// Jira site hostname, e.g. yourcompany.atlassian.net — used as the MCP cloudId.
     var site: String { didSet { UserDefaults.standard.set(site, forKey: "site") } }
-    var model: String { didSet { UserDefaults.standard.set(model, forKey: "model") } }
     var effort: String { didSet { UserDefaults.standard.set(effort, forKey: "effort") } }
     var mode: TestMode { didSet { UserDefaults.standard.set(mode.rawValue, forKey: "mode") } }
     /// Hosted app QA tests against, e.g. "https://app.dev.example.com (DEV)".
@@ -42,11 +77,20 @@ final class AppSettings {
 
     init() {
         let d = UserDefaults.standard
-        anthropicKey = Keychain.get("anthropic") ?? ""
+        provider = LLMProvider(rawValue: d.string(forKey: "llmProvider") ?? "") ?? .anthropic
+        var models = d.dictionary(forKey: "llmModels") as? [String: String] ?? [:]
+        // Carry over the model chosen before multi-provider support.
+        if models[LLMProvider.anthropic.rawValue] == nil, let old = d.string(forKey: "model") {
+            models[LLMProvider.anthropic.rawValue] = old
+        }
+        llmModels = models
+        llmBaseURLs = d.dictionary(forKey: "llmBaseURLs") as? [String: String] ?? [:]
+        llmKeys = Dictionary(uniqueKeysWithValues: LLMProvider.allCases.compactMap { p in
+            Keychain.get(p.keychainAccount).map { (p, $0) }
+        })
         atlassianToken = Keychain.get("atlassian") ?? ""
         atlassianEmail = d.string(forKey: "atlassianEmail") ?? ""
         site = d.string(forKey: "site") ?? ""
-        model = d.string(forKey: "model") ?? "claude-opus-5"
         effort = d.string(forKey: "effort") ?? "high"
         mode = TestMode(rawValue: d.string(forKey: "mode") ?? "") ?? .dev
         qaEnvironment = d.string(forKey: "qaEnvironment") ?? ""
@@ -112,7 +156,7 @@ final class AppSettings {
         }
     }
 
-    var isConfigured: Bool { !anthropicKey.isEmpty && (isAtlassianConfigured || isLinearConfigured) }
+    var isConfigured: Bool { isLLMConfigured && (isAtlassianConfigured || isLinearConfigured) }
 
     /// MCP client wired to whichever Atlassian auth method is selected.
     func makeMCPClient() -> MCPClient {
