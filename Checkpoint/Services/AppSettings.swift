@@ -23,6 +23,9 @@ final class AppSettings {
     var site: String { didSet { UserDefaults.standard.set(site, forKey: "site") } }
     var model: String { didSet { UserDefaults.standard.set(model, forKey: "model") } }
     var effort: String { didSet { UserDefaults.standard.set(effort, forKey: "effort") } }
+    var mode: TestMode { didSet { UserDefaults.standard.set(mode.rawValue, forKey: "mode") } }
+    /// Hosted app QA tests against, e.g. "https://app.dev.example.com (DEV)".
+    var qaEnvironment: String { didSet { UserDefaults.standard.set(qaEnvironment, forKey: "qaEnvironment") } }
 
     init() {
         let d = UserDefaults.standard
@@ -32,6 +35,8 @@ final class AppSettings {
         site = d.string(forKey: "site") ?? ""
         model = d.string(forKey: "model") ?? "claude-opus-5"
         effort = d.string(forKey: "effort") ?? "high"
+        mode = TestMode(rawValue: d.string(forKey: "mode") ?? "") ?? .dev
+        qaEnvironment = d.string(forKey: "qaEnvironment") ?? ""
         atlassianAuth = AtlassianAuth(rawValue: d.string(forKey: "atlassianAuth") ?? "") ?? .oauth
         atlassianUser = AtlassianOAuth.shared.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil
     }

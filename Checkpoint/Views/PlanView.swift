@@ -115,7 +115,7 @@ struct PlanView: View {
                     Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
                 }
                 Button("Re-run", systemImage: "arrow.clockwise") {
-                    store.analyze(saved.id, settings: settings)
+                    store.analyze(saved.plan.ticket.key, mode: saved.mode, settings: settings)
                 }
                 if let url = URL(string: plan.ticket.url) {
                     Link(destination: url) { Label("Open in Jira", systemImage: "arrow.up.right.square") }
@@ -129,6 +129,7 @@ struct PlanView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     TicketKeyButton(key: plan.ticket.key, font: .headline.monospaced())
+                    ModeBadge(mode: saved.mode)
                     Chip(text: plan.ticket.type)
                     Chip(text: plan.ticket.status, tint: .blue)
                 }

@@ -11,6 +11,7 @@ struct ProgressFeedView: View {
                         ProgressView().controlSize(.small)
                         Text("Researching \(store.runningKey ?? "")")
                             .font(.title3.weight(.semibold))
+                        ModeBadge(mode: store.runningMode)
                     }
                     .padding(.bottom, 6)
 

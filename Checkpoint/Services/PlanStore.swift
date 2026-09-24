@@ -2,10 +2,30 @@ import Foundation
 import Observation
 
 nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {
-    var id: String { plan.ticket.key }
+    /// Dev and QA plans for the same ticket are kept side by side.
+    var id: String { Self.id(plan.ticket.key, mode) }
     var plan: TestPlan
+    var mode: TestMode
     var createdAt: Date
     var done: Set<String>
+
+    static func id(_ key: String, _ mode: TestMode) -> String { "\(key):\(mode.rawValue)" }
+
+    init(plan: TestPlan, mode: TestMode, createdAt: Date, done: Set<String>) {
+        self.plan = plan
+        self.mode = mode
+        self.createdAt = createdAt
+        self.done = done
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        plan = try c.decode(TestPlan.self, forKey: .plan)
+        // Plans saved before modes existed were dev plans.
+        mode = try c.decodeIfPresent(TestMode.self, forKey: .mode) ?? .dev
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        done = try c.decode(Set<String>.self, forKey: .done)
+    }
 
     var progress: Double {
         plan.tasks.isEmpty ? 0 : Double(plan.tasks.filter { done.contains($0.id) }.count) / Double(plan.tasks.count)
@@ -53,7 +73,11 @@ final class PlanStore {
         return String(match.output)
     }
 
-    func analyze(_ input: String, settings: AppSettings) {
+    private(set) var runningMode: TestMode = .dev
+
+    /// `mode` defaults to the current toolbar toggle; re-runs pass the plan's own mode.
+    func analyze(_ input: String, mode: TestMode? = nil, settings: AppSettings) {
+        let mode = mode ?? settings.mode
         guard let key = Self.extractKey(input) else {
             error = "That doesn't look like a Jira key (e.g. PROJ-1234)."
             return
@@ -66,6 +90,7 @@ final class PlanStore {
         error = nil
         feed = []
         runningKey = key
+        runningMode = mode
         selection = nil
 
         let generator = PlanGenerator(
@@ -73,20 +98,23 @@ final class PlanStore {
             mcp: settings.makeMCPClient(),
             model: settings.model,
             effort: settings.effort,
-            site: settings.siteHost
+            site: settings.siteHost,
+            mode: mode,
+            environment: settings.qaEnvironment
         )
         task = Task {
             do {
                 let plan = try await generator.run(ticketKey: key) { event in
                     await MainActor.run { self.record(event) }
                 }
-                let previous = plans.first { $0.id == plan.ticket.key }
+                let id = SavedPlan.id(plan.ticket.key, mode)
+                let previous = plans.first { $0.id == id }
                 // Keep ticks for tasks that survived a re-run.
                 let kept = previous?.done.intersection(plan.tasks.map(\.id)) ?? []
-                plans.removeAll { $0.id == plan.ticket.key }
-                plans.insert(SavedPlan(plan: plan, createdAt: .now, done: kept), at: 0)
+                plans.removeAll { $0.id == id }
+                plans.insert(SavedPlan(plan: plan, mode: mode, createdAt: .now, done: kept), at: 0)
                 save()
-                selection = plan.ticket.key
+                selection = id
             } catch is CancellationError {
             } catch {
                 self.error = error.localizedDescription

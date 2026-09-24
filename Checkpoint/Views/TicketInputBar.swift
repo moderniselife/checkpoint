@@ -35,6 +35,9 @@ struct TicketInputBar: View {
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .glassEffectID("field", in: glass)
 
+                ModeToggle()
+                    .glassEffectID("mode", in: glass)
+
                 if store.isRunning {
                     Button("Stop", systemImage: "stop.fill") { store.cancel() }
                         .buttonStyle(.glass)
@@ -64,5 +67,45 @@ struct TicketInputBar: View {
     private func submit() {
         store.analyze(input, settings: settings)
         if store.error == nil { input = "" }
+    }
+}
+
+/// Dev / QA switch that sits in the glass input bar. ⌘⇧M flips it.
+private struct ModeToggle: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(PlanStore.self) private var store
+
+    var body: some View {
+        @Bindable var settings = settings
+        HStack(spacing: 2) {
+            ForEach(TestMode.allCases) { mode in
+                let selected = settings.mode == mode
+                Button {
+                    withAnimation(.smooth) { settings.mode = mode }
+                } label: {
+                    Label(mode.label, systemImage: mode.icon)
+                        .font(.callout.weight(selected ? .semibold : .regular))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                        .background {
+                            if selected {
+                                Capsule().fill(mode == .qa ? Color.teal.gradient : Color.indigo.gradient)
+                            }
+                        }
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+                .help(mode.help)
+            }
+        }
+        .padding(4)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .disabled(store.isRunning)
+        .background {
+            Button("") { settings.mode = settings.mode == .dev ? .qa : .dev }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .hidden()
+        }
     }
 }
