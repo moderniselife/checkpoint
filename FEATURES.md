@@ -3,7 +3,7 @@
 The single place for what Checkpoint does, where each feature lives in the code, how well it's been
 verified, what's known to be rough, and how to fix things when they break.
 
-**Last updated:** 2026-09-25 · **Latest release:** 0.2.0 — AI providers, scenarios, build script, landing page, community files
+**Last updated:** 2026-09-25 · **Latest release:** 0.3.0 — plan export (Markdown / HTML), epic child issues, MIT license
 
 ---
 
@@ -17,7 +17,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | 🐞 **Known issue** | Works with a caveat — see *Known limitations* |
 | 💡 **Backlog** | Idea / not built |
 
-> Everything that shipped in **0.1.0** has been tested by the maintainer (✅). Work added in **0.2.0** is 🧪 — logic
+> Everything that shipped in **0.1.0** has been tested by the maintainer (✅). Work added in **0.2.0–0.3.0** is 🧪 — logic
 > tested with harnesses and fixture servers — until someone runs it for real. Promote a row to ✅ once seen working.
 
 ---
@@ -37,7 +37,9 @@ verified, what's known to be rough, and how to fix things when they break.
 | Prompt caching, server-side refusal fallbacks (`fallbacks: "default"`) | ✅ | `PlanGenerator.run` | Cache hits visible in API usage; fallback only on refusals |
 | Model + effort picker | ✅ | Settings → Anthropic | Change model, re-run |
 | Re-run keeps ticked tasks / met criteria that still exist | ✅ | `PlanStore.analyze` | Tick, re-run, ticks remain |
-| Copy as Markdown (tasks + AC checkboxes) | ✅ | `TestPlan.markdown` | Toolbar → Copy, paste into Jira |
+| Copy as Markdown (tasks + AC checkboxes) | ✅ | `PlanExporter.markdown` | Toolbar → Export → Copy as Markdown |
+| Save as Markdown (`.md`) with status header, emoji sections, scenarios, sources | 🧪 | `PlanExporter.markdown` | Export → Save as Markdown… |
+| Save as HTML page — Liquid Glass, light/dark, print, browser-tickable with live rings | 🧪 | `PlanExporter.html` | Export → Save as HTML Page… (rendered in Chrome light + dark) |
 
 ### 1.2 Research visibility
 
@@ -86,6 +88,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | **Inline images** in description/comments (ADF → attachment ID) | ✅ | `TicketDetail.MediaResolver`, `InlineImage` | Open a ticket with a screenshot pasted into a comment |
 | Attachments grid with previews, full-size viewer | ✅ | `AttachmentsGrid`, `AttachmentLoader` | Needs an API token saved (see limitations) |
 | Related: parent / sub-tasks / links (opens as tab) | ✅ | `LinkedRow` | — |
+| Epic child issues (JQL `parent = KEY`, paginated) with done / in-progress / to-do filter | 🧪 | `TicketInspector.jiraChildren`, `ChildIssuesView` | Open an epic |
 | Comments (newest-first toggle), work log, change history | ✅ | `CommentsList`, `WorklogList`, `HistoryList` | — |
 | Comment/worklog avatars (filled by accountId) + initials fallback | ✅ | `TicketDetail.fillAvatars`, `AvatarView` | Comment authors show avatars |
 | All other custom fields | ✅ | "All other fields" disclosure | — |
@@ -196,7 +199,6 @@ verified, what's known to be rough, and how to fix things when they break.
 | L10 | Non-Claude providers | Plans are written in two phases (research, then JSON); models without tool calling can't research | Pick a tool-calling model |
 | L11 | Local models | Big epics can exceed a small local model's context window | Use a larger-context model, or analyze children individually |
 | L12 | Scenarios | Tickets-only scenarios depend on how well related tickets describe the flows; codebase mode gives more grounded journeys | Point it at the product repo |
-| L13 | Licensing | No LICENSE file yet, so the code isn't formally open source | Maintainer to choose a license |
 | L9 | App icon | Legacy asset-catalog icon (full-bleed) rather than an Icon Composer `.icon` with live glass layers | Split the logo into layers in Xcode's Icon Composer |
 
 ---
@@ -286,7 +288,11 @@ picking the good ones later (`./ideas/idea "…"` to add one). Picked ideas get 
 | 2026-09-25 | `8311efd` | `build.sh` one-command build from source |
 | 2026-09-25 | `34d929b` | Issue forms and community health files |
 | 2026-09-25 | `6e94039` | Docs: verified 0.1.0 features, scenarios, build script, community |
-| 2026-09-25 | — | **Release 0.2.0** — multi-provider AI, scenarios, build script, landing page, community files, new link-preview banner |
+| 2026-09-25 | `51ecb65` | **Release 0.2.0** — multi-provider AI, scenarios, build script, landing page, community files, new link-preview banner |
+| 2026-09-25 | `ad27288` | Epic child issues in the ticket panel |
+| 2026-09-25 | `297c31d` | Export plans as Markdown or a styled HTML page |
+| 2026-09-25 | `7c2f5cd` | MIT license |
+| 2026-09-25 | — | **Release 0.3.0** — export, epic children, MIT license |
 
 ---
 

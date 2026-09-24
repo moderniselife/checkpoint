@@ -43,5 +43,5 @@ See [README → Project layout](README.md#project-layout). In short: `Models/` (
 3. Run `./build.sh` — it must succeed.
 4. Open a PR using the template and link the issue or `IDEA-###`.
 
-By contributing you agree your contributions are licensed under the project's license, and to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+By contributing you agree your contributions are licensed under the [MIT License](LICENSE), and to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 You'll be added to [CONTRIBUTORS.md](CONTRIBUTORS.md) — thank you!
