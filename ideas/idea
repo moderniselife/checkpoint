@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Capture and query ideas in ideas/IDEAS.md.
+#
+#   ./ideas/idea "One-line idea" ["optional notes"]   append to the Inbox with the next IDEA-### id
+#   ./ideas/idea --stats                              count ideas by status
+#   ./ideas/idea --list 👍                            list ideas with a status emoji
+set -euo pipefail
+
+BOARD="$(cd "$(dirname "$0")" && pwd)/IDEAS.md"
+[ -f "$BOARD" ] || { echo "Can't find $BOARD" >&2; exit 1; }
+
+# Board rows are markdown table lines starting with "| IDEA-".
+rows() { grep -E '^\| IDEA-[0-9]+ \|' "$BOARD" || true; }
+status_of() { awk -F'|' '{ s=$(NF-1); gsub(/^ +| +$/, "", s); print s }'; }
+
+case "${1:-}" in
+  ""|-h|--help)
+    sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+
+  --stats)
+    total=$(rows | wc -l | tr -d ' ')
+    echo "Ideas: $total"
+    for s in 💭 👍 📐 🚧 ✅ 🧊 ❌; do
+      n=$(rows | status_of | grep -c -x -- "$s" || true)
+      if [ "$n" -gt 0 ]; then printf '  %s %s\n' "$s" "$n"; fi
+    done
+    ;;
+
+  --list)
+    want="${2:?usage: --list <status emoji>}"
+    rows | awk -F'|' -v want="$want" '{
+      s = $(NF-1); gsub(/^ +| +$/, "", s)
+      if (s == want) { id = $2; t = $3; gsub(/^ +| +$/, "", id); gsub(/^ +| +$/, "", t); printf "%s  %s\n", id, t }
+    }'
+    ;;
+
+  *)
+    title="${1//|/\\|}"
+    notes="${2:-}"; notes="${notes//|/\\|}"
+    last=$(grep -o -E 'IDEA-[0-9]+' "$BOARD" | sed 's/IDEA-//' | sort -n | tail -1)
+    next=$(printf 'IDEA-%03d' $(( 10#${last:-0} + 1 )))
+    row="| $next | $title | $notes | ? | ? | 💭 |"
+    # Append to the end of the Inbox table (first table after the "## 📥 Inbox" heading).
+    tmp="$(mktemp)"
+    # Pass the row via the environment: awk -v would eat the \| escapes.
+    ROW="$row" awk '
+      /^## 📥 Inbox/ { inbox = 1 }
+      inbox && /^\|/ { intable = 1 }
+      inbox && intable && !/^\|/ && !done { print ENVIRON["ROW"]; done = 1; inbox = 0 }
+      { print }
+      END { if (!done) print ENVIRON["ROW"] }
+    ' "$BOARD" > "$tmp" && mv "$tmp" "$BOARD"
+    echo "Added $next: $1"
+    ;;
+esac

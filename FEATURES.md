@@ -128,6 +128,7 @@ verified, what's known to be rough, and how to fix things when they break.
 
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
+| Landing page (Liquid Glass, light/dark, responsive, live download link) | 🧪 | `site/index.html` | Previewed locally at desktop + 375px; deploys via `.github/workflows/pages.yml` |
 | GitHub Action: tag → universal Release build → DMG + zip + SHA256 → GitHub Release | 🧪 | `.github/workflows/release.yml` | Unsigned path dry-run locally (universal, DMG, zip); first CI run pending |
 | Developer ID signing + notarization + stapling when secrets are set | 🔍 | same | Add the five secrets, push a tag |
 | Ad-hoc signed fallback when no secrets | 🧪 | same | Dry-run verified locally |
@@ -224,19 +225,8 @@ To reset: quit, delete the `Checkpoint` folder above, remove the Keychain items.
 
 ## 6. Backlog / ideas
 
-| Idea | Notes |
-|---|---|
-| 💡 Auto-update via Sparkle (appcast from GitHub Releases) | Needs Developer ID signing first |
-| 💡 Post the plan back to Jira/Linear as a comment | Needs a write-capable connection + explicit confirmation |
-| 💡 Icon Composer `.icon` with layered glass | Split logo into foreground/background layers |
-| 💡 Menu-bar quick analyze | Global shortcut → paste key |
-| 💡 Search / filter plans in the sidebar | By key, title, folder, mode |
-| 💡 Export folder as a test report (PDF/Markdown) | Rolled-up metrics + per-plan status |
-| 💡 Attach evidence (screenshots) to tasks | Store locally, include in export |
-| 💡 Bulk analyze (all children of an epic as separate plans) | Into a new folder |
-| 💡 Token/cost readout per plan | From streamed `usage` |
-| 💡 Jira remote links in the panel's Links card | `getJiraIssueRemoteIssueLinks` |
-| 💡 Fetch full comment threads when truncated | Paginate comments |
+Ideas now live in [`ideas/IDEAS.md`](ideas/IDEAS.md) — a triage board for capturing lots of ideas and
+picking the good ones later (`./ideas/idea "…"` to add one). Picked ideas get a spec in `ideas/specs/`.
 
 ---
 
@@ -264,4 +254,4 @@ To reset: quit, delete the `Checkpoint` folder above, remove the Keychain items.
 - Add a row when a feature ships; move 🧪/🔍 → ✅ once seen working in the app.
 - Log new problems under **Known limitations** with a workaround.
 - Append each commit to the **Changelog**.
-- Related docs: [`README.md`](README.md) (overview & setup).
+- Related docs: [`README.md`](README.md) (overview & setup), [`ideas/`](ideas/README.md) (idea board).
