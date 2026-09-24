@@ -42,6 +42,9 @@ struct TicketInputBar: View {
                 ModeToggle()
                     .glassEffectID("mode", in: glass)
 
+                ScenarioMenu()
+                    .glassEffectID("scenarios", in: glass)
+
                 if store.isRunning {
                     Button("Stop", systemImage: "stop.fill") { store.cancel() }
                         .buttonStyle(.glass)
@@ -142,5 +145,55 @@ private struct TrackerMenu: View {
         .buttonStyle(.plain)
         .fixedSize()
         .help("Bare keys are looked up in \(settings.defaultTracker.label). Pasted links are detected automatically.")
+    }
+}
+
+/// Optional scenario generation: off, from related tickets, or tickets + a local codebase.
+private struct ScenarioMenu: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(PlanStore.self) private var store
+
+    var body: some View {
+        let on = settings.scenarioMode != .off
+        Menu {
+            ForEach(ScenarioMode.allCases) { m in
+                Button {
+                    if m == .ticketsAndCode && settings.codebaseBookmark == nil { settings.chooseCodebase() }
+                    if m != .ticketsAndCode || settings.codebaseBookmark != nil { settings.scenarioMode = m }
+                } label: {
+                    Label(m.label, systemImage: settings.scenarioMode == m ? "checkmark" : icon(m))
+                }
+            }
+            Divider()
+            if let path = settings.codebasePath {
+                Text("Codebase: \((path as NSString).lastPathComponent)")
+            }
+            Button(settings.codebasePath == nil ? "Choose Codebase…" : "Change Codebase…", systemImage: "folder") {
+                settings.chooseCodebase()
+            }
+        } label: {
+            Label(on ? settings.scenarioMode.shortLabel : "Scenarios", systemImage: "theatermasks")
+                .font(.callout.weight(on ? .semibold : .regular))
+                .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background { if on { Capsule().fill(Color.purple.gradient) } }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .padding(4)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .disabled(store.isRunning)
+        .help("Optional: also generate end-to-end test scenarios")
+    }
+
+    private func icon(_ m: ScenarioMode) -> String {
+        switch m {
+        case .off: "xmark.circle"
+        case .tickets: "ticket"
+        case .ticketsAndCode: "chevron.left.forwardslash.chevron.right"
+        }
     }
 }

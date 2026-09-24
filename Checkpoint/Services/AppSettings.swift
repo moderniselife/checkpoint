@@ -72,6 +72,11 @@ final class AppSettings {
     var site: String { didSet { UserDefaults.standard.set(site, forKey: "site") } }
     var effort: String { didSet { UserDefaults.standard.set(effort, forKey: "effort") } }
     var mode: TestMode { didSet { UserDefaults.standard.set(mode.rawValue, forKey: "mode") } }
+    /// Optional end-to-end scenario generation.
+    var scenarioMode: ScenarioMode { didSet { UserDefaults.standard.set(scenarioMode.rawValue, forKey: "scenarioMode") } }
+    /// Security-scoped bookmark to a local codebase (read-only) for scenario research.
+    var codebaseBookmark: Data? { didSet { UserDefaults.standard.set(codebaseBookmark, forKey: "codebaseBookmark") } }
+    var codebasePath: String? { didSet { UserDefaults.standard.set(codebasePath, forKey: "codebasePath") } }
     /// Hosted app QA tests against, e.g. "https://app.dev.example.com (DEV)".
     var qaEnvironment: String { didSet { UserDefaults.standard.set(qaEnvironment, forKey: "qaEnvironment") } }
 
@@ -93,6 +98,9 @@ final class AppSettings {
         site = d.string(forKey: "site") ?? ""
         effort = d.string(forKey: "effort") ?? "high"
         mode = TestMode(rawValue: d.string(forKey: "mode") ?? "") ?? .dev
+        scenarioMode = ScenarioMode(rawValue: d.string(forKey: "scenarioMode") ?? "") ?? .off
+        codebaseBookmark = d.data(forKey: "codebaseBookmark")
+        codebasePath = d.string(forKey: "codebasePath")
         qaEnvironment = d.string(forKey: "qaEnvironment") ?? ""
         atlassianAuth = AtlassianAuth(rawValue: d.string(forKey: "atlassianAuth") ?? "") ?? .oauth
         atlassianUser = MCPOAuth.atlassian.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil
@@ -179,5 +187,46 @@ final class AppSettings {
         if let url = URL(string: s), let host = url.host { s = host }
         if !s.isEmpty && !s.contains(".") { s += ".atlassian.net" }
         return s
+    }
+}
+
+// MARK: - Codebase folder (scenario research)
+
+import AppKit
+
+extension AppSettings {
+    /// Lets the user pick a repo folder; stores a read-only security-scoped bookmark.
+    func chooseCodebase() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use This Codebase"
+        panel.message = "Checkpoint reads this folder (read-only) to build realistic test scenarios."
+        guard panel.runModal() == .OK, let url = panel.url,
+              let data = try? url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+                                               includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
+        codebaseBookmark = data
+        codebasePath = url.path
+    }
+
+    func clearCodebase() {
+        codebaseBookmark = nil
+        codebasePath = nil
+        if scenarioMode == .ticketsAndCode { scenarioMode = .tickets }
+    }
+
+    /// Resolves the bookmark and starts security-scoped access; call `stopAccessingSecurityScopedResource()` when done.
+    func openCodebase() -> URL? {
+        guard let data = codebaseBookmark else { return nil }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope,
+                                 relativeTo: nil, bookmarkDataIsStale: &stale),
+              url.startAccessingSecurityScopedResource() else { return nil }
+        if stale, let fresh = try? url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+                                                    includingResourceValuesForKeys: nil, relativeTo: nil) {
+            codebaseBookmark = fresh
+        }
+        return url
     }
 }
