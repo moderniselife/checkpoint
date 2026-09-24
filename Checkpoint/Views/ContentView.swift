@@ -53,6 +53,8 @@ struct ContentView: View {
                         ProgressFeedView()
                     } else if let saved = store.selected {
                         PlanView(saved: saved)
+                    } else if let folder = store.selectedFolder {
+                        FolderOverview(folder: folder)
                     } else {
                         EmptyStateView()
                     }

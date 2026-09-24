@@ -124,7 +124,15 @@ private struct TicketDetailView: View {
 
                 if !detail.attachments.isEmpty {
                     PanelCard(title: "Attachments (\(detail.attachments.count))", icon: "paperclip") {
-                        AttachmentsGrid(attachments: detail.attachments)
+                        AttachmentsGrid(attachments: detail.attachments, tracker: detail.tracker)
+                    }
+                }
+
+                if !detail.externalLinks.isEmpty {
+                    PanelCard(title: "Links (\(detail.externalLinks.count))", icon: "arrow.up.forward.square") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(detail.externalLinks) { ExternalLinkRow(link: $0) }
+                        }
                     }
                 }
 
@@ -139,15 +147,32 @@ private struct TicketDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Picker("", selection: $tab) {
-                        Text("Comments (\(detail.commentTotal))").tag(Tab.comments)
-                        Text("Work log (\(detail.worklogTotal))").tag(Tab.worklog)
-                        Text("History (\(detail.history.count))").tag(Tab.history)
+                    // Linear has no work log, and its MCP doesn't expose history.
+                    let tabs = Tab.allCases.filter { t in
+                        switch t {
+                        case .comments: true
+                        case .worklog: detail.tracker == .jira
+                        case .history: detail.tracker == .jira || !detail.history.isEmpty
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+                    if tabs.count > 1 {
+                        Picker("", selection: $tab) {
+                            ForEach(tabs, id: \.self) { t in
+                                switch t {
+                                case .comments: Text("Comments (\(detail.commentTotal))").tag(t)
+                                case .worklog: Text("Work log (\(detail.worklogTotal))").tag(t)
+                                case .history: Text("History (\(detail.history.count))").tag(t)
+                                }
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    } else {
+                        Label("Comments (\(detail.commentTotal))", systemImage: "bubble.left.and.bubble.right")
+                            .font(.subheadline.weight(.semibold))
+                    }
 
-                    switch tab {
+                    switch tabs.contains(tab) ? tab : .comments {
                     case .comments: CommentsList(comments: detail.comments, total: detail.commentTotal)
                     case .worklog: WorklogList(worklogs: detail.worklogs, total: detail.worklogTotal)
                     case .history: HistoryList(entries: detail.history)
@@ -436,6 +461,7 @@ private struct HistoryList: View {
 
 private struct AttachmentsGrid: View {
     let attachments: [TicketDetail.Attachment]
+    var tracker: Tracker = .jira
     @Environment(AppSettings.self) private var settings
     @State private var preview: TicketDetail.Attachment?
 
@@ -448,7 +474,7 @@ private struct AttachmentsGrid: View {
                     }
                 }
             }
-            if settings.attachmentCredentials.basicHeader == nil {
+            if tracker == .jira && settings.attachmentCredentials.basicHeader == nil {
                 Text("Image previews use your Atlassian API token if one is saved in Settings; otherwise click to open in your browser.")
                     .font(.caption2).foregroundStyle(.tertiary)
             }
@@ -553,5 +579,37 @@ func priorityTint(_ p: String) -> Color {
     case "high": .orange
     case "medium": .yellow
     default: .gray
+    }
+}
+
+private struct ExternalLinkRow: View {
+    let link: TicketDetail.ExternalLink
+
+    var body: some View {
+        Button { NSWorkspace.shared.open(link.url) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon).foregroundStyle(.tint).frame(width: 18)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(link.title).font(.callout).lineLimit(1).foregroundStyle(.primary)
+                    if !link.subtitle.isEmpty {
+                        Text(link.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.up.right").font(.caption2).foregroundStyle(.tertiary)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help(link.url.absoluteString)
+    }
+
+    private var icon: String {
+        let host = link.url.host() ?? ""
+        if host.contains("github") || host.contains("gitlab") || host.contains("bitbucket") { return "arrow.triangle.pull" }
+        if host.contains("figma") { return "paintpalette" }
+        if host.contains("sentry") { return "ant" }
+        if host.contains("slack") { return "bubble.left" }
+        return "link"
     }
 }

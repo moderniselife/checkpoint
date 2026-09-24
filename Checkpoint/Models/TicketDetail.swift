@@ -67,6 +67,14 @@ nonisolated struct TicketDetail: Sendable, Hashable {
         var changes: [Change]
     }
 
+    /// A link attached to the issue (PR, design, doc…), shown as a clickable row.
+    struct ExternalLink: Sendable, Hashable, Identifiable {
+        var title: String
+        var url: URL
+        var subtitle: String = ""
+        var id: String { url.absoluteString }
+    }
+
     struct Field: Sendable, Hashable, Identifiable {
         var name: String
         var value: String
@@ -101,6 +109,8 @@ nonisolated struct TicketDetail: Sendable, Hashable {
     var history: [HistoryEntry]
     var otherFields: [Field]
     var webURL: URL?
+    var tracker: Tracker = .jira
+    var externalLinks: [ExternalLink] = []
 }
 
 // MARK: - Parsing

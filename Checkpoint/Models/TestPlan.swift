@@ -79,14 +79,15 @@ nonisolated extension TestPlan {
         ])
     }()
 
-    func markdown(done: Set<String>) -> String {
+    func markdown(done: Set<String>, met: Set<String> = []) -> String {
         var md = "# \(ticket.key) — \(ticket.title)\n\n\(ticket.url)\n\n\(summary)\n"
         if !preconditions.isEmpty {
             md += "\n## Before you start\n" + preconditions.map { "- \($0)" }.joined(separator: "\n") + "\n"
         }
         if !acceptanceCriteria.isEmpty {
             md += "\n## Acceptance criteria\n"
-                + acceptanceCriteria.map { "- **\($0.id)** \($0.text) _(\($0.source))_" }.joined(separator: "\n") + "\n"
+                + acceptanceCriteria.map { "- [\(met.contains($0.id) ? "x" : " ")] **\($0.id)** \($0.text) _(\($0.source))_" }
+                    .joined(separator: "\n") + "\n"
         }
         md += "\n## Test tasks\n"
         for t in tasks {

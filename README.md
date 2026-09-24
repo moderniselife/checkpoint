@@ -23,8 +23,20 @@ No more opening ten tabs and flipping back and forth.
   - **Test tasks** — numbered steps + one observable expected result, grouped per ticket for
     epics, priority and area, tickable and saved
   - edge cases, open questions, and every source it read
-- **Copy as Markdown** for Jira comments / PRs. **Re-run** keeps ticks for tasks that survive.
+- **Acceptance criteria are checkboxes** — click the seal to mark a criterion met. Plans track two
+  metrics: tasks tested and AC met (header rings, sidebar, folder roll-ups, Markdown export).
+- **Copy as Markdown** for Jira comments / PRs. **Re-run** keeps ticks and met criteria that survive.
 - **Live research feed** — see each ticket it opens and expand its reasoning as it works.
+
+### Folders
+Organise plans into folders nested to any depth, each with a colour.
+- **＋ folder** button in the sidebar header; right-click a folder for *New Subfolder*, *Edit*, *Move*, *Delete*
+  (deleting moves its contents up a level).
+- **Drag** plans and folders onto folders, or onto the *Test plans* header to move them to the top level.
+  Right-click → **Move To** gives a nested menu too.
+- Folders show rolled-up tested counts; selecting one opens an overview with breadcrumb, tested / AC-met
+  rings, subfolders and plans.
+- New plans land in the folder you're looking at.
 
 ### Dev vs QA mode
 Toggle in the input bar (**⌘⇧M**); default in Settings.
@@ -45,6 +57,11 @@ Click any ticket key (feed, plan header, task groups, AC sources, source chips) 
 fields, time tracking, description (task lists, tables, code, panels), **inline images**,
 attachments with previews, parent / sub-issues / links (navigable, with Back),
 comments, work log, change history and every other custom field.
+
+### Jira and Linear, same features
+Plans, Dev/QA mode, the research feed, the ticket panel, folders and AC tracking work identically for both.
+The panel adapts to each tracker: Jira adds work log, history and time tracking; Linear shows its
+project, cycle, estimate, sub-issues, relations, link attachments (PRs, Figma…) and uploaded files.
 
 ### Read-only by design
 Checkpoint can never change your tickets:
@@ -131,10 +148,10 @@ listener for sign-in only).
 ```
 Checkpoint/
   App/        CheckpointApp — scenes and environment
-  Models/     TestPlan, TicketDetail (+ ADF→markdown), LinearParsing, TestMode, Tracker, JSONValue
+  Models/     TestPlan, TicketDetail (+ ADF→markdown), LinearParsing, PlanFolder, TestMode, Tracker, JSONValue
   Services/   MCPClient, MCPOAuth, LoopbackServer, ClaudeClient, PlanGenerator,
               PlanStore, TicketInspector (+ AttachmentLoader), AppSettings, Keychain
-  Views/      ContentView, TicketInputBar, SidebarView, ProgressFeedView, PlanView,
+  Views/      ContentView, TicketInputBar, SidebarView, FolderOverview, ProgressFeedView, PlanView,
               TicketPanel, MarkdownView, GlassScrollIndicator, SettingsView
 project.yml   XcodeGen spec (the .xcodeproj is generated, not committed)
 ```
