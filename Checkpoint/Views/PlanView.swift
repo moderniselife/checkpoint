@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import AppKit
 
 struct PlanView: View {
@@ -15,6 +16,27 @@ struct PlanView: View {
     enum Filter: String, CaseIterable { case todo = "To do", all = "All" }
 
     private var plan: TestPlan { saved.plan }
+
+    private enum ExportFormat { case markdown, html }
+
+    /// Save panel → writes the file; HTML opens in the browser afterwards.
+    private func export(_ format: ExportFormat) {
+        let panel = NSSavePanel()
+        let ext = format == .html ? "html" : "md"
+        panel.nameFieldStringValue = "\(plan.ticket.key) test plan.\(ext)"
+        panel.allowedContentTypes = [format == .html ? .html : UTType(filenameExtension: "md") ?? .plainText]
+        panel.canCreateDirectories = true
+        panel.message = format == .html ? "A styled, self-contained page you can open, share or print." : "Markdown you can paste into Jira, GitHub or docs."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let ctx = PlanExporter.Context(saved: saved)
+        let text = format == .html ? PlanExporter.html(ctx) : PlanExporter.markdown(ctx)
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            if format == .html { NSWorkspace.shared.open(url) } else { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        } catch {
+            store.error = "Couldn't save: \(error.localizedDescription)"
+        }
+    }
     private var detailsOpen: Bool { inspector.currentKey == plan.ticket.key.uppercased() }
 
     private var visibleTasks: [TestPlan.Task] {
@@ -145,13 +167,20 @@ struct PlanView: View {
                 .help("Switch between the test plan and the research that produced it")
             }
             ToolbarItemGroup {
-                Button(copied ? "Copied" : "Copy as Markdown",
-                       systemImage: copied ? "checkmark" : "doc.on.doc") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(plan.markdown(done: saved.done, met: saved.metCriteria), forType: .string)
-                    copied = true
-                    Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                Menu {
+                    Button("Copy as Markdown", systemImage: "doc.on.doc") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(PlanExporter.markdown(.init(saved: saved)), forType: .string)
+                        copied = true
+                        Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                    }
+                    Divider()
+                    Button("Save as Markdown…", systemImage: "doc.text") { export(.markdown) }
+                    Button("Save as HTML Page…", systemImage: "safari") { export(.html) }
+                } label: {
+                    Label(copied ? "Copied" : "Export", systemImage: copied ? "checkmark" : "square.and.arrow.up")
                 }
+                .help("Copy or save this plan as Markdown or a styled HTML page")
                 Button("Re-run", systemImage: "arrow.clockwise") {
                     store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
                 }
