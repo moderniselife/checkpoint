@@ -128,7 +128,7 @@ verified, what's known to be rough, and how to fix things when they break.
 
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
-| Landing page (Liquid Glass, light/dark, responsive, live download link) | 🧪 | `site/index.html` | Previewed locally at desktop + 375px; deploys via `.github/workflows/pages.yml` |
+| Landing page (Liquid Glass, light/dark, responsive, live download link) | 🧪 | `site/index.html` | Previewed locally at desktop + 375px; deploys to https://checkpoint.guide via `.github/workflows/pages.yml` |
 | SEO: JSON-LD (SoftwareApplication, WebSite, WebPage, FAQPage), OG/Twitter cards, canonical, sitemap, robots, manifest, 404 | 🧪 | `site/` | Validate with Google Rich Results Test once deployed |
 | GitHub Action: tag → universal Release build → DMG + zip + SHA256 → GitHub Release | 🧪 | `.github/workflows/release.yml` | Unsigned path dry-run locally (universal, DMG, zip); first CI run pending |
 | Developer ID signing + notarization + stapling when secrets are set | 🔍 | same | Add the five secrets, push a tag |
@@ -250,7 +250,8 @@ picking the good ones later (`./ideas/idea "…"` to add one). Picked ideas get 
 | 2026-09-24 | `0de3ca2` | FEATURES.md: tracker, parity, limitations, support, changelog |
 | 2026-09-24 | `06fc9ce` | GitHub Actions release workflow (DMG + zip + checksums, optional notarization) |
 | 2026-09-24 | `8fd0695` | Landing page, GitHub Pages deploy, ideas board |
-| 2026-09-25 | — | Landing page SEO: structured data, social cards, sitemap, use cases, FAQ |
+| 2026-09-24 | `001811c` | Landing page SEO: structured data, social cards, sitemap, use cases, FAQ |
+| 2026-09-25 | — | Landing page moves to the checkpoint.guide custom domain |
 
 ---
 

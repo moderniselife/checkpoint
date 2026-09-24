@@ -190,8 +190,9 @@ Ad-hoc builds: right-click → **Open** the first time, or `xattr -dr com.apple.
 
 ## Landing page
 
-`site/` is a self-contained landing page (no build step). It deploys to GitHub Pages on every push that
-touches `site/` — enable it once under **Settings → Pages → Source: GitHub Actions**. Preview locally:
+`site/` is a self-contained landing page (no build step), live at **https://checkpoint.guide**.
+It deploys to GitHub Pages on every push that touches `site/` (Settings → Pages → Source: GitHub Actions,
+custom domain `checkpoint.guide`, DNS on Cloudflare). Preview locally:
 
 ```bash
 cd site && python3 -m http.server 8000
