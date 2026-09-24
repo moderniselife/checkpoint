@@ -151,6 +151,12 @@ private struct TicketDetailView: View {
                     }
                 }
 
+                if !detail.children.isEmpty {
+                    PanelCard(title: "Child issues (\(detail.children.count))", icon: "list.bullet.indent") {
+                        ChildIssuesView(children: detail.children)
+                    }
+                }
+
                 if !detail.subtasks.isEmpty || !detail.links.isEmpty || detail.parent != nil {
                     PanelCard(title: "Related", icon: "link") {
                         VStack(alignment: .leading, spacing: 6) {
@@ -726,6 +732,54 @@ private struct TicketTab: View {
         case "indeterminate": .blue
         case .some: .gray
         case nil: .secondary.opacity(0.4)
+        }
+    }
+}
+
+/// Epic children with a done / in-progress / to-do breakdown and a filter.
+private struct ChildIssuesView: View {
+    let children: [TicketDetail.LinkedIssue]
+    @State private var filter = "all"
+
+    private var counts: (done: Int, active: Int, todo: Int) {
+        (children.filter { $0.category == "done" }.count,
+         children.filter { $0.category == "indeterminate" }.count,
+         children.filter { $0.category != "done" && $0.category != "indeterminate" }.count)
+    }
+
+    private var shown: [TicketDetail.LinkedIssue] {
+        switch filter {
+        case "done": children.filter { $0.category == "done" }
+        case "active": children.filter { $0.category == "indeterminate" }
+        case "todo": children.filter { $0.category != "done" && $0.category != "indeterminate" }
+        default: children
+        }
+    }
+
+    var body: some View {
+        let c = counts
+        let total = max(children.count, 1)
+        VStack(alignment: .leading, spacing: 10) {
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    Rectangle().fill(.green).frame(width: geo.size.width * CGFloat(c.done) / CGFloat(total))
+                    Rectangle().fill(.blue).frame(width: geo.size.width * CGFloat(c.active) / CGFloat(total))
+                    Rectangle().fill(.quaternary)
+                }
+                .clipShape(.capsule)
+            }
+            .frame(height: 6)
+            Picker("", selection: $filter) {
+                Text("All \(children.count)").tag("all")
+                Text("Done \(c.done)").tag("done")
+                Text("In progress \(c.active)").tag("active")
+                Text("To do \(c.todo)").tag("todo")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(shown) { LinkedRow(issue: $0) }
+            }
         }
     }
 }

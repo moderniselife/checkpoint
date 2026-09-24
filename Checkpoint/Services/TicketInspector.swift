@@ -165,7 +165,44 @@ final class TicketInspector {
         ])
         if result.isError { throw TicketDetail.ParseError.notFound(result.text) }
         let raw = try JSONCoding.decoder.decode(JSONValue.self, from: Data(result.text.utf8))
-        return try TicketDetail.parse(raw)
+        var detail = try TicketDetail.parse(raw)
+        // Epic children are linked by `parent`, not listed in `subtasks` — ask for them explicitly.
+        let subtaskKeys = Set(detail.subtasks.map(\.key))
+        detail.children = (await jiraChildren(of: detail.key, cloudID: cloudID, mcp: mcp))
+            .filter { !subtaskKeys.contains($0.key) }
+        return detail
+    }
+
+    /// Every issue with `parent = key`, following pagination (epics can have hundreds).
+    nonisolated private static func jiraChildren(of key: String, cloudID: String, mcp: MCPClient) async -> [TicketDetail.LinkedIssue] {
+        var out: [TicketDetail.LinkedIssue] = []
+        var token: String?
+        for _ in 0..<10 {   // up to 1,000 children
+            var args: [String: JSONValue] = [
+                "cloudId": .string(cloudID),
+                "jql": .string("parent = \(key) ORDER BY rank, key"),
+                "fields": ["summary", "status", "issuetype"],
+                "maxResults": 100,
+            ]
+            if let token { args["nextPageToken"] = .string(token) }
+            guard let r = try? await mcp.callTool("searchJiraIssuesUsingJql", arguments: .object(args)), !r.isError,
+                  let json = try? JSONCoding.decoder.decode(JSONValue.self, from: Data(r.text.utf8)) else { break }
+            let nodes = json["issues"]?["nodes"]?.arrayValue ?? json["issues"]?.arrayValue ?? []
+            out += nodes.compactMap { n in
+                guard let k = n["key"]?.stringValue else { return nil }
+                let f = n["fields"]
+                return .init(key: k, summary: f?["summary"]?.stringValue ?? "",
+                             status: f?["status"]?["name"]?.stringValue ?? "",
+                             type: f?["issuetype"]?["name"]?.stringValue ?? "",
+                             relation: f?["issuetype"]?["name"]?.stringValue.map { $0.lowercased() } ?? "child",
+                             category: f?["status"]?["statusCategory"]?["key"]?.stringValue ?? "")
+            }
+            let info = json["issues"]?["pageInfo"] ?? json["pageInfo"]
+            guard info?["hasNextPage"]?.boolValue == true,
+                  let next = info?["endCursor"]?.stringValue ?? json["nextPageToken"]?.stringValue else { break }
+            token = next
+        }
+        return out
     }
 
     /// Linear's tool argument names aren't documented, so pick them from each tool's schema.
