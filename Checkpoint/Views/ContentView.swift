@@ -124,9 +124,11 @@ struct EmptyStateView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "checklist")
-                .font(.system(size: 44, weight: .light))
-                .foregroundStyle(.secondary)
+            Image("Logo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 112, height: 112)
+                .shadow(color: .indigo.opacity(0.25), radius: 18, y: 8)
             Text("Drop in a ticket, get a test plan.")
                 .font(.title2.weight(.semibold))
             Text("Checkpoint reads the ticket, its children, linked issues, comments and specs, then tells you what to test, how, and what counts as done.")

@@ -25,7 +25,9 @@ private struct GlassScrollIndicator: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .scrollIndicators(.hidden)
+            // `.hidden` is only a hint on macOS — with "Show scroll bars: Always" (or a mouse
+            // attached) the system scroller still draws. `.never` removes it outright.
+            .scrollIndicators(.never)
             .scrollPosition($position)
             .onScrollGeometryChange(for: ScrollMetrics.self) { g in
                 ScrollMetrics(
