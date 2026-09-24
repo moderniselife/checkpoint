@@ -1,6 +1,10 @@
-# Checkpoint
+<p align="center">
+  <img src="assets/logo-512.png" alt="Checkpoint" width="160">
+</p>
 
-**Paste a ticket. Get a test plan.**
+<h1 align="center">Checkpoint</h1>
+
+<p align="center"><strong>Paste a ticket. Get a test plan.</strong></p>
 
 Checkpoint is a native macOS 26 app (SwiftUI + Liquid Glass) that reads a Jira or Linear issue —
 plus its comments, children, parent, linked issues and specs — and turns it into a focused,
@@ -153,6 +157,8 @@ Checkpoint/
               PlanStore, TicketInspector (+ AttachmentLoader), AppSettings, Keychain
   Views/      ContentView, TicketInputBar, SidebarView, FolderOverview, ProgressFeedView, PlanView,
               TicketPanel, MarkdownView, GlassScrollIndicator, SettingsView
+  Assets.xcassets  AppIcon (generated from assets/logo.png on Apple's icon grid) + Logo
+assets/       logo.png (master), logo-512.png (README)
 project.yml   XcodeGen spec (the .xcodeproj is generated, not committed)
 ```
 

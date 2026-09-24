@@ -62,12 +62,13 @@ struct MarkdownView: View {
                 .padding(.leading, 10)
                 .overlay(alignment: .leading) { Rectangle().fill(.tint.opacity(0.5)).frame(width: 3) }
         case .code(let text):
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 Text(text).font(.caption.monospaced()).padding(10)
             }
+            .scrollIndicators(.never)
             .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
         case .table(let rows):
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
                         GridRow {
@@ -81,6 +82,7 @@ struct MarkdownView: View {
                 }
                 .padding(10)
             }
+            .scrollIndicators(.never)
             .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 8))
         case .image(let alt, let url):
             InlineImage(alt: alt, url: url)
