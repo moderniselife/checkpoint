@@ -37,6 +37,8 @@ actor MCPClient {
     /// v1 silently treats them as anonymous and hides the Jira tools.
     static let oauthEndpoint = URL(string: "https://mcp.atlassian.com/v1/mcp")!
     static let apiTokenEndpoint = URL(string: "https://mcp.atlassian.com/v2/mcp")!
+    /// Linear's read-only endpoint — write tools aren't even listed.
+    static let linearEndpoint = URL(string: "https://mcp.linear.app/mcp/readonly")!
 
     private let endpoint: URL
     private static let protocolVersion = "2025-06-18"

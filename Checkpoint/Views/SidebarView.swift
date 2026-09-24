@@ -21,13 +21,14 @@ struct SidebarView: View {
                     SidebarRow(saved: saved)
                         .tag(saved.id)
                         .contextMenu {
-                            Button("Show ticket details") { inspector.open(saved.plan.ticket.key) }
+                            Button("Show ticket details") { inspector.open(saved.plan.ticket.key, tracker: saved.tracker) }
                             Button("Run in \(saved.mode == .dev ? "QA" : "Dev") mode") {
-                                store.analyze(saved.plan.ticket.key, mode: saved.mode == .dev ? .qa : .dev, settings: settings)
+                                store.analyze(saved.plan.ticket.key, mode: saved.mode == .dev ? .qa : .dev,
+                                              tracker: saved.tracker, settings: settings)
                             }
                             Button("Re-run") { rerun(saved) }
                             if let url = URL(string: saved.plan.ticket.url) {
-                                Link("Open in Jira", destination: url)
+                                Link("Open in \(saved.tracker.label)", destination: url)
                             }
                             Divider()
                             Button("Delete", role: .destructive) { store.delete(saved.id) }
@@ -35,6 +36,7 @@ struct SidebarView: View {
                 }
             }
         }
+        .glassScrollIndicator()
         .overlay {
             if store.plans.isEmpty && !store.isRunning {
                 ContentUnavailableView("No plans yet", systemImage: "tray", description: Text("Analyze a ticket to start."))
@@ -43,7 +45,9 @@ struct SidebarView: View {
     }
 
     @Environment(AppSettings.self) private var settings
-    private func rerun(_ saved: SavedPlan) { store.analyze(saved.plan.ticket.key, mode: saved.mode, settings: settings) }
+    private func rerun(_ saved: SavedPlan) {
+        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
+    }
 }
 
 private struct SidebarRow: View {

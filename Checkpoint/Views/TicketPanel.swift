@@ -12,7 +12,7 @@ struct TicketPanel: View {
             Divider().opacity(0.4)
             Group {
                 if let key = inspector.currentKey {
-                    switch inspector.states[key] {
+                    switch inspector.currentState {
                     case .loaded(let detail): TicketDetailView(detail: detail)
                     case .failed(let msg):
                         ContentUnavailableView {
@@ -36,6 +36,13 @@ struct TicketPanel: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
     }
 
+    /// Loaded issue URL (always right for Linear), else the Jira browse URL.
+    private var currentURL: URL? {
+        if case .loaded(let d) = inspector.currentState, let url = d.webURL { return url }
+        guard let ref = inspector.current, ref.tracker == .jira else { return nil }
+        return settings.browseURL(for: ref.key)
+    }
+
     private var toolbar: some View {
         HStack(spacing: 8) {
             if inspector.canGoBack {
@@ -53,7 +60,7 @@ struct TicketPanel: View {
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .help("Refresh")
-            if let key = inspector.currentKey, let url = settings.browseURL(for: key) {
+            if let url = currentURL {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(url.absoluteString, forType: .string)
@@ -61,10 +68,10 @@ struct TicketPanel: View {
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                     .help("Copy link")
-                Link(destination: url) { Image(systemName: "arrow.up.right") }
+                Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.right") }
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
-                    .help("Open in Jira")
+                    .help("Open in \(inspector.current?.tracker.label ?? "tracker")")
             }
             Button { withAnimation(.smooth) { inspector.close() } } label: { Image(systemName: "xmark") }
                 .buttonStyle(.glass)
@@ -170,11 +177,18 @@ private struct TicketDetailView: View {
             }
             .padding(18)
         }
+        .glassScrollIndicator()
         .environment(\.ticketAttachments, Dictionary(detail.attachments.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }))
+        .environment(\.ticketTracker, inspector.current?.tracker ?? .jira)
         .environment(\.openURL, OpenURLAction { url in
-            // Jira browse links inside descriptions/comments open in the panel.
+            // Jira browse links and Linear issue links inside bodies open in the panel.
             if url.path.hasPrefix("/browse/"), let key = PlanStore.extractKey(url.lastPathComponent) {
-                inspector.open(key, push: true)
+                inspector.open(key, tracker: .jira, push: true)
+                return .handled
+            }
+            if url.host()?.hasSuffix("linear.app") == true, url.path.contains("/issue/"),
+               let key = PlanStore.extractKey(url.path) {
+                inspector.open(key, tracker: .linear, push: true)
                 return .handled
             }
             return .systemAction
@@ -309,7 +323,7 @@ private struct LinkedRow: View {
     @Environment(TicketInspector.self) private var inspector
 
     var body: some View {
-        Button { withAnimation(.smooth) { inspector.open(issue.key, push: true) } } label: {
+        Button { withAnimation(.smooth) { inspector.open(issue.key, tracker: inspector.current?.tracker ?? .jira, push: true) } } label: {
             HStack(spacing: 8) {
                 Text(issue.relation).font(.caption).foregroundStyle(.secondary).frame(width: 78, alignment: .leading)
                 Text(issue.key).font(.callout.monospaced().weight(.medium))

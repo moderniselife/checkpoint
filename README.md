@@ -1,55 +1,149 @@
 # Checkpoint
 
-A macOS 26 (Liquid Glass) app: paste a Jira key, get a test plan.
+**Paste a ticket. Get a test plan.**
 
-Checkpoint connects to the **Atlassian Rovo MCP server**, lets Claude read the ticket plus
-its comments, children, parent epic, linked issues and Confluence specs, then produces:
+Checkpoint is a native macOS 26 app (SwiftUI + Liquid Glass) that reads a Jira or Linear issue —
+plus its comments, children, parent, linked issues and specs — and turns it into a focused,
+tickable test plan: what changed, what "done" means, and exactly what to click to prove it.
+No more opening ten tabs and flipping back and forth.
 
-- a plain-English summary of what changed
-- **Before you start** — env, tenancy, roles, flags, build to verify on
-- **Acceptance criteria** — quoted from tickets (or marked *derived*), each showing whether it's covered/verified
-- **Test tasks** — numbered steps + expected result, grouped per ticket, tickable (saved locally)
-- edge cases, open questions, and the list of sources it read for you
-- Copy as Markdown (paste into a Jira comment / PR)
+---
+
+## Features
+
+### Test plans
+- **One input** — a key (`PROJ-123`, `ENG-123`) or a pasted Jira/Linear link.
+- **Deep research** — Claude follows comments (later ones win), epic children / sub-issues, parent,
+  related issues and linked Confluence pages / Linear docs, only as far as they change what to test.
+- **The plan**
+  - plain-English summary of what changed
+  - **Before you start** — environment, tenancy, roles, flags, test data, build/deploy
+  - **Acceptance criteria** — quoted from the tickets (or marked *derived*), each showing
+    uncovered / pending / verified as you tick tasks
+  - **Test tasks** — numbered steps + one observable expected result, grouped per ticket for
+    epics, priority and area, tickable and saved
+  - edge cases, open questions, and every source it read
+- **Copy as Markdown** for Jira comments / PRs. **Re-run** keeps ticks for tasks that survive.
+- **Live research feed** — see each ticket it opens and expand its reasoning as it works.
+
+### Dev vs QA mode
+Toggle in the input bar (**⌘⇧M**); default in Settings.
+
+| | Dev | QA |
+|---|---|---|
+| Audience | the developer verifying their own change | a tester on the **hosted** app |
+| Language | may reference branches, commits, APIs, logs, tests | UI names only — no code, repos or local setup |
+| First task | setup | confirm the fix is actually deployed |
+| Technical-only checks | tasks | open questions ("confirm with the dev") |
+
+Set **Hosted environment** (e.g. `https://app.dev.example.com (DEV)`) and QA plans aim at it.
+Dev and QA plans for the same ticket live side by side — right-click → **Run in QA/Dev mode**.
+
+### Ticket panel
+Click any ticket key (feed, plan header, task groups, AC sources, source chips) or hit
+**Ticket details / ⌘I** to slide in a resizable Liquid Glass panel with *everything*:
+fields, time tracking, description (task lists, tables, code, panels), **inline images**,
+attachments with previews, parent / sub-issues / links (navigable, with Back),
+comments, work log, change history and every other custom field.
+
+### Read-only by design
+Checkpoint can never change your tickets:
+- **Jira** — only `get*` / `search*` / `fetch` / `lookup*` / `list*` MCP tools are exposed to Claude.
+- **Linear** — uses Linear's `/mcp/readonly` endpoint with a `read` OAuth scope, enforced by Linear.
+
+---
 
 ## Setup
 
-1. `brew install xcodegen` (once)
-2. `xcodegen generate && open Checkpoint.xcodeproj` — build & run (⌘R)
-3. Settings (⌘,):
-   - **Anthropic API key** — https://platform.claude.com/settings/keys
-   - **Jira site** (e.g. `yourcompany.atlassian.net`)
-   - **Connect with**: *Sign in with Atlassian* (OAuth, default) or *API token* (email + token from https://id.atlassian.com/manage-profile/security/api-tokens)
-   - Hit **Test connection** — it should show your name.
+Requirements: macOS 26+, Xcode 26+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
-OAuth uses dynamic client registration + PKCE against `mcp.atlassian.com`, opens your default
-browser, and catches the redirect on `http://127.0.0.1:33418/callback` (falls back to a free port).
-Loopback redirects are pre-approved in Atlassian's MCP domain allowlist, so no admin change is
-needed — custom schemes like `checkpoint://` would need allowlisting. Tokens refresh automatically
-(including once on a mid-run 401).
+```bash
+brew install xcodegen
+```
 
-> API-token auth for the Rovo MCP server must be enabled by your Atlassian org admin.
-> With bad credentials Atlassian still answers, but hides the Jira tools — Checkpoint detects this.
+```bash
+xcodegen generate && open Checkpoint.xcodeproj
+```
+
+Build & run (⌘R). Signing uses the team in `project.yml` (`DEVELOPMENT_TEAM`) — change it to yours.
+
+Then open **Settings (⌘,)**:
+
+1. **Anthropic** — API key from <https://platform.claude.com/settings/keys>; pick model and effort.
+2. **Testing** — default mode and your hosted environment.
+3. **Atlassian (Rovo MCP)** — Jira site (e.g. `yourco.atlassian.net`), then either
+   - **Sign in with Atlassian** (OAuth, recommended), or
+   - **API token** — email + token from <https://id.atlassian.com/manage-profile/security/api-tokens>
+     (your org admin must allow API-token auth for the Rovo MCP server).
+4. **Linear (official MCP)** — **Sign in with Linear** (OAuth) or a Linear API key.
+5. **Test connection** on each.
+
+Connect one or both trackers. Pasted links pick the tracker automatically; with both connected,
+bare keys go to the tracker chosen in the input bar menu.
+
+> **Attachment previews in Jira** load with your Atlassian email + API token if saved (even when
+> you sign in with OAuth), otherwise with the OAuth token.
+
+---
 
 ## How it works
 
-- `MCPClient` — minimal MCP Streamable-HTTP client (JSON-RPC over POST, SSE responses, `Mcp-Session-Id`), Basic auth.
-- `PlanGenerator` — agent loop on the Claude Messages API (raw HTTP). Only **read-only** MCP tools
-  (`get*`, `search*`, `fetch`, `lookup*`) are exposed, so it can never edit tickets. Tool calls in a turn
-  run in parallel; the final turn is constrained to the `TestPlan` JSON schema via `output_config.format`.
-  Adaptive thinking (summaries stream into the progress feed), prompt caching, and server-side refusal fallbacks are on.
-- `PlanStore` — history + tick state in `~/Library/Containers/com.josephshenton.checkpoint/.../Application Support/Checkpoint/plans.json`.
-- Keys live in the Keychain.
+```
+Ticket key ─▶ PlanGenerator ──(Messages API, adaptive thinking, structured output)──▶ TestPlan
+                  │   ▲
+      tool calls  ▼   │ results
+                MCPClient ──(Streamable HTTP)──▶ Atlassian Rovo MCP  /  Linear MCP (read-only)
+```
 
-## Dev vs QA mode
+| Piece | What it does |
+|---|---|
+| `MCPClient` | Minimal MCP Streamable-HTTP client: JSON-RPC over POST, SSE responses, `Mcp-Session-Id`, per-request auth with one refresh-and-retry on 401. |
+| `MCPOAuth` | OAuth 2.1 for Atlassian and Linear: dynamic client registration, PKCE, loopback redirect on `127.0.0.1:33418` (pre-approved by Atlassian's domain allowlist), Keychain tokens with coalesced auto-refresh. |
+| `PlanGenerator` | Agent loop on the Claude Messages API (raw HTTP — no Swift SDK). Parallel tool calls, prompt caching, server-side refusal fallbacks, final turn constrained to the `TestPlan` JSON schema. Prompts vary by tracker and Dev/QA mode. |
+| `TicketInspector` | Loads full issues for the panel — Jira as ADF + `renderedFields` (so inline images map to attachment IDs), Linear via `get_issue` + `list_comments` with argument names read from the tool schemas. |
+| `PlanStore` | Plan history + tick state in the app's Application Support container. |
 
-Toggle in the input bar (⌘⇧M), default in Settings.
+**Endpoints**
+- Jira OAuth → `https://mcp.atlassian.com/v1/mcp`
+- Jira API token → `https://mcp.atlassian.com/v2/mcp` (v1 silently ignores API tokens)
+- Linear → `https://mcp.linear.app/mcp/readonly`
 
-- **Dev** — for the developer verifying their own change: may reference branches, commits, APIs, logs, tests.
-- **QA** — black-box plans for testing the *hosted* app: UI names only, no code/branches/local setup,
-  starts by confirming the fix is deployed, covers roles/negative/edge/regression, and pushes anything
-  only verifiable technically into open questions. Set **Hosted environment** in Settings to aim plans at it.
+Keys and tokens live in the macOS Keychain. The app is sandboxed (network client + a loopback
+listener for sign-in only).
 
-Dev and QA plans for the same ticket are saved side by side; right-click a plan → "Run in QA/Dev mode".
+---
 
-Shortcuts: ⌘L focus ticket field · ⌘↩ analyze · ⌘⇧M toggle Dev/QA.
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| ⌘L | Focus the ticket field |
+| ⌘↩ | Analyze |
+| ⌘⇧M | Toggle Dev / QA |
+| ⌘I | Show / hide ticket details |
+| Esc | Close the ticket panel |
+| ⌘, | Settings |
+
+---
+
+## Project layout
+
+```
+Checkpoint/
+  App/        CheckpointApp — scenes and environment
+  Models/     TestPlan, TicketDetail (+ ADF→markdown), LinearParsing, TestMode, Tracker, JSONValue
+  Services/   MCPClient, MCPOAuth, LoopbackServer, ClaudeClient, PlanGenerator,
+              PlanStore, TicketInspector (+ AttachmentLoader), AppSettings, Keychain
+  Views/      ContentView, TicketInputBar, SidebarView, ProgressFeedView, PlanView,
+              TicketPanel, MarkdownView, GlassScrollIndicator, SettingsView
+project.yml   XcodeGen spec (the .xcodeproj is generated, not committed)
+```
+
+## Troubleshooting
+
+- **"Atlassian rejected your credentials"** with an API token → your admin hasn't enabled API-token
+  auth for Rovo MCP, the email doesn't match the token's account, or the token is scoped. Try OAuth.
+- **Sign-in browser tab errors** → your admin may have removed the default `127.0.0.1` domain from
+  the Rovo MCP allowlist; ask them to add `http://127.0.0.1:*/**`.
+- **Images show a ⚠️ placeholder** → save an Atlassian API token (Jira) or use a Linear API key.
+- **Plan feels too technical** → switch to QA mode.

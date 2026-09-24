@@ -2,21 +2,42 @@ import AppKit
 import CryptoKit
 import Foundation
 
-/// OAuth 2.1 for the Atlassian Rovo MCP server: dynamic client registration,
-/// PKCE authorization code flow with a loopback redirect, and refresh.
-actor AtlassianOAuth {
-    static let shared = AtlassianOAuth()
+/// OAuth 2.1 for a remote MCP server (Atlassian Rovo, Linear): dynamic client
+/// registration, PKCE authorization code flow with a loopback redirect, and refresh.
+actor MCPOAuth {
+    static let atlassian = MCPOAuth(name: "Atlassian", base: URL(string: "https://mcp.atlassian.com/v1/")!,
+                                   storageKey: "atlassian", scope: nil)
+    /// `read` scope: Linear guarantees the token can't reach write APIs.
+    static let linear = MCPOAuth(name: "Linear", base: URL(string: "https://mcp.linear.app/")!,
+                                storageKey: "linear", scope: "read")
+
+    nonisolated let name: String
+    private let base: URL
+    private let scope: String?
+    private nonisolated let tokensAccount: String
+    private let clientIDsKey: String
+    private let activeClientKey: String
+
+    init(name: String, base: URL, storageKey: String, scope: String?) {
+        self.name = name
+        self.base = base
+        self.scope = scope
+        // Atlassian keeps its original storage keys so existing sign-ins survive.
+        tokensAccount = "\(storageKey)-oauth"
+        clientIDsKey = "\(storageKey)OAuthClientIDs"
+        activeClientKey = "\(storageKey)OAuthActiveClient"
+    }
 
     enum OAuthError: LocalizedError {
-        case notSignedIn
+        case notSignedIn(String)
         case cancelled
         case badResponse(String)
 
         var errorDescription: String? {
             switch self {
-            case .notSignedIn: return "Not signed in to Atlassian. Sign in from Settings (⌘,)."
-            case .cancelled: return "Atlassian sign-in was cancelled."
-            case .badResponse(let s): return "Atlassian sign-in failed: \(s)"
+            case .notSignedIn(let name): return "Not signed in to \(name). Sign in from Settings (⌘,)."
+            case .cancelled: return "Sign-in was cancelled."
+            case .badResponse(let s): return "Sign-in failed: \(s)"
             }
         }
     }
@@ -29,18 +50,14 @@ actor AtlassianOAuth {
 
     /// Preferred loopback port; a different free port is used (and a new client registered) if it's taken.
     private static let preferredPort: UInt16 = 33418
-    private static let base = URL(string: "https://mcp.atlassian.com/v1/")!
-    private static let tokensAccount = "atlassian-oauth"
-    /// Registered client IDs, keyed by redirect URI (DCR binds a client to its redirect).
-    private static let clientIDsKey = "atlassianOAuthClientIDs"
 
     private var refreshTask: Task<Tokens, Error>?
 
-    nonisolated var isSignedIn: Bool { Keychain.get(Self.tokensAccount) != nil }
+    nonisolated var isSignedIn: Bool { Keychain.get(tokensAccount) != nil }
 
     /// A valid access token, refreshing it first if it's about to expire.
     func accessToken() async throws -> String {
-        guard var tokens = loadTokens() else { throw OAuthError.notSignedIn }
+        guard var tokens = loadTokens() else { throw OAuthError.notSignedIn(name) }
         if tokens.expiresAt.timeIntervalSinceNow < 60 {
             tokens = try await refresh(tokens)
         }
@@ -49,12 +66,12 @@ actor AtlassianOAuth {
 
     /// Forces a refresh — used after the MCP server returns 401 mid-session.
     func forceRefresh() async throws {
-        guard let tokens = loadTokens() else { throw OAuthError.notSignedIn }
+        guard let tokens = loadTokens() else { throw OAuthError.notSignedIn(name) }
         _ = try await refresh(tokens)
     }
 
     func signOut() {
-        Keychain.set("", for: Self.tokensAccount)
+        Keychain.set("", for: tokensAccount)
     }
 
     // MARK: - Sign in
@@ -68,7 +85,7 @@ actor AtlassianOAuth {
         let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded
         let state = Self.randomURLSafe(16)
 
-        var comps = URLComponents(url: Self.base.appending(path: "authorize"), resolvingAgainstBaseURL: false)!
+        var comps = URLComponents(url: base.appending(path: "authorize"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [
             .init(name: "response_type", value: "code"),
             .init(name: "client_id", value: clientID),
@@ -77,6 +94,7 @@ actor AtlassianOAuth {
             .init(name: "code_challenge_method", value: "S256"),
             .init(name: "state", value: state),
         ]
+        if let scope { comps.queryItems?.append(.init(name: "scope", value: scope)) }
 
         // Default browser: already signed in to Atlassian, and loopback needs no admin allowlisting.
         await MainActor.run { _ = NSWorkspace.shared.open(comps.url!) }
@@ -102,26 +120,26 @@ actor AtlassianOAuth {
             "code_verifier": verifier,
         ], previousRefresh: nil)
         saveTokens(tokens)
-        UserDefaults.standard.set(clientID, forKey: Self.activeClientKey)
+        UserDefaults.standard.set(clientID, forKey: activeClientKey)
     }
 
     // MARK: - Internals
 
-    private static let activeClientKey = "atlassianOAuthActiveClient"
 
     private func clientID(for redirectURI: String) async throws -> String {
-        var ids = UserDefaults.standard.dictionary(forKey: Self.clientIDsKey) as? [String: String] ?? [:]
+        var ids = UserDefaults.standard.dictionary(forKey: clientIDsKey) as? [String: String] ?? [:]
         if let id = ids[redirectURI] { return id }
-        var req = URLRequest(url: Self.base.appending(path: "register"))
+        var req = URLRequest(url: base.appending(path: "register"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: JSONValue = [
+        var body: JSONValue = [
             "client_name": "Checkpoint",
             "redirect_uris": [.string(redirectURI)],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",
         ]
+        if let scope, case .object(var o) = body { o["scope"] = .string(scope); body = .object(o) }
         req.httpBody = try JSONCoding.encoder.encode(body)
         let (data, response) = try await URLSession.shared.data(for: req)
         let json = try? JSONCoding.decoder.decode(JSONValue.self, from: data)
@@ -129,7 +147,7 @@ actor AtlassianOAuth {
             throw OAuthError.badResponse("client registration failed: \(String(decoding: data, as: UTF8.self).prefix(200))")
         }
         ids[redirectURI] = id
-        UserDefaults.standard.set(ids, forKey: Self.clientIDsKey)
+        UserDefaults.standard.set(ids, forKey: clientIDsKey)
         return id
     }
 
@@ -137,7 +155,7 @@ actor AtlassianOAuth {
         // Coalesce concurrent refreshes (parallel tool calls) into one request.
         if let refreshTask { return try await refreshTask.value }
         guard let refreshToken = tokens.refreshToken,
-              let clientID = UserDefaults.standard.string(forKey: Self.activeClientKey) else { throw OAuthError.notSignedIn }
+              let clientID = UserDefaults.standard.string(forKey: activeClientKey) else { throw OAuthError.notSignedIn(name) }
         let task = Task {
             try await self.tokenRequest([
                 "grant_type": "refresh_token",
@@ -154,12 +172,12 @@ actor AtlassianOAuth {
         } catch {
             // A dead refresh token means the user has to sign in again.
             signOut()
-            throw OAuthError.notSignedIn
+            throw OAuthError.notSignedIn(name)
         }
     }
 
     private func tokenRequest(_ params: [String: String], previousRefresh: String?) async throws -> Tokens {
-        var req = URLRequest(url: Self.base.appending(path: "token"))
+        var req = URLRequest(url: base.appending(path: "token"))
         req.httpMethod = "POST"
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -186,13 +204,13 @@ actor AtlassianOAuth {
     }
 
     private func loadTokens() -> Tokens? {
-        guard let raw = Keychain.get(Self.tokensAccount) else { return nil }
+        guard let raw = Keychain.get(tokensAccount) else { return nil }
         return try? JSONDecoder().decode(Tokens.self, from: Data(raw.utf8))
     }
 
     private func saveTokens(_ tokens: Tokens) {
         guard let data = try? JSONEncoder().encode(tokens) else { return }
-        Keychain.set(String(decoding: data, as: UTF8.self), for: Self.tokensAccount)
+        Keychain.set(String(decoding: data, as: UTF8.self), for: tokensAccount)
     }
 
     private static func randomURLSafe(_ bytes: Int) -> String {

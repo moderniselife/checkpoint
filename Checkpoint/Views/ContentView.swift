@@ -80,10 +80,11 @@ struct TicketKeyButton: View {
     let key: String
     var font: Font = .callout.monospaced().weight(.semibold)
     @Environment(TicketInspector.self) private var inspector
+    @Environment(\.ticketTracker) private var tracker
     @State private var hovering = false
 
     var body: some View {
-        Button { inspector.open(key) } label: {
+        Button { inspector.open(key, tracker: tracker) } label: {
             Text(key)
                 .font(font)
                 .underline(hovering)
@@ -154,4 +155,9 @@ struct ErrorBanner: View {
             .frame(maxWidth: 560)
             .textSelection(.enabled)
     }
+}
+
+extension EnvironmentValues {
+    /// Tracker that ticket keys in this part of the UI belong to.
+    @Entry var ticketTracker: Tracker = .jira
 }
