@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @Environment(PlanStore.self) private var store
@@ -43,9 +44,9 @@ struct SidebarView: View {
                 .padding(.horizontal, 4)
                 .background(rootDropTargeted ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 6))
                 // Drop on the header to move things back to the top level.
-                .dropDestination(for: String.self) { items, _ in
-                    store.handleDrop(items, onto: nil)
-                } isTargeted: { rootDropTargeted = $0 }
+                .onDrop(of: [.plainText], isTargeted: $rootDropTargeted) { providers in
+                    loadDropPayloads(providers) { store.handleDrop($0, onto: nil) }
+                }
             }
         }
         .glassScrollIndicator()
@@ -107,12 +108,12 @@ private struct FolderTreeRow: View {
         .contentShape(.rect)
         .background(dropTargeted ? folder.color.color.opacity(0.22) : .clear, in: .rect(cornerRadius: 6))
         .tag(PlanStore.folderTag(folder.id))
-        .draggable("folder:\(folder.id.uuidString)") {
-            Label(folder.name, systemImage: "folder.fill").padding(6)
+        // `.itemProvider` (not `.draggable`): List routes drags of *selected* rows through
+        // its own selection drag, which ignores `.draggable` on the row content.
+        .itemProvider { NSItemProvider(object: "folder:\(folder.id.uuidString)" as NSString) }
+        .onDrop(of: [.plainText], isTargeted: $dropTargeted) { providers in
+            loadDropPayloads(providers) { store.handleDrop($0, onto: folder.id) }
         }
-        .dropDestination(for: String.self) { items, _ in
-            store.handleDrop(items, onto: folder.id)
-        } isTargeted: { dropTargeted = $0 }
         .popover(isPresented: Binding(
             get: { editingFolder == folder.id },
             set: { if !$0 { editingFolder = nil } }
@@ -244,9 +245,7 @@ private struct PlanRow: View {
     var body: some View {
         SidebarRow(saved: saved)
             .tag(saved.id)
-            .draggable("plan:\(saved.id)") {
-                Label(saved.plan.ticket.key, systemImage: "checklist").padding(6)
-            }
+            .itemProvider { NSItemProvider(object: "plan:\(saved.id)" as NSString) }
             .contextMenu {
                 Button("Show ticket details", systemImage: "sidebar.right") {
                     inspector.open(saved.plan.ticket.key, tracker: saved.tracker)
@@ -350,4 +349,23 @@ struct ModeBadge: View {
             .background((mode == .qa ? Color.teal : Color.indigo).opacity(0.14), in: .capsule)
             .help(mode.help)
     }
+}
+
+/// Reads the "plan:<id>" / "folder:<uuid>" strings from a sidebar drop and hands them to `apply` on the main actor.
+func loadDropPayloads(_ providers: [NSItemProvider], apply: @escaping @MainActor ([String]) -> Void) -> Bool {
+    let relevant = providers.filter { $0.canLoadObject(ofClass: NSString.self) }
+    guard !relevant.isEmpty else { return false }
+    Task {
+        var items: [String] = []
+        for provider in relevant {
+            let value: String? = await withCheckedContinuation { cont in
+                _ = provider.loadObject(ofClass: NSString.self) { obj, _ in
+                    cont.resume(returning: (obj as? NSString) as String?)
+                }
+            }
+            if let value, value.hasPrefix("plan:") || value.hasPrefix("folder:") { items.append(value) }
+        }
+        if !items.isEmpty { await MainActor.run { apply(items) } }
+    }
+    return true
 }

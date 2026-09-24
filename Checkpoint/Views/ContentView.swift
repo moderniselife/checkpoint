@@ -25,6 +25,18 @@ struct ContentView: View {
             }
             .background { Backdrop() }
             .animation(.smooth(duration: 0.35), value: inspector.isOpen)
+            .toolbar {
+                if !inspector.isOpen && !inspector.tabs.isEmpty {
+                    ToolbarItem {
+                        Button {
+                            withAnimation(.smooth) { inspector.show() }
+                        } label: {
+                            Label("Open tickets (\(inspector.tabs.count))", systemImage: "rectangle.stack")
+                        }
+                        .help("Show your open ticket tabs")
+                    }
+                }
+            }
         }
     }
 
@@ -52,7 +64,7 @@ struct ContentView: View {
                     if store.isRunning {
                         ProgressFeedView()
                     } else if let saved = store.selected {
-                        PlanView(saved: saved)
+                        PlanView(saved: saved).id(saved.id)
                     } else if let folder = store.selectedFolder {
                         FolderOverview(folder: folder)
                     } else {

@@ -7,6 +7,9 @@ struct PlanView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(TicketInspector.self) private var inspector
     @State private var filter: Filter = .todo
+    @State private var pane: Pane = .plan
+
+    enum Pane: String, CaseIterable { case plan = "Plan", research = "Research" }
     @State private var copied = false
 
     enum Filter: String, CaseIterable { case todo = "To do", all = "All" }
@@ -34,74 +37,80 @@ struct PlanView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
 
-                if !plan.preconditions.isEmpty {
-                    Section(title: "Before you start", icon: "wrench.and.screwdriver") {
-                        BulletList(items: plan.preconditions)
+                if pane == .plan {
+                    if !plan.preconditions.isEmpty {
+                        Section(title: "Before you start", icon: "wrench.and.screwdriver") {
+                            BulletList(items: plan.preconditions)
+                        }
                     }
-                }
 
-                if !plan.acceptanceCriteria.isEmpty {
-                    Section(title: "Acceptance criteria", icon: "target") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(plan.acceptanceCriteria) { ac in
-                                CriterionRow(criterion: ac, state: coverage(of: ac),
-                                             isMet: saved.metCriteria.contains(ac.id)) {
-                                    withAnimation(.smooth) { store.toggleCriterion(ac.id, in: saved.id) }
+                    if !plan.acceptanceCriteria.isEmpty {
+                        Section(title: "Acceptance criteria", icon: "target") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(plan.acceptanceCriteria) { ac in
+                                    CriterionRow(criterion: ac, state: coverage(of: ac),
+                                                 isMet: saved.metCriteria.contains(ac.id)) {
+                                        withAnimation(.smooth) { store.toggleCriterion(ac.id, in: saved.id) }
+                                    }
                                 }
+                                CriteriaLegend(hasUncovered: plan.acceptanceCriteria.contains { coverage(of: $0) == .uncovered })
+                                    .padding(.top, 4)
                             }
                         }
                     }
-                }
 
-                Section(title: "Test tasks", icon: "checklist", accessory: {
-                    Picker("", selection: $filter) {
-                        ForEach(Filter.allCases, id: \.self) { Text($0.rawValue) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 140)
-                }) {
-                    if visibleTasks.isEmpty {
-                        Label("All done — nice.", systemImage: "party.popper")
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 8)
-                    }
-                    VStack(alignment: .leading, spacing: 18) {
-                        ForEach(groupedTasks, id: \.key) { group in
-                            VStack(alignment: .leading, spacing: 8) {
-                                if groupedTasks.count > 1 || group.key != plan.ticket.key {
-                                    TicketTag(key: group.key, title: title(for: group.key), url: url(for: group.key))
-                                }
-                                ForEach(group.tasks) { task in
-                                    TaskRow(task: task, isDone: saved.done.contains(task.id)) {
-                                        withAnimation(.smooth) { store.toggle(task.id, in: saved.id) }
+                    Section(title: "Test tasks", icon: "checklist", accessory: {
+                        Picker("", selection: $filter) {
+                            ForEach(Filter.allCases, id: \.self) { Text($0.rawValue) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 140)
+                    }) {
+                        if visibleTasks.isEmpty {
+                            Label("All done — nice.", systemImage: "party.popper")
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 8)
+                        }
+                        VStack(alignment: .leading, spacing: 18) {
+                            ForEach(groupedTasks, id: \.key) { group in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    if groupedTasks.count > 1 || group.key != plan.ticket.key {
+                                        TicketTag(key: group.key, title: title(for: group.key), url: url(for: group.key))
+                                    }
+                                    ForEach(group.tasks) { task in
+                                        TaskRow(task: task, isDone: saved.done.contains(task.id)) {
+                                            withAnimation(.smooth) { store.toggle(task.id, in: saved.id) }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                if !plan.edgeCases.isEmpty {
-                    Section(title: "Edge cases worth poking", icon: "exclamationmark.triangle") {
-                        BulletList(items: plan.edgeCases)
+                    if !plan.edgeCases.isEmpty {
+                        Section(title: "Edge cases worth poking", icon: "exclamationmark.triangle") {
+                            BulletList(items: plan.edgeCases)
+                        }
                     }
-                }
 
-                if !plan.openQuestions.isEmpty {
-                    Section(title: "Open questions", icon: "questionmark.bubble") {
-                        BulletList(items: plan.openQuestions)
+                    if !plan.openQuestions.isEmpty {
+                        Section(title: "Open questions", icon: "questionmark.bubble") {
+                            BulletList(items: plan.openQuestions)
+                        }
                     }
-                }
 
-                if !plan.sources.isEmpty {
-                    Section(title: "Read so you didn't have to", icon: "books.vertical") {
-                        FlowLayout(spacing: 8) {
-                            ForEach(plan.sources) { s in
-                                SourceChip(source: s)
+                    if !plan.sources.isEmpty {
+                        Section(title: "Read so you didn't have to", icon: "books.vertical") {
+                            FlowLayout(spacing: 8) {
+                                ForEach(plan.sources) { s in
+                                    SourceChip(source: s)
+                                }
                             }
                         }
                     }
+                } else {
+                    ResearchLog(saved: saved)
                 }
             }
             .environment(\.ticketTracker, saved.tracker)
@@ -113,6 +122,16 @@ struct PlanView: View {
         }
         .glassScrollIndicator()
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("View", selection: $pane) {
+                    Label("Plan", systemImage: "checklist").tag(Pane.plan)
+                    Label("Research (\(saved.research.filter { $0.kind != .status }.count))", systemImage: "magnifyingglass")
+                        .tag(Pane.research)
+                }
+                .pickerStyle(.segmented)
+                .labelStyle(.titleOnly)
+                .help("Switch between the test plan and the research that produced it")
+            }
             ToolbarItemGroup {
                 Button(copied ? "Copied" : "Copy as Markdown",
                        systemImage: copied ? "checkmark" : "doc.on.doc") {
@@ -466,7 +485,7 @@ private struct BulletList: View {
 }
 
 /// Wrapping horizontal layout for chips.
-private struct FlowLayout: Layout {
+struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -497,5 +516,98 @@ private struct FlowLayout: Layout {
             width = max(width, x - spacing)
         }
         return (CGSize(width: width, height: y + rowHeight), origins)
+    }
+}
+
+/// Everything the research step did for a plan: tickets opened, searches, and reasoning.
+private struct ResearchLog: View {
+    let saved: SavedPlan
+
+    var body: some View {
+        let items = saved.research
+        let tools = items.filter { $0.kind == .tool }
+        let tickets = Set(tools.compactMap { PlanStore.extractKey($0.detail) })
+        let thoughts = items.filter { $0.kind == .thinking }.count
+
+        VStack(alignment: .leading, spacing: 14) {
+            if items.isEmpty {
+                ContentUnavailableView(
+                    "No research log",
+                    systemImage: "magnifyingglass",
+                    description: Text("This plan was made before research logs were saved. Re-run it to capture one.")
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                HStack(spacing: 10) {
+                    Stat(value: "\(tickets.count)", label: tickets.count == 1 ? "ticket read" : "tickets read", icon: "ticket")
+                    Stat(value: "\(tools.count)", label: tools.count == 1 ? "lookup" : "lookups", icon: "arrow.down.doc")
+                    Stat(value: "\(thoughts)", label: thoughts == 1 ? "thought" : "thoughts", icon: "brain")
+                    if let d = saved.researchDuration {
+                        Stat(value: Duration.seconds(d).formatted(.units(allowed: [.minutes, .seconds], width: .narrow)),
+                             label: "research time", icon: "clock")
+                    }
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(items) { item in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(item.at, format: .dateTime.hour().minute().second())
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 62, alignment: .trailing)
+                            FeedRow(item: item)
+                        }
+                    }
+                    Label("Plan ready", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.callout)
+                        .padding(.leading, 72)
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background.opacity(0.55), in: .rect(cornerRadius: 22))
+                .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.separator.opacity(0.5)))
+            }
+        }
+        .environment(\.ticketTracker, saved.tracker)
+    }
+}
+
+private struct Stat: View {
+    let value: String
+    let label: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value).font(.headline.monospacedDigit())
+                Text(label).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+    }
+}
+
+/// Explains the seal icons under the acceptance criteria.
+private struct CriteriaLegend: View {
+    let hasUncovered: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Label("Click to mark met", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+            Label("Tests to do", systemImage: "seal")
+            Label("Tests done", systemImage: "checkmark.seal")
+            if hasUncovered {
+                Label("No test task covers it — verify manually or ask", systemImage: "exclamationmark.circle")
+                    .foregroundStyle(.orange)
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .labelStyle(.titleAndIcon)
     }
 }

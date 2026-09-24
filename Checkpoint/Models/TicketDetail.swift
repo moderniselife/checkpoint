@@ -5,6 +5,7 @@ nonisolated struct TicketDetail: Sendable, Hashable {
     struct Person: Sendable, Hashable {
         var name: String
         var avatar: URL?
+        var accountID: String? = nil
     }
 
     struct Comment: Sendable, Hashable, Identifiable {
@@ -250,7 +251,34 @@ nonisolated extension TicketDetail {
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         }
+        fillAvatars(&detail, from: node)
         return detail
+    }
+
+    /// Jira omits `avatarUrls` on comment/worklog authors; borrow each person's avatar
+    /// from anywhere else in the response (assignee, reporter, changelog, attachments…).
+    private static func fillAvatars(_ detail: inout TicketDetail, from node: JSONValue) {
+        var avatars: [String: URL] = [:]
+        func walk(_ v: JSONValue) {
+            switch v {
+            case .object(let o):
+                if let id = o["accountId"]?.stringValue, avatars[id] == nil,
+                   let url = o["avatarUrls"]?["48x48"]?.stringValue.flatMap(URL.init(string:)) {
+                    avatars[id] = url
+                }
+                o.values.forEach(walk)
+            case .array(let a): a.forEach(walk)
+            default: break
+            }
+        }
+        walk(node)
+        func fill(_ p: inout Person) {
+            if p.avatar == nil, let id = p.accountID { p.avatar = avatars[id] }
+        }
+        for i in detail.comments.indices { fill(&detail.comments[i].author) }
+        for i in detail.worklogs.indices { fill(&detail.worklogs[i].author) }
+        if detail.assignee != nil { fill(&detail.assignee!) }
+        if detail.reporter != nil { fill(&detail.reporter!) }
     }
 
 
@@ -409,7 +437,8 @@ nonisolated extension TicketDetail {
 
     private static func person(_ v: JSONValue?) -> Person? {
         guard let v, let name = v["displayName"]?.stringValue else { return nil }
-        return Person(name: name, avatar: v["avatarUrls"]?["48x48"]?.stringValue.flatMap(URL.init(string:)))
+        return Person(name: name, avatar: v["avatarUrls"]?["48x48"]?.stringValue.flatMap(URL.init(string:)),
+                      accountID: v["accountId"]?.stringValue)
     }
 
     private static func linked(_ v: JSONValue, relation: String) -> LinkedIssue? {
