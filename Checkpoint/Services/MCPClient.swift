@@ -22,7 +22,9 @@ actor MCPClient {
 
         var errorDescription: String? {
             switch self {
-            case .http(401, _), .http(403, _), .unauthenticated:
+            case .http(401, let body), .http(403, let body):
+                return "Atlassian rejected your credentials (\(body.prefix(120))). In Settings, sign in with Atlassian again — or, for API tokens, check the email matches your Atlassian account and the token is a current classic API token."
+            case .unauthenticated:
                 return "Atlassian rejected your credentials. In Settings, sign in with Atlassian again — or, for API tokens, check the email/token and that your org admin allows API-token auth for the Rovo MCP server."
             case .http(let code, let body): return "Atlassian MCP HTTP \(code): \(body.prefix(300))"
             case .rpc(let msg): return "Atlassian MCP error: \(msg)"
@@ -31,7 +33,12 @@ actor MCPClient {
         }
     }
 
-    static let endpoint = URL(string: "https://mcp.atlassian.com/v1/mcp")!
+    /// OAuth tokens are issued for v1; API tokens (Basic/Bearer) only work on v2 —
+    /// v1 silently treats them as anonymous and hides the Jira tools.
+    static let oauthEndpoint = URL(string: "https://mcp.atlassian.com/v1/mcp")!
+    static let apiTokenEndpoint = URL(string: "https://mcp.atlassian.com/v2/mcp")!
+
+    private let endpoint: URL
     private static let protocolVersion = "2025-06-18"
 
     /// Returns the Authorization header value; called per request so OAuth tokens can refresh.
@@ -44,7 +51,8 @@ actor MCPClient {
     private var nextID = 1
     private var initialized = false
 
-    init(auth: @escaping AuthProvider, onUnauthorized: (@Sendable () async throws -> Void)? = nil) {
+    init(endpoint: URL, auth: @escaping AuthProvider, onUnauthorized: (@Sendable () async throws -> Void)? = nil) {
+        self.endpoint = endpoint
         self.auth = auth
         self.onUnauthorized = onUnauthorized
         let config = URLSessionConfiguration.ephemeral
@@ -127,7 +135,7 @@ actor MCPClient {
     }
 
     private func send(_ message: JSONValue, expectID: Int?, isRetry: Bool = false) async throws -> JSONValue? {
-        var req = URLRequest(url: Self.endpoint)
+        var req = URLRequest(url: endpoint)
         req.httpMethod = "POST"
         req.httpBody = try JSONCoding.encoder.encode(message)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")

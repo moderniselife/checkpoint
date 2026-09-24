@@ -50,9 +50,10 @@ final class AppSettings {
         switch atlassianAuth {
         case .apiToken:
             let header = "Basic " + Data("\(atlassianEmail):\(atlassianToken)".utf8).base64EncodedString()
-            return MCPClient(auth: { header })
+            return MCPClient(endpoint: MCPClient.apiTokenEndpoint, auth: { header })
         case .oauth:
             return MCPClient(
+                endpoint: MCPClient.oauthEndpoint,
                 auth: { "Bearer " + (try await AtlassianOAuth.shared.accessToken()) },
                 onUnauthorized: { try await AtlassianOAuth.shared.forceRefresh() }
             )
