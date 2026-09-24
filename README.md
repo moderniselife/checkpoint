@@ -162,6 +162,30 @@ assets/       logo.png (master), logo-512.png (README)
 project.yml   XcodeGen spec (the .xcodeproj is generated, not committed)
 ```
 
+## Releases
+
+Pushing a tag builds and publishes a GitHub Release (`.github/workflows/release.yml`):
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Or run **Actions → Release → Run workflow** and enter a version.
+
+Each release has a universal (Apple Silicon + Intel) `Checkpoint-<version>.dmg`, a `.zip`, and
+`SHA256SUMS.txt`. Builds are **ad-hoc signed** unless these repository secrets are set, in which case
+they're Developer ID signed, notarized and stapled:
+
+| Secret | Value |
+|---|---|
+| `MACOS_CERTIFICATE_P12` | `base64 -i DeveloperID.p12 \| pbcopy` of your *Developer ID Application* certificate |
+| `MACOS_CERTIFICATE_PASSWORD` | the .p12 password |
+| `APPLE_TEAM_ID` | your 10-character team ID |
+| `APPLE_ID` | Apple ID used for notarization |
+| `APPLE_APP_PASSWORD` | an app-specific password from appleid.apple.com |
+
+Ad-hoc builds: right-click → **Open** the first time, or `xattr -dr com.apple.quarantine /Applications/Checkpoint.app`.
+
 ## Feature tracker
 
 See [`FEATURES.md`](FEATURES.md) for every feature, its verification status, Jira↔Linear parity,
