@@ -128,8 +128,7 @@ struct PlanView: View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Text(plan.ticket.key)
-                        .font(.headline.monospaced())
+                    TicketKeyButton(key: plan.ticket.key, font: .headline.monospaced())
                     Chip(text: plan.ticket.type)
                     Chip(text: plan.ticket.status, tint: .blue)
                 }
@@ -293,7 +292,8 @@ private struct CriterionRow: View {
                 Chip(text: "derived", tint: .orange)
                     .help("No explicit AC on the ticket — inferred from the description.")
             } else {
-                Text(criterion.source).font(.caption.monospaced()).foregroundStyle(.tertiary)
+                TicketKeyButton(key: criterion.source, font: .caption.monospaced())
+                    .foregroundStyle(.tertiary)
             }
         }
     }
@@ -352,7 +352,7 @@ private struct TicketTag: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(key).font(.subheadline.monospaced().weight(.semibold))
+            TicketKeyButton(key: key, font: .subheadline.monospaced().weight(.semibold))
             Text(title).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
             if let url {
                 Link(destination: url) { Image(systemName: "arrow.up.right") }
@@ -364,6 +364,7 @@ private struct TicketTag: View {
 
 private struct SourceChip: View {
     let source: TestPlan.Source
+    @Environment(TicketInspector.self) private var inspector
 
     var body: some View {
         let label = HStack(spacing: 6) {
@@ -375,7 +376,9 @@ private struct SourceChip: View {
         .glassEffect(.regular.interactive(), in: .capsule)
         .help(source.title)
 
-        if let url = URL(string: source.url), !source.url.isEmpty {
+        if PlanStore.extractKey(source.key) == source.key {
+            Button { inspector.open(source.key) } label: { label }.buttonStyle(.plain)
+        } else if let url = URL(string: source.url), !source.url.isEmpty {
             Link(destination: url) { label }.buttonStyle(.plain)
         } else {
             label
