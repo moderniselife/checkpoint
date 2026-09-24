@@ -18,11 +18,16 @@ its comments, children, parent epic, linked issues and Confluence specs, then pr
 2. `xcodegen generate && open Checkpoint.xcodeproj` — build & run (⌘R)
 3. Settings (⌘,):
    - **Anthropic API key** — https://platform.claude.com/settings/keys
-   - **Jira site** (e.g. `yourcompany.atlassian.net`), **email**, **Atlassian API token** — https://id.atlassian.com/manage-profile/security/api-tokens
+   - **Jira site** (e.g. `yourcompany.atlassian.net`)
+   - **Connect with**: *Sign in with Atlassian* (OAuth, default) or *API token* (email + token from https://id.atlassian.com/manage-profile/security/api-tokens)
    - Hit **Test connection** — it should show your name.
 
+OAuth uses dynamic client registration + PKCE against `mcp.atlassian.com`, the system
+`ASWebAuthenticationSession` sheet (reuses your browser login), redirect `checkpoint://oauth/callback`,
+and refreshes tokens automatically (including once on a mid-run 401).
+
 > API-token auth for the Rovo MCP server must be enabled by your Atlassian org admin.
-> With an unauthorised token Atlassian still answers, but hides the Jira tools — Checkpoint detects this.
+> With bad credentials Atlassian still answers, but hides the Jira tools — Checkpoint detects this.
 
 ## How it works
 

@@ -6,6 +6,16 @@ final class AppSettings {
     static let models = ["claude-opus-5", "claude-opus-5-5", "claude-sonnet-5", "claude-fable-5-1"]
     static let efforts = ["low", "medium", "high", "xhigh"]
 
+    enum AtlassianAuth: String, CaseIterable, Identifiable {
+        case oauth, apiToken
+        var id: Self { self }
+        var label: String { self == .oauth ? "Sign in with Atlassian" : "API token" }
+    }
+
+    var atlassianAuth: AtlassianAuth { didSet { UserDefaults.standard.set(atlassianAuth.rawValue, forKey: "atlassianAuth") } }
+    /// Display name after OAuth sign-in; nil when signed out.
+    var atlassianUser: String? { didSet { UserDefaults.standard.set(atlassianUser, forKey: "atlassianUser") } }
+
     var anthropicKey: String { didSet { Keychain.set(anthropicKey, for: "anthropic") } }
     var atlassianEmail: String { didSet { UserDefaults.standard.set(atlassianEmail, forKey: "atlassianEmail") } }
     var atlassianToken: String { didSet { Keychain.set(atlassianToken, for: "atlassian") } }
@@ -22,14 +32,31 @@ final class AppSettings {
         site = d.string(forKey: "site") ?? ""
         model = d.string(forKey: "model") ?? "claude-opus-5"
         effort = d.string(forKey: "effort") ?? "high"
+        atlassianAuth = AtlassianAuth(rawValue: d.string(forKey: "atlassianAuth") ?? "") ?? .oauth
+        atlassianUser = AtlassianOAuth.shared.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil
     }
 
-    var isConfigured: Bool {
-        !anthropicKey.isEmpty && !atlassianEmail.isEmpty && !atlassianToken.isEmpty
+    var isAtlassianConfigured: Bool {
+        switch atlassianAuth {
+        case .oauth: atlassianUser != nil
+        case .apiToken: !atlassianEmail.isEmpty && !atlassianToken.isEmpty
+        }
     }
 
-    var atlassianAuthHeader: String {
-        "Basic " + Data("\(atlassianEmail):\(atlassianToken)".utf8).base64EncodedString()
+    var isConfigured: Bool { !anthropicKey.isEmpty && isAtlassianConfigured }
+
+    /// MCP client wired to whichever Atlassian auth method is selected.
+    func makeMCPClient() -> MCPClient {
+        switch atlassianAuth {
+        case .apiToken:
+            let header = "Basic " + Data("\(atlassianEmail):\(atlassianToken)".utf8).base64EncodedString()
+            return MCPClient(auth: { header })
+        case .oauth:
+            return MCPClient(
+                auth: { "Bearer " + (try await AtlassianOAuth.shared.accessToken()) },
+                onUnauthorized: { try await AtlassianOAuth.shared.forceRefresh() }
+            )
+        }
     }
 
     /// Normalises "https://foo.atlassian.net/browse/X" or "foo" into "foo.atlassian.net".
