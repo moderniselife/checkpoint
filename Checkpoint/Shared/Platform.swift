@@ -53,3 +53,17 @@ extension Image {
         #endif
     }
 }
+
+/// Page margins. On the Mac, content starts below the floating ticket bar;
+/// on iOS the bar isn't overlaid, so pages start near the top.
+enum PageLayout {
+    #if os(macOS)
+    static let top: CGFloat = 92
+    static let feedTop: CGFloat = 96
+    static let side: CGFloat = 28
+    #else
+    static let top: CGFloat = 12
+    static let feedTop: CGFloat = 16
+    static let side: CGFloat = 16
+    #endif
+}

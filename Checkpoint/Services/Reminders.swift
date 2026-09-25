@@ -12,7 +12,9 @@ enum Reminders {
 
     /// Schedule (or re-schedule) the banner for a plan. Past dates and
     /// finished plans get no request — the overdue badge covers them.
-    static func sync(_ saved: SavedPlan) {
+    /// `askPermission` is true only when the user has just set a reminder; re-arming
+    /// at launch or after a sync never prompts.
+    static func sync(_ saved: SavedPlan, askPermission: Bool = false) {
         let center = UNUserNotificationCenter.current()
         let id = identifier(for: saved.id)
         center.removePendingNotificationRequests(withIdentifiers: [id])
@@ -22,6 +24,7 @@ enum Reminders {
             case .authorized, .provisional, .ephemeral:
                 schedule(id: id, saved: saved, due: due)
             case .notDetermined:
+                guard askPermission else { return }
                 UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
                     if granted { schedule(id: id, saved: saved, due: due) }
                 }

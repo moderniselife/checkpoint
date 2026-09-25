@@ -12,62 +12,27 @@ struct TicketInputBar: View {
     @State private var width: CGFloat = 760
     private var compact: Bool { width < 700 }
 
+    /// iPhone: field and Analyze on one row, options on the row below.
+    var stacked = false
+
     var body: some View {
         GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 12) {
-                HStack(spacing: 10) {
-                    if settings.isAtlassianConfigured && settings.isLinearConfigured {
-                        TrackerMenu()
-                    } else {
-                        Image(systemName: "ticket")
-                            .foregroundStyle(.secondary)
-                    }
-                    // Custom placeholder: macOS hides the built-in one as soon as the field
-                    // is focused, and this field auto-focuses, so it was never visible.
-                    TextField("", text: $input)
-                        .textFieldStyle(.plain)
-                        .font(.title3)
-                        .background(alignment: .leading) {
-                            if input.isEmpty {
-                                Text(placeholder)
-                                    .font(.title3)
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                        .focused($focused)
-                        .onSubmit(submit)
-                        .disabled(store.isRunning)
-                    PlanOptionsMenu(template: $template, quick: $quick)
+            if stacked {
+                // One row on iPhone: scenarios move into the field's options menu.
+                HStack(spacing: 8) {
+                    field
+                    ModeToggle(compact: true)
+                        .glassEffectID("mode", in: glass)
+                    action
                 }
-                .padding(.leading, 18)
-                .padding(.trailing, 8)
-                .padding(.vertical, 12)
-                .glassEffect(.regular.interactive(), in: .capsule)
-                .glassEffectID("field", in: glass)
-
-                ModeToggle(compact: compact)
-                    .glassEffectID("mode", in: glass)
-
-                ScenarioMenu(compact: compact)
-                    .glassEffectID("scenarios", in: glass)
-
-                if store.isRunning {
-                    Button("Stop", systemImage: "stop.fill") { store.cancel() }
-                        .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                        .buttonStyle(.glass)
-                        .controlSize(.extraLarge)
-                        .glassEffectID("action", in: glass)
-                } else {
-                    Button("Analyze", systemImage: "sparkles", action: submit)
-                        .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                        .help("Analyze (⌘Return)")
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.extraLarge)
-                        .keyboardShortcut(.return, modifiers: .command)
-                        .disabled(PlanStore.extractKey(input) == nil)
-                        .glassEffectID("action", in: glass)
+            } else {
+                HStack(spacing: 12) {
+                    field
+                    ModeToggle(compact: compact)
+                        .glassEffectID("mode", in: glass)
+                    ScenarioMenu(compact: compact)
+                        .glassEffectID("scenarios", in: glass)
+                    action
                 }
             }
         }
@@ -75,12 +40,75 @@ struct TicketInputBar: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .animation(.smooth, value: store.isRunning)
         .animation(.smooth, value: compact)
-        .onAppear { focused = true }
+        .onAppear {
+            // Mac: type straight away. iOS: don't throw the keyboard up on launch.
+            if Platform.isMac { focused = true }
+        }
         .background {
             // ⌘L jumps to the field from anywhere.
             Button("") { focused = true }
                 .keyboardShortcut("l", modifiers: .command)
                 .hidden()
+        }
+    }
+
+    private var field: some View {
+        HStack(spacing: 10) {
+            if settings.isAtlassianConfigured && settings.isLinearConfigured {
+                TrackerMenu()
+            } else {
+                Image(systemName: "ticket")
+                    .foregroundStyle(.secondary)
+            }
+            // Custom placeholder: macOS hides the built-in one as soon as the field
+            // is focused, and this field auto-focuses, so it was never visible.
+            TextField("", text: $input)
+                .textFieldStyle(.plain)
+                .font(.title3)
+                .background(alignment: .leading) {
+                    if input.isEmpty {
+                        Text(placeholder)
+                            .font(.title3)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .focused($focused)
+                .onSubmit(submit)
+                .disabled(store.isRunning)
+                #if os(iOS)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .keyboardType(.asciiCapable)
+                .submitLabel(.go)
+                #endif
+            PlanOptionsMenu(template: $template, quick: $quick, showScenarios: stacked)
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 8)
+        .padding(.vertical, 12)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassEffectID("field", in: glass)
+    }
+
+    @ViewBuilder
+    private var action: some View {
+        if store.isRunning {
+            Button("Stop", systemImage: "stop.fill") { store.cancel() }
+                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                .buttonStyle(.glass)
+                .controlSize(.extraLarge)
+                .glassEffectID("action", in: glass)
+        } else {
+            Button("Analyze", systemImage: "sparkles", action: submit)
+                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                .help("Analyze (⌘Return)")
+                .buttonStyle(.glassProminent)
+                .controlSize(.extraLarge)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(PlanStore.extractKey(input) == nil)
+                .glassEffectID("action", in: glass)
         }
     }
 
@@ -176,10 +204,14 @@ private struct TrackerMenu: View {
 private struct PlanOptionsMenu: View {
     @Binding var template: PlanGenerator.PlanTemplate
     @Binding var quick: Bool
+    /// iPhone has no room for the Scenarios pill, so it lives in here.
+    var showScenarios = false
     @Environment(PlanStore.self) private var store
+    @Environment(AppSettings.self) private var settings
 
     private var summary: String? {
-        let parts = [quick ? "Quick" : nil, template == .auto ? nil : template.label].compactMap(\.self)
+        let scen = showScenarios && settings.scenarioMode != .off ? "Scenarios" : nil
+        let parts = [quick ? "Quick" : nil, template == .auto ? nil : template.label, scen].compactMap(\.self)
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -196,6 +228,13 @@ private struct PlanOptionsMenu: View {
                 }
             }
             .pickerStyle(.inline)
+            if showScenarios {
+                @Bindable var settings = settings
+                Picker("Scenarios", selection: $settings.scenarioMode) {
+                    ForEach(ScenarioMode.available) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.inline)
+            }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "slider.horizontal.3")

@@ -116,7 +116,11 @@ struct SidebarView: View {
             }
         }
         .glassScrollIndicator()
+        #if os(iOS)
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search plans")
+        #else
         .searchable(text: $query, prompt: "Search plans")
+        #endif
         .sheet(isPresented: $showingBatch) {
             BatchSheet()
                 .environment(store)
@@ -593,8 +597,8 @@ struct SmartFolderOverview: View {
                 }
             }
             .frame(maxWidth: 820, alignment: .leading)
-            .padding(.horizontal, 28)
-            .padding(.top, 92)
+            .padding(.horizontal, PageLayout.side)
+            .padding(.top, PageLayout.top)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }

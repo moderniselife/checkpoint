@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Environment(SyncCoordinator.self) private var sync
     @State private var selection: SettingsSection? = .aiProvider
     @State private var query = ""
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationSplitView {
@@ -18,7 +19,9 @@ struct SettingsView: View {
         } detail: {
             detail(for: selection ?? .aiProvider)
         }
+        #if os(macOS)
         .frame(minWidth: 680, idealWidth: 860, minHeight: 480, idealHeight: 620)
+        #endif
     }
 
     private var sidebar: some View {
@@ -44,6 +47,12 @@ struct SettingsView: View {
         }
         .listStyle(.sidebar)
         .searchable(text: $query, placement: .sidebar, prompt: "Search")
+        #if os(iOS)
+        .navigationTitle("Settings")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+        }
+        #endif
     }
 
     /// Each custom server gets its own row under Trackers.

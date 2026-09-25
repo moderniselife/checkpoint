@@ -187,6 +187,11 @@ final class SyncCoordinator {
             return "iCloud Drive" + path[r.upperBound...].replacingOccurrences(of: "/", with: " › ")
         }
         if path.contains("/Mobile Documents/") || path.contains("CloudDocs") { return "iCloud Drive › \(url.lastPathComponent)" }
+        // iOS "On My iPhone" lives in the File Provider Storage of Files.
+        if path.contains("File Provider Storage") {
+            let tail = path.components(separatedBy: "File Provider Storage").last ?? ""
+            return (Platform.isMac ? "On My Mac" : "On My iPhone") + tail.replacingOccurrences(of: "/", with: " › ")
+        }
         return (path as NSString).abbreviatingWithTildeInPath
     }
 

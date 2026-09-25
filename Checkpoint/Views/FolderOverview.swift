@@ -77,8 +77,8 @@ struct FolderOverview: View {
                 }
             }
             .frame(maxWidth: 820, alignment: .leading)
-            .padding(.horizontal, 28)
-            .padding(.top, 92)
+            .padding(.horizontal, PageLayout.side)
+            .padding(.top, PageLayout.top)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
