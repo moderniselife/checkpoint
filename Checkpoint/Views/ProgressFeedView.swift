@@ -76,7 +76,7 @@ struct ProgressFeedView: View {
                 .animation(.smooth(duration: 0.3), value: store.feed)
                 .frame(maxWidth: 720, alignment: .leading)
                 .padding(.horizontal, 24)
-                .padding(.top, 140)
+                .padding(.top, 96)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity)
             }
