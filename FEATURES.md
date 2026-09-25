@@ -38,7 +38,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | Model + effort picker | ✅ | Settings → AI Provider | Change model, re-run |
 | Re-run keeps ticked tasks / met criteria that still exist | ✅ | `PlanStore.analyze` | Tick, re-run, ticks remain |
 | Re-run diff banner + added/changed highlights | 🧪 | `PlanDiff`, `PlanStore.planDiff` | Re-run a changed ticket |
-| Smoke subset lens (top-6 by risk) + P0/P1/P2 badges + P0 filter | 🧪 | `TestPlan.smokeSubset`, `LensChip` | Test tasks → filter menu → Smoke / P0 |
+| Smoke subset lens (top-6 by risk) + P0/P1/P2 badges + P0 filter | 🧪 | `TestPlan.smokeSubset`, `LensChip` | Test tasks pill → Smoke / P0 |
 | Sample data, time estimates, source citations per task | 🧪 | `Task.testData/estimateMin/sources` | Fresh runs; older plans lack fields |
 | Ambiguity flags with draft questions; one-click coverage gap fill | 🧪 | `CriterionRow` | Amber flag / plus on uncovered AC |
 | Edge-case booster (curated, dupe-checked) | 🧪 | `PlanStore.boostEdgeCases` | Edge cases ⋯ → Add more edge-case tasks |
@@ -125,7 +125,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | Sort plans (updated, progress, key, AC met) | 🧪 | `PlanStore.sidebarSort` | Filter menu in the Test plans header |
 | Pin / favourite (Pinned section) | 🧪 | `SavedPlan.pinned`, `PlanStore.togglePin` | Right-click → Pin |
 | Archive (hidden by default, restorable) | 🧪 | `SavedPlan.archived`, `PlanStore.toggleArchive` | Right-click → Archive |
-| Tags on plans (editor, chips, filter) | 🧪 | `SavedPlan.tags`, `HeaderMeta` | Add tag, under the plan summary |
+| Tags on plans (editor, chips, filter) | 🧪 | `SavedPlan.tags`, `TagEditor` | ⌘T, More → Tags…, or right-click a plan |
 | Due dates with local notifications + overdue badges | 🧪 | `SavedPlan.dueDate`, `Reminders.swift` | Plan toolbar → More → Remind Me |
 | Batch planning: JQL sprint import, epic children, paste-a-list → one plan each in a folder | 🧪 | `BatchSheet.swift`, `PlanStore.startBatch` | Test plans header ＋ → Plan Several Tickets; panel “Plan each child” |
 | Smart folders (label/component/fix-version/epic rules, live, convertible) | 🧪 | `SmartFolder.swift`, `PlanStore.smartFolders` | Test plans header ＋ → New Smart Folder; old plans need a re-run for metadata |
@@ -164,7 +164,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | Quick model preset at low effort | 🧪 | `AppSettings.quickModel` | Ticket-field options menu → Quick; model in Settings → AI Provider |
 | Cost readout per plan (tokens + ≈$) | 🧪 | `LLMUsage`, research log stat | Plan → Research tab |
 | Follow-up chat with plan updates | 🧪 | `PlanChat`, Chat tab | Plan toolbar → Chat |
-| Regenerate one section (tasks/AC/edge cases) | 🧪 | `PlanStore.regenerate` | ⋯ on AC / Edge cases; Test tasks filter menu |
+| Regenerate one section (tasks/AC/edge cases) | 🧪 | `PlanStore.regenerate` | ⋯ on AC / Edge cases; Test tasks pill |
 | Why-this-task rationale popovers | 🧪 | `TaskRow` ⋯ menu | Task ⋯ → Why This Task? |
 | Custom MCP servers as research sources | 🧪 | `CustomMCPTracker.useForResearch` | Custom server → Use for research |
 | Strip-and-retry unsupported params (reasoning effort, JSON schema…) | 🧪 | `OpenAIChatClient.stream` | Fixture 400 on `reasoning_effort` recovered |
