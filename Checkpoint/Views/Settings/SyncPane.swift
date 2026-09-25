@@ -3,8 +3,6 @@ import UniformTypeIdentifiers
 
 struct SyncPane: View {
     @Environment(SyncCoordinator.self) private var sync
-    @State private var pickingFolder = false
-
     var body: some View {
         SettingsPane(section: .sync) {
             Section {
@@ -12,9 +10,9 @@ struct SyncPane: View {
                     sync.setMode(.off)
                 }
                 SyncModeRow(mode: .folder, title: "Sync folder",
-                            detail: "Keep plans in a folder you choose — iCloud Drive syncs it to your other devices. Free, and works in any build.",
+                            detail: "Keep plans in a folder that syncs — iCloud Drive, or your company's OneDrive, Google Drive or Dropbox. Free, and works in any build.",
                             icon: "folder.badge.gearshape") {
-                    if sync.hasFolder { sync.setMode(.folder) } else { pickingFolder = true }
+                    if sync.hasFolder { sync.setMode(.folder) } else { sync.requestFolder() }
                 }
                 SyncModeRow(mode: .iCloud, title: "iCloud",
                             detail: sync.iCloudAvailable
@@ -36,12 +34,38 @@ struct SyncPane: View {
                             .foregroundStyle(.secondary)
                     }
                     HStack {
-                        Button("Change Folder…") { pickingFolder = true }
+                        #if os(macOS)
+                        Menu("Change Folder…") {
+                            Button("In iCloud Drive…", systemImage: "icloud") { sync.requestFolder(start: .iCloudDrive) }
+                            Button("In OneDrive, Google Drive or Dropbox…", systemImage: "externaldrive.connected.to.line.below") {
+                                sync.requestFolder(start: .cloudStorage)
+                            }
+                            Button("Somewhere Else…", systemImage: "folder") { sync.requestFolder(start: .anywhere) }
+                        }
+                        .fixedSize()
+                        #else
+                        Button("Change Folder…") { sync.requestFolder() }
+                        #endif
                         Spacer()
                         Button("Stop Using This Folder", role: .destructive) { sync.forgetFolder() }
                     }
                 }
             }
+
+            #if os(macOS)
+            if !sync.hasFolder {
+                Section {
+                    HStack {
+                        Text("Work laptop?").foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Use OneDrive, Google Drive or Dropbox…") { sync.requestFolder(start: .cloudStorage) }
+                    }
+                } footer: {
+                    Text("Their desktop apps sync a normal folder, so Checkpoint's data stays in your company's storage rather than a personal iCloud.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            #endif
 
             if sync.mode != .off {
                 Section {
@@ -57,7 +81,7 @@ struct SyncPane: View {
                 }
             }
         }
-        .syncFolderPicker(isPresented: $pickingFolder)
+        .syncFolderPicker()
     }
 
     private var statusIcon: String {
@@ -113,25 +137,21 @@ private struct SyncModeRow: View {
 }
 
 extension View {
-    /// Presents the platform's folder picker and hands the result to the sync coordinator.
-    func syncFolderPicker(isPresented: Binding<Bool>) -> some View {
-        modifier(SyncFolderPicker(isPresented: isPresented))
+    /// iOS: presents the Files folder picker when the sync coordinator asks for one.
+    func syncFolderPicker() -> some View {
+        modifier(SyncFolderPicker())
     }
 }
 
 private struct SyncFolderPicker: ViewModifier {
-    @Binding var isPresented: Bool
     @Environment(SyncCoordinator.self) private var sync
 
     func body(content: Content) -> some View {
         #if os(macOS)
-        content.onChange(of: isPresented) {
-            guard isPresented else { return }
-            isPresented = false
-            sync.chooseFolder()
-        }
+        content
         #else
-        content.fileImporter(isPresented: $isPresented, allowedContentTypes: [.folder]) { result in
+        @Bindable var sync = sync
+        content.fileImporter(isPresented: $sync.wantsFolderPicker, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result { sync.useFolder(url) }
         }
         #endif

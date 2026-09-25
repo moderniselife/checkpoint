@@ -686,7 +686,6 @@ private struct TrackerCard<Extra: View>: View {
 
 private struct SyncPage: View {
     @Environment(SyncCoordinator.self) private var sync
-    @State private var pickingFolder = false
 
     var body: some View {
         VStack(spacing: 22) {
@@ -702,19 +701,31 @@ private struct SyncPage: View {
                            selected: sync.mode == .iCloud) { sync.setMode(.iCloud) }
                     .disabled(!sync.iCloudAvailable)
                 SyncChoice(title: "Sync folder", icon: "folder.fill", tint: .blue,
-                           text: sync.folderPath.map { "Using \($0)" } ?? "A folder in iCloud Drive. Free.",
+                           text: sync.folderPath.map { "Using \($0)" } ?? "A folder in iCloud Drive, OneDrive or Google Drive.",
                            badge: sync.iCloudAvailable ? nil : "Recommended",
                            selected: sync.mode == .folder) {
-                    if sync.hasFolder { sync.setMode(.folder) } else { pickingFolder = true }
+                    if sync.hasFolder { sync.setMode(.folder) } else { sync.requestFolder() }
                 }
                 SyncChoice(title: "Just this device", icon: "iphone", tint: .gray,
                            text: "You can turn sync on later in Settings.", badge: nil,
                            selected: sync.mode == .off) { sync.setMode(.off) }
             }
             .frame(maxWidth: 520)
+            if sync.status.isError {
+                Label(sync.status.summary, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.red)
+            } else {
+                #if os(macOS)
+                Button("Work laptop? Use OneDrive, Google Drive or Dropbox instead") { sync.requestFolder(start: .cloudStorage) }
+                    .buttonStyle(.plain).font(.callout).foregroundStyle(.tint)
+                #else
+                Text("OneDrive, Google Drive and Dropbox show up in the folder picker too.")
+                    .font(.caption).foregroundStyle(.secondary)
+                #endif
+            }
             Spacer(minLength: 0)
         }
-        .syncFolderPicker(isPresented: $pickingFolder)
+        .syncFolderPicker()
     }
 }
 
