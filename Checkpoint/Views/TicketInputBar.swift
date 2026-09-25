@@ -8,6 +8,9 @@ struct TicketInputBar: View {
     @State private var quick = false
     @FocusState private var focused: Bool
     @Namespace private var glass
+    /// Width the bar actually gets; below ~700pt the pills drop their labels.
+    @State private var width: CGFloat = 760
+    private var compact: Bool { width < 700 }
 
     var body: some View {
         GlassEffectContainer(spacing: 12) {
@@ -44,19 +47,22 @@ struct TicketInputBar: View {
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .glassEffectID("field", in: glass)
 
-                ModeToggle()
+                ModeToggle(compact: compact)
                     .glassEffectID("mode", in: glass)
 
-                ScenarioMenu()
+                ScenarioMenu(compact: compact)
                     .glassEffectID("scenarios", in: glass)
 
                 if store.isRunning {
                     Button("Stop", systemImage: "stop.fill") { store.cancel() }
+                        .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                         .buttonStyle(.glass)
                         .controlSize(.extraLarge)
                         .glassEffectID("action", in: glass)
                 } else {
                     Button("Analyze", systemImage: "sparkles", action: submit)
+                        .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                        .help("Analyze (⌘Return)")
                         .buttonStyle(.glassProminent)
                         .controlSize(.extraLarge)
                         .keyboardShortcut(.return, modifiers: .command)
@@ -66,7 +72,9 @@ struct TicketInputBar: View {
             }
         }
         .frame(maxWidth: 760)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .animation(.smooth, value: store.isRunning)
+        .animation(.smooth, value: compact)
         .onAppear { focused = true }
         .background {
             // ⌘L jumps to the field from anywhere.
@@ -98,6 +106,7 @@ struct TicketInputBar: View {
 
 /// Dev / QA switch that sits in the glass input bar. ⌘⇧M flips it.
 private struct ModeToggle: View {
+    var compact = false
     @Environment(AppSettings.self) private var settings
     @Environment(PlanStore.self) private var store
 
@@ -110,8 +119,11 @@ private struct ModeToggle: View {
                     withAnimation(.smooth) { settings.mode = mode }
                 } label: {
                     Label(mode.label, systemImage: mode.icon)
+                        .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                        .lineLimit(1)
+                        .fixedSize()
                         .font(.callout.weight(selected ? .semibold : .regular))
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, compact ? 10 : 12)
                         .padding(.vertical, 8)
                         .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
                         .background {
@@ -206,6 +218,7 @@ private struct PlanOptionsMenu: View {
 
 /// Optional scenario generation: off, from related tickets, or tickets + a local codebase.
 private struct ScenarioMenu: View {
+    var compact = false
     @Environment(AppSettings.self) private var settings
     @Environment(PlanStore.self) private var store
 
@@ -229,6 +242,8 @@ private struct ScenarioMenu: View {
             }
         } label: {
             Label(on ? settings.scenarioMode.shortLabel : "Scenarios", systemImage: "theatermasks")
+                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                .lineLimit(1)
                 .font(.callout.weight(on ? .semibold : .regular))
                 .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
                 .padding(.horizontal, 12)
@@ -252,4 +267,11 @@ private struct ScenarioMenu: View {
         case .ticketsAndCode: "chevron.left.forwardslash.chevron.right"
         }
     }
+}
+
+/// Type-erased label style, so a view can switch between icon-only and full labels.
+struct AnyLabelStyle: LabelStyle {
+    private let make: (Configuration) -> AnyView
+    init<S: LabelStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
+    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }

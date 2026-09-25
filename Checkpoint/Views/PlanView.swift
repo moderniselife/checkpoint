@@ -18,6 +18,7 @@ struct PlanView: View {
     @FocusState private var listFocused: Bool
     @State private var copied = false
     @State private var editingTags = false
+    @State private var headerWidth: CGFloat = 800
 
     enum Pane: String, CaseIterable { case plan = "Plan", research = "Research", chat = "Chat" }
     enum Filter: String, CaseIterable { case todo = "To do", all = "All", failed = "Failed", blocked = "Blocked" }
@@ -271,6 +272,8 @@ struct PlanView: View {
                         withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
                     } label: {
                         Label(detailsOpen ? "Hide details" : "Ticket details", systemImage: "sidebar.right")
+                            .labelStyle(headerWidth < 600 ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                            .lineLimit(1)
                             .font(.callout.weight(.medium))
                     }
                     .buttonStyle(.glass)
@@ -299,6 +302,7 @@ struct PlanView: View {
             }
         }
         .padding(24)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { headerWidth = $0 }
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
         .popover(isPresented: $editingTags, arrowEdge: .bottom) {
             TagEditor(saved: saved)
@@ -1571,6 +1575,8 @@ struct Chip: View {
     var body: some View {
         Text(text)
             .font(.caption.weight(.medium))
+            .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .glassEffect(.regular.tint(tint.opacity(0.2)), in: .capsule)
@@ -1689,7 +1695,7 @@ private struct ResearchLog: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
-                HStack(spacing: 10) {
+                FlowLayout(spacing: 10) {
                     Stat(value: "\(tickets.count)", label: tickets.count == 1 ? "ticket read" : "tickets read", icon: "ticket")
                     Stat(value: "\(tools.count)", label: tools.count == 1 ? "lookup" : "lookups", icon: "arrow.down.doc")
                     Stat(value: "\(thoughts)", label: thoughts == 1 ? "thought" : "thoughts", icon: "brain")
@@ -1741,6 +1747,8 @@ private struct Stat: View {
                 Text(value).font(.headline.monospacedDigit())
                 Text(label).font(.caption).foregroundStyle(.secondary)
             }
+            .lineLimit(1)
+            .fixedSize()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
