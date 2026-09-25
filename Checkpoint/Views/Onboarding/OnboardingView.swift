@@ -592,7 +592,7 @@ private struct TrackersPage: View {
             PageHeader(title: "Connect your tracker",
                        subtitle: "Checkpoint only ever reads. It can't change a ticket, by design.")
             VStack(spacing: 14) {
-                TrackerCard(name: "Jira", icon: "square.stack.3d.up.fill", tint: .blue,
+                TrackerCard(name: "Jira", tracker: .jira,
                             connected: settings.isAtlassianConfigured, who: settings.atlassianUser,
                             busy: busy == .jira) {
                     TextField("Jira site", text: $settings.site, prompt: Text("yourcompany.atlassian.net"))
@@ -603,7 +603,7 @@ private struct TrackersPage: View {
                 } connect: {
                     signIn(.jira)
                 }
-                TrackerCard(name: "Linear", icon: "circle.hexagongrid.fill", tint: .purple,
+                TrackerCard(name: "Linear", tracker: .linear,
                             connected: settings.isLinearConfigured, who: settings.linearUser,
                             busy: busy == .linear) {
                     EmptyView()
@@ -645,8 +645,7 @@ private struct TrackersPage: View {
 
 private struct TrackerCard<Extra: View>: View {
     let name: String
-    let icon: String
-    let tint: Color
+    let tracker: Tracker
     let connected: Bool
     let who: String?
     let busy: Bool
@@ -656,11 +655,7 @@ private struct TrackerCard<Extra: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(tint.gradient, in: .rect(cornerRadius: 11))
+                TrackerLogo(tracker: tracker, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name).font(.headline)
                     if connected {

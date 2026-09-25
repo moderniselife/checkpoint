@@ -677,7 +677,7 @@ struct SidebarRow: View {
                         .fixedSize()
                     ModeBadge(mode: saved.mode, compact: true)
                     if saved.tracker == .linear {
-                        Image(systemName: Tracker.linear.icon).font(.caption2).foregroundStyle(.purple)
+                        TrackerLogo(tracker: .linear, size: 13)
                             .help("Linear")
                     }
                     if saved.isOverdue {

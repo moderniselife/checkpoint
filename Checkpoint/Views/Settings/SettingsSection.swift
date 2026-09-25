@@ -68,6 +68,15 @@ enum SettingsSection: Hashable, Identifiable {
         }
     }
 
+    /// Brand tile shown instead of a symbol, for built-in trackers.
+    var logo: Tracker? {
+        switch self {
+        case .jira: .jira
+        case .linear: .linear
+        default: nil
+        }
+    }
+
     var tint: Color {
         switch self {
         case .aiProvider: .purple

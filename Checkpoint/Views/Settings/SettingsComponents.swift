@@ -20,11 +20,12 @@ struct SettingsSidebarRow: View {
     let title: String
     let icon: String
     let tint: Color
+    var logo: Tracker? = nil
     var status: StatusDot.State = .none
 
     var body: some View {
         HStack(spacing: 8) {
-            SettingsIconTile(icon: icon, tint: tint)
+            if let logo { TrackerLogo(tracker: logo) } else { SettingsIconTile(icon: icon, tint: tint) }
             Text(title).lineLimit(1)
             Spacer(minLength: 4)
             StatusDot(state: status)
@@ -48,7 +49,11 @@ struct SettingsPane<Content: View>: View {
         Form {
             Section {
                 HStack(spacing: 12) {
-                    SettingsIconTile(icon: section.icon, tint: section.tint, size: 40)
+                    if let logo = section.logo {
+                        TrackerLogo(tracker: logo, size: 40)
+                    } else {
+                        SettingsIconTile(icon: section.icon, tint: section.tint, size: 40)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title ?? section.title).font(.title3.weight(.semibold))
                         Text(section.subtitle).font(.callout).foregroundStyle(.secondary)
