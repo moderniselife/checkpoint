@@ -34,58 +34,75 @@ struct BatchSheet: View {
     @State private var resolveError: String?
 
     var body: some View {
-        @Bindable var store = store
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title).font(.headline)
-            if initialKeys == nil {
-                Picker("Source", selection: $mode) {
-                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+        VStack(spacing: 0) {
+            Form {
+                if initialKeys == nil {
+                    Section {
+                        Picker("Source", selection: $mode) {
+                            ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .onChange(of: mode) { keys = []; resolveError = nil }
+                        sourceEditor
+                    } header: {
+                        Text(title)
+                    }
                 }
-                .pickerStyle(.segmented)
-                .onChange(of: mode, perform: { _ in keys = []; resolveError = nil })
-                sourceEditor
-            }
-            if !keys.isEmpty {
-                Text("\(keys.count) issues: \(keys.prefix(8).joined(separator: ", "))\(keys.count > 8 ? "…" : "")")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .lineLimit(3)
-            }
-            if let resolveError {
-                Text(resolveError).font(.callout).foregroundStyle(.red)
-            }
-            HStack {
-                Text("Folder").frame(width: 70, alignment: .leading)
-                TextField("Folder name", text: $folderName)
-                    .textFieldStyle(.roundedBorder)
-            }
-            HStack {
-                Text("Mode").frame(width: 70, alignment: .leading)
-                Picker("Mode", selection: $runMode) {
-                    ForEach(TestMode.allCases) { Label($0.label, systemImage: $0.icon).tag($0) }
+
+                Section {
+                    if keys.isEmpty {
+                        Text(initialKeys == nil ? "Nothing found yet." : "No issues.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        LabeledContent("\(keys.count) issue\(keys.count == 1 ? "" : "s")") {
+                            Text(keys.prefix(6).joined(separator: ", ") + (keys.count > 6 ? "…" : ""))
+                                .font(.callout.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    if let resolveError {
+                        Label(resolveError, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    Text(initialKeys == nil ? "Found" : title)
+                } footer: {
+                    if keys.count > 25 {
+                        Text("Large batch — each plan takes a minute or more. They run one at a time and you can cancel from the sidebar.")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 220)
-                Picker("Tracker", selection: $tracker) {
-                    ForEach(Tracker.allCases) { Text($0.label).tag($0) }
+
+                Section("Plan into") {
+                    TextField("Folder", text: $folderName, prompt: Text("Sprint import"))
+                    Picker("Mode", selection: $runMode) {
+                        ForEach(TestMode.allCases) { Label($0.label, systemImage: $0.icon).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if settings.connectedTrackers.count > 1 || initialKeys != nil {
+                        Picker("Tracker", selection: $tracker) {
+                            ForEach(Tracker.allCases) { Text($0.label).tag($0) }
+                        }
+                    }
                 }
-                .labelsHidden()
-                .frame(maxWidth: 140)
             }
-            if keys.count > 25 {
-                Text("Large batch — each plan takes a minute or more. It runs sequentially and you can cancel anytime.")
-                    .font(.caption).foregroundStyle(.orange)
-            }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Plan \(keys.count) issues", action: start)
+                Button(keys.isEmpty ? "Plan Issues" : "Plan \(keys.count) Issue\(keys.count == 1 ? "" : "s")", action: start)
                     .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(keys.isEmpty || folderName.trimmingCharacters(in: .whitespaces).isEmpty || store.batchRunning)
             }
+            .padding([.horizontal, .bottom], 20)
         }
-        .padding(20)
-        .frame(width: 480)
+        .frame(width: 500)
+        .fixedSize(horizontal: false, vertical: true)
         .onAppear(perform: setup)
     }
 
@@ -113,36 +130,34 @@ struct BatchSheet: View {
     private var sourceEditor: some View {
         switch mode {
         case .jql:
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("JQL", text: $jql, axis: .vertical)
-                    .font(.body.monospaced())
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(2...4)
-                HStack {
-                    Button(resolving ? "Searching…" : "Find issues", action: resolveJQL)
-                        .disabled(resolving || jql.isEmpty)
-                    Spacer()
-                }
+            TextField("JQL", text: $jql, axis: .vertical)
+                .font(.body.monospaced())
+                .lineLimit(2...4)
+            HStack {
+                Spacer()
+                if resolving { ProgressView().controlSize(.small) }
+                Button("Find Issues", action: resolveJQL)
+                    .disabled(resolving || jql.isEmpty)
             }
         case .epic:
             HStack {
-                TextField("Epic key", text: $epicKey, prompt: Text("PROJ-100"))
+                TextField("Epic", text: $epicKey, prompt: Text("PROJ-100"))
                     .font(.body.monospaced())
-                    .textFieldStyle(.roundedBorder)
-                Button(resolving ? "Loading…" : "Load children", action: resolveEpic)
+                    .onSubmit(resolveEpic)
+                if resolving { ProgressView().controlSize(.small) }
+                Button("Load Children", action: resolveEpic)
                     .disabled(resolving || epicKey.isEmpty)
             }
         case .paste:
-            TextField("One key or link per line", text: $pasted, axis: .vertical)
+            TextField("Keys", text: $pasted, prompt: Text("One key or link per line"), axis: .vertical)
                 .font(.body.monospaced())
-                .textFieldStyle(.roundedBorder)
                 .lineLimit(3...8)
-                .onChange(of: pasted, perform: { _ in
+                .onChange(of: pasted) {
                     keys = BatchResolver.extractKeys(from: pasted)
                     if folderName == "Sprint import" || folderName.isEmpty {
                         folderName = keys.first.map { String($0.prefix(while: { $0 != "-" })) + " batch" } ?? folderName
                     }
-                })
+                }
         }
     }
 

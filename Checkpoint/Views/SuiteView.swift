@@ -19,12 +19,9 @@ struct SuiteBuilderSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Regression suite — \(folder.name)").font(.headline)
-            Text("Pick plans to merge. Shared setup is deduped by title; ticks stay in this sheet.")
-                .font(.callout).foregroundStyle(.secondary)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
+        VStack(spacing: 0) {
+            Form {
+                Section {
                     ForEach(candidates) { saved in
                         Toggle(isOn: Binding(
                             get: { included.contains(saved.id) },
@@ -32,45 +29,69 @@ struct SuiteBuilderSheet: View {
                                 if on { included.insert(saved.id) } else { included.remove(saved.id) }
                             }
                         )) {
-                            HStack {
-                                Text(saved.plan.ticket.key).font(.callout.monospaced())
+                            HStack(spacing: 8) {
+                                Text(saved.plan.ticket.key).font(.callout.monospaced().weight(.medium))
                                 Text(saved.plan.ticket.title).lineLimit(1).foregroundStyle(.secondary)
                                 Spacer(minLength: 4)
-                                Text("\(saved.plan.tasks.count)").font(.caption).foregroundStyle(.tertiary)
+                                Text("\(saved.plan.tasks.count) tasks").font(.caption).foregroundStyle(.tertiary)
                             }
                         }
                     }
+                } header: {
+                    Text("Regression suite — \(folder.name)")
+                } footer: {
+                    Text("Merges the plans you pick into one run, dropping near-duplicate tasks. Ticks stay in this sheet; the plans themselves aren't changed.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-            }
-            .frame(maxHeight: 180)
-            Divider()
-            Text("\(suite.count) checks").font(.headline)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(suite, id: \.task.id) { item in
-                        HStack(alignment: .top, spacing: 8) {
+
+                Section {
+                    if suite.isEmpty {
+                        Text("Pick at least one plan.").foregroundStyle(.secondary)
+                    }
+                    ForEach(Array(suite.enumerated()), id: \.offset) { _, item in
+                        let key = RegressionSuite.key(item)
+                        let done = ticks.contains(key)
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Button {
-                                if ticks.contains(item.task.id) { ticks.remove(item.task.id) }
-                                else { ticks.insert(item.task.id) }
+                                withAnimation(.smooth) {
+                                    if done { ticks.remove(key) } else { ticks.insert(key) }
+                                }
                             } label: {
-                                Image(systemName: ticks.contains(item.task.id) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(ticks.contains(item.task.id) ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                                Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                                    .font(.title3)
+                                    .foregroundStyle(done ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                                    .contentTransition(.symbolEffect(.replace))
                             }
                             .buttonStyle(.plain)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.task.title).font(.callout.weight(.medium))
-                                Text("\(item.plan.plan.ticket.key) · expected: \(item.task.expected)")
+                                Text(item.task.title)
+                                    .font(.callout.weight(.medium))
+                                    .strikethrough(done)
+                                    .foregroundStyle(done ? .secondary : .primary)
+                                Text(item.task.expected)
                                     .font(.caption).foregroundStyle(.secondary)
+                                    .lineLimit(2)
                             }
+                            Spacer(minLength: 4)
+                            Text(item.plan.plan.ticket.key).font(.caption.monospaced()).foregroundStyle(.tertiary)
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Text("\(suite.count) checks")
+                        Spacer()
+                        if !suite.isEmpty {
+                            Text("\(ticks.count) done").monospacedDigit()
                         }
                     }
                 }
             }
-            .frame(maxHeight: 220)
+            .formStyle(.grouped)
+
             HStack {
                 Spacer()
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(copied ? "Copied" : "Copy as Markdown", systemImage: "doc.on.doc") {
+                Button(copied ? "Copied" : "Copy as Markdown", systemImage: copied ? "checkmark" : "doc.on.doc") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(RegressionSuite.markdown(folderName: folder.name, suite: suite, ticks: ticks), forType: .string)
                     copied = true
@@ -79,15 +100,20 @@ struct SuiteBuilderSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(suite.isEmpty)
             }
+            .padding(20)
         }
-        .padding(20)
-        .frame(width: 560, height: 640)
-        .onAppear(perform: { included = Set(candidates.map(\.id)) })
+        .frame(width: 580, height: 660)
+        .onAppear { included = Set(candidates.map(\.id)) }
     }
 }
 
 /// Pure merge logic: order by plan, dedupe near-identical titles.
 nonisolated enum RegressionSuite {
+    /// Task ids repeat across plans (t1, t2…), so ticks key on plan + task.
+    static func key(_ item: (plan: SavedPlan, task: TestPlan.Task)) -> String {
+        item.plan.id + "/" + item.task.id
+    }
+
     static func merge(_ plans: [SavedPlan]) -> [(plan: SavedPlan, task: TestPlan.Task)] {
         var kept: [(plan: SavedPlan, task: TestPlan.Task)] = []
         var norms: [String] = []
@@ -114,7 +140,7 @@ nonisolated enum RegressionSuite {
                 md += "\n### \(item.plan.plan.ticket.key) — \(item.plan.plan.ticket.title)\n"
                 lastKey = item.plan.plan.ticket.key
             }
-            md += "\n- [\(ticks.contains(item.task.id) ? "x" : " ")] **\(item.task.title)**\n"
+            md += "\n- [\(ticks.contains(key(item)) ? "x" : " ")] **\(item.task.title)**\n"
             for (i, step) in item.task.steps.enumerated() { md += "    \(i + 1). \(step)\n" }
             md += "    - **Expected:** \(item.task.expected)\n"
         }
