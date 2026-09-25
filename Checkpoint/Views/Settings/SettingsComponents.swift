@@ -130,3 +130,59 @@ struct MCPToolsView: View {
         }
     }
 }
+
+/// Native combo box: type any value, or pick one from the dropdown.
+struct ComboBox: NSViewRepresentable {
+    @Binding var text: String
+    var items: [String]
+    var placeholder: String = ""
+    var monospaced = true
+
+    func makeNSView(context: Context) -> NSComboBox {
+        let box = NSComboBox()
+        box.usesDataSource = false
+        box.completes = true
+        box.isButtonBordered = false
+        box.numberOfVisibleItems = 12
+        box.delegate = context.coordinator
+        box.target = context.coordinator
+        box.action = #selector(Coordinator.changed(_:))
+        box.font = monospaced ? .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular) : .systemFont(ofSize: NSFont.systemFontSize)
+        box.alignment = .right
+        box.isBordered = false
+        box.drawsBackground = false
+        box.focusRingType = .none
+        box.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return box
+    }
+
+    func updateNSView(_ box: NSComboBox, context: Context) {
+        context.coordinator.parent = self
+        if box.stringValue != text { box.stringValue = text }
+        box.placeholderString = placeholder
+        let current = box.objectValues.compactMap { $0 as? String }
+        if current != items {
+            box.removeAllItems()
+            box.addItems(withObjectValues: items)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, NSComboBoxDelegate {
+        var parent: ComboBox
+        init(_ parent: ComboBox) { self.parent = parent }
+
+        @objc func changed(_ sender: NSComboBox) { parent.text = sender.stringValue }
+
+        func controlTextDidChange(_ note: Notification) {
+            if let box = note.object as? NSComboBox { parent.text = box.stringValue }
+        }
+
+        func comboBoxSelectionDidChange(_ note: Notification) {
+            guard let box = note.object as? NSComboBox, box.indexOfSelectedItem >= 0,
+                  let value = box.itemObjectValue(at: box.indexOfSelectedItem) as? String else { return }
+            parent.text = value
+        }
+    }
+}

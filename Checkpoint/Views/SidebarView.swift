@@ -452,52 +452,78 @@ private struct SmartFolderEditor: View {
         case .label: store.allLabels
         case .component: store.allComponents
         case .fixVersion: store.allFixVersions
-        case .epic: store.plans.map { $0.plan.ticket.key }
+        case .epic: Array(Set(store.plans.compactMap(\.plan.ticket.parentKey))).sorted()
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Smart folder").font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            Label {
+                Text("Smart folder").font(.headline)
+            } icon: {
+                Image(systemName: "folder.fill.badge.gearshape").foregroundStyle(.teal.gradient)
+            }
             TextField("Name", text: $name)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .onSubmit(save)
-            Picker("Rule", selection: $kind) {
-                ForEach(SmartFolder.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Shows plans whose ticket has").font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Picker("Rule", selection: $kind) {
+                        ForEach(SmartFolder.Kind.allCases, id: \.self) { k in
+                            Label(k.label, systemImage: k.icon).tag(k)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    TextField(kind.valuePrompt, text: $value)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(save)
+                }
+                if !suggestions.isEmpty {
+                    FlowLayout(spacing: 6) {
+                        ForEach(suggestions.prefix(12), id: \.self) { s in
+                            Button { value = s } label: {
+                                Text(s)
+                                    .font(.caption.weight(value == s ? .semibold : .regular))
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 4)
+                                    .glassEffect(value == s ? .regular.tint(.teal.opacity(0.35)).interactive() : .regular.interactive(),
+                                                 in: .capsule)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            TextField(kind.valuePrompt, text: $value)
-                .textFieldStyle(.roundedBorder)
-                .font(.body.monospaced())
-                .onSubmit(save)
-            if !suggestions.isEmpty {
-                Text("Known values: \(suggestions.prefix(8).joined(separator: ", "))\(suggestions.count > 8 ? "…" : "")")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Text("Membership updates live as new plans arrive. Old plans have no ticket metadata — re-run them to fill it in.")
+
+            Text("Updates live as plans arrive. Plans made before ticket details were saved need a re-run to show up.")
                 .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             HStack(spacing: 10) {
                 Button("Cancel", action: dismiss)
                     .buttonStyle(.glass)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
-                Button("Save", action: save)
+                Button("Save Smart Folder", action: save)
                     .buttonStyle(.glassProminent)
                     .controlSize(.large)
                     .keyboardShortcut(.return, modifiers: .command)
                     .frame(maxWidth: .infinity)
+                    .disabled(value.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
         .padding(18)
         .frame(width: 340)
-        .onAppear(perform: {
+        .onAppear {
             name = smart.name
             kind = smart.kind
             value = smart.value
             focused = true
-        })
+        }
     }
 
     private func save() {
@@ -587,11 +613,13 @@ private struct PlanRow: View {
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
     @Environment(AppSettings.self) private var settings
+    @State private var editingTags = false
 
     var body: some View {
         SidebarRow(saved: saved)
             .tag(saved.id)
             .itemProvider { NSItemProvider(object: "plan:\(saved.id)" as NSString) }
+            .popover(isPresented: $editingTags, arrowEdge: .trailing) { TagEditor(saved: saved) }
             .contextMenu {
                 Button("Show ticket details", systemImage: "sidebar.right") {
                     inspector.open(saved.plan.ticket.key, tracker: saved.tracker)
@@ -614,6 +642,7 @@ private struct PlanRow: View {
                 }
                 MoveMenu(title: "Move To") { store.movePlan(saved.id, to: $0) }
                 Divider()
+                Button("Tags…", systemImage: "tag") { editingTags = true }
                 Button(saved.pinned ? "Unpin" : "Pin", systemImage: saved.pinned ? "pin.slash" : "pin") {
                     store.togglePin(saved.id)
                 }

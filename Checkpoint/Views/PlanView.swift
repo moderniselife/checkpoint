@@ -17,6 +17,7 @@ struct PlanView: View {
     @State private var noteTaskID: String?
     @FocusState private var listFocused: Bool
     @State private var copied = false
+    @State private var editingTags = false
 
     enum Pane: String, CaseIterable { case plan = "Plan", research = "Research", chat = "Chat" }
     enum Filter: String, CaseIterable { case todo = "To do", all = "All", failed = "Failed", blocked = "Blocked" }
@@ -25,6 +26,7 @@ struct PlanView: View {
     private var detailsOpen: Bool { inspector.currentKey == plan.ticket.key.uppercased() }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
@@ -122,6 +124,18 @@ struct PlanView: View {
             .frame(maxWidth: .infinity)
         }
         .glassScrollIndicator()
+        .safeAreaInset(edge: .bottom) {
+            if pane == .chat { ChatComposer(saved: saved) }
+        }
+        .onChange(of: saved.chat.count) {
+            guard pane == .chat else { return }
+            withAnimation(.smooth) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+        }
+        .onChange(of: store.chatBusyID) {
+            guard pane == .chat else { return }
+            withAnimation(.smooth) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+        }
+        }
         .toolbar { toolbar }
     }
 
@@ -190,6 +204,7 @@ struct PlanView: View {
                 Button(saved.pinned ? "Unpin" : "Pin", systemImage: saved.pinned ? "pin.slash" : "pin") {
                     store.togglePin(saved.id)
                 }
+                Button("Tags…  ⌘T", systemImage: "tag") { editingTags = true }
                 Menu("Remind Me", systemImage: "bell") {
                     Button("Tomorrow") { remind(days: 1) }
                     Button("In 3 Days") { remind(days: 3) }
@@ -270,7 +285,7 @@ struct PlanView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                HeaderMeta(saved: saved)
+                HeaderMeta(saved: saved) { editingTags = true }
                     .padding(.top, 2)
             }
             Spacer(minLength: 0)
@@ -285,6 +300,14 @@ struct PlanView: View {
         }
         .padding(24)
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
+        .popover(isPresented: $editingTags, arrowEdge: .bottom) {
+            TagEditor(saved: saved)
+        }
+        .background {
+            Button("") { editingTags = true }
+                .keyboardShortcut("t", modifiers: .command)
+                .hidden()
+        }
     }
 
     private func diffBanner(_ summary: String) -> some View {
@@ -309,44 +332,64 @@ struct PlanView: View {
 
     // MARK: Tasks
 
+    private func count(_ f: Filter) -> Int {
+        switch f {
+        case .all: plan.tasks.count
+        case .todo: plan.tasks.filter { saved.verdict(of: $0.id) == .todo }.count
+        case .failed: saved.failedCount
+        case .blocked: saved.blockedCount
+        }
+    }
+
+    /// One glass pill: which tasks to show, the Smoke/P0 lenses and regenerate.
     private var taskListAccessory: some View {
-        HStack(spacing: 10) {
-            Menu {
+        let lensOn = smokeOnly || p0Only
+        return Menu {
+            Picker("Show", selection: $filter.animation(.smooth)) {
+                ForEach(Filter.allCases, id: \.self) { f in
+                    Text("\(f.rawValue)  \(count(f))").tag(f)
+                }
+            }
+            .pickerStyle(.inline)
+            SwiftUI.Section("Narrow to") {
                 Toggle(isOn: $smokeOnly.animation(.smooth)) {
-                    Label("Smoke Subset", systemImage: "flame")
+                    Label("Smoke Subset — top risks, about 5 min", systemImage: "flame")
                 }
                 Toggle(isOn: $p0Only.animation(.smooth)) {
                     Label("P0 Only", systemImage: "exclamationmark.triangle")
                 }
-                Divider()
-                Button("Regenerate Tasks", systemImage: "arrow.triangle.2.circlepath") {
-                    store.regenerate(section: .tasks, in: saved.id, settings: settings)
-                }
-                .disabled(store.regenerating != nil || store.chatBusyID != nil)
-                Divider()
-                Text("Keys: j/k move · space tick · f fail · b blocked · n note")
-            } label: {
+            }
+            Divider()
+            Button("Regenerate Tasks", systemImage: "arrow.triangle.2.circlepath") {
+                store.regenerate(section: .tasks, in: saved.id, settings: settings)
+            }
+            .disabled(store.regenerating != nil || store.chatBusyID != nil)
+            Divider()
+            Text("Keys: j/k move · space pass · f fail · b blocked · n note")
+        } label: {
+            HStack(spacing: 6) {
                 if store.regenerating == saved.id + ":tasks" {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.mini)
                 } else {
-                    Image(systemName: smokeOnly || p0Only
-                          ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                        .foregroundStyle(smokeOnly || p0Only ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    Image(systemName: lensOn ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+                        .foregroundStyle(lensOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                 }
+                Text(filter.rawValue).font(.callout.weight(.medium))
+                Text("\(count(filter))")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Smoke subset, P0 only, regenerate — click the list to use the keyboard")
-
-            Picker("", selection: $filter) {
-                ForEach(Filter.allCases, id: \.self) { Text($0.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(.capsule)
         }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .help("Show to do, all, failed or blocked tasks; Smoke and P0 lenses")
     }
 
     /// Shown only while a lens narrows the list, so it's obvious why tasks are missing.
@@ -555,8 +598,8 @@ private struct SectionMenu<Extra: View>: View {
 /// One quiet line under the summary: estimate, timer, verdict counts, tags and reminder.
 private struct HeaderMeta: View {
     let saved: SavedPlan
+    let editTags: () -> Void
     @Environment(PlanStore.self) private var store
-    @State private var editingTags = false
 
     var body: some View {
         FlowLayout(spacing: 12) {
@@ -592,57 +635,98 @@ private struct HeaderMeta: View {
                     .foregroundStyle(saved.isOverdue ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                     .help("Reminder: \(due.formatted(date: .abbreviated, time: .shortened))")
             }
-            ForEach(saved.tags.sorted(), id: \.self) { tag in
-                Text(tag)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(.quaternary, in: .capsule)
-            }
-            Button {
-                editingTags = true
-            } label: {
-                Label(saved.tags.isEmpty ? "Add tag" : "Edit tags", systemImage: "tag")
-                    .foregroundStyle(.tertiary)
+            Button(action: editTags) {
+                HStack(spacing: 6) {
+                    if saved.tags.isEmpty {
+                        Label("Add tags", systemImage: "tag")
+                    } else {
+                        Image(systemName: "tag")
+                        ForEach(saved.tags.sorted(), id: \.self) { tag in
+                            Text(tag)
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 8).padding(.vertical, 2)
+                                .background(.quaternary, in: .capsule)
+                        }
+                    }
+                }
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .popover(isPresented: $editingTags, arrowEdge: .bottom) {
-                TagEditor(saved: saved) { editingTags = false }
-            }
+            .help("Edit tags (⌘T)")
         }
         .font(.callout)
         .foregroundStyle(.secondary)
     }
 }
 
-private struct TagEditor: View {
+/// Tags for one plan: current ones as removable chips, a field to add more,
+/// and your other tags as one-click suggestions. Changes save immediately.
+struct TagEditor: View {
     let saved: SavedPlan
-    let done: () -> Void
     @Environment(PlanStore.self) private var store
     @State private var text = ""
+    @FocusState private var focused: Bool
+
+    private var current: SavedPlan { store.plans.first { $0.id == saved.id } ?? saved }
+    private var suggestions: [String] { store.allTags.filter { !current.tags.contains($0) } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Tags").font(.headline)
-            TextField("Tags", text: $text, prompt: Text("sprint-12, needs-qa"))
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(save)
-            Text("Comma separated. Smart folders can filter on them.")
-                .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("Save", action: save)
-                    .buttonStyle(.glassProminent)
-                    .keyboardShortcut(.defaultAction)
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Tags", systemImage: "tag").font(.headline)
+            if !current.tags.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(current.tags.sorted(), id: \.self) { tag in
+                        Button { set(current.tags.subtracting([tag])) } label: {
+                            HStack(spacing: 4) {
+                                Text(tag)
+                                Image(systemName: "xmark").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                            }
+                            .font(.callout)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .glassEffect(.regular.tint(Color.accentColor.opacity(0.2)).interactive(), in: .capsule)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove \(tag)")
+                    }
+                }
             }
+            TextField("Add a tag", text: $text, prompt: Text("sprint-12, needs-qa…"))
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit(add)
+            if !suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Your tags").font(.caption).foregroundStyle(.secondary)
+                    FlowLayout(spacing: 6) {
+                        ForEach(suggestions.prefix(16), id: \.self) { tag in
+                            Button { set(current.tags.union([tag])) } label: {
+                                Label(tag, systemImage: "plus")
+                                    .font(.callout)
+                                    .padding(.horizontal, 10).padding(.vertical, 4)
+                                    .glassEffect(.regular.interactive(), in: .capsule)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            Text("Press Return to add. Filter by tag from the sidebar's filter menu.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         .padding(16)
-        .frame(width: 280)
-        .onAppear { text = saved.tags.sorted().joined(separator: ", ") }
+        .frame(width: 300)
+        .onAppear { focused = true }
     }
 
-    private func save() {
-        store.setTags(Set(text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }),
-                      for: saved.id)
-        done()
+    private func add() {
+        let new = text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard !new.isEmpty else { return }
+        set(current.tags.union(new))
+        text = ""
+    }
+
+    private func set(_ tags: Set<String>) {
+        withAnimation(.smooth) { store.setTags(tags, for: saved.id) }
     }
 }
 
@@ -1311,73 +1395,170 @@ private struct RiskChip: View {
 }
 
 
-/// Follow-up chat over a finished plan (IDEA-083).
+/// Follow-up chat over a finished plan. The composer lives in PlanView's
+/// bottom inset so it stays put while the thread scrolls.
 private struct ChatView: View {
     let saved: SavedPlan
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
-    @State private var question = ""
 
     private var busy: Bool { store.chatBusyID == saved.id || store.regenerating?.hasPrefix(saved.id) == true }
 
+    private var suggestions: [String] {
+        var out = ["What's the riskiest part of this change?", "Which tasks can I skip for a quick smoke test?"]
+        if saved.mode == .qa { out.append("What should I check as an admin?") } else { out.append("What should I unit test instead?") }
+        out.append("Add coverage for slow or offline networks")
+        return out
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Ask follow-ups about this plan — answers stay here, and anything useful can update the plan with ticks intact.")
-                .font(.callout).foregroundStyle(.secondary)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if saved.chat.isEmpty {
-                        ContentUnavailableView("No questions yet", systemImage: "bubble.left.and.text.bubble.right",
-                                               description: Text("Try “what about admins?” or “add coverage for offline mode”."))
+        VStack(alignment: .leading, spacing: 14) {
+            if saved.chat.isEmpty {
+                VStack(spacing: 14) {
+                    Image(systemName: "bubble.left.and.text.bubble.right")
+                        .font(.system(size: 30))
+                        .foregroundStyle(.tint)
+                    Text("Ask anything about this plan").font(.title3.weight(.semibold))
+                    Text("Answers stay with the plan, and any useful one can update it — your ticks stay put.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    FlowLayout(spacing: 8) {
+                        ForEach(suggestions, id: \.self) { q in
+                            Button { store.sendChat(q, in: saved.id, settings: settings) } label: {
+                                Text(q)
+                                    .font(.callout)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .glassEffect(.regular.interactive(), in: .capsule)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(busy)
+                        }
                     }
-                    ForEach(saved.chat) { msg in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label(msg.role == .user ? "You" : "Checkpoint",
-                                  systemImage: msg.role == .user ? "person" : "sparkles")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                }
+                .frame(maxWidth: 520)
+                .padding(28)
+                .frame(maxWidth: .infinity)
+                .background(.background.opacity(0.55), in: .rect(cornerRadius: 22))
+                .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.separator.opacity(0.5)))
+            }
+
+            ForEach(saved.chat) { msg in
+                if msg.role == .user {
+                    HStack {
+                        Spacer(minLength: 80)
+                        Text(msg.text)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .glassEffect(.regular.tint(Color.accentColor.opacity(0.35)), in: .rect(cornerRadius: 18))
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 10) {
+                        ChatAvatar()
+                        VStack(alignment: .leading, spacing: 10) {
                             Text(msg.text)
                                 .font(.callout)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
-                            if msg.role == .assistant && !msg.text.hasPrefix("Couldn't answer") {
-                                Button("Update plan from this", systemImage: "arrow.triangle.2.circlepath") {
+                            if !msg.text.hasPrefix("Couldn't answer") {
+                                Button("Update Plan from This", systemImage: "arrow.triangle.2.circlepath") {
                                     store.applyChatRevision(msg.text, in: saved.id, settings: settings)
                                 }
                                 .buttonStyle(.glass)
                                 .controlSize(.small)
                                 .disabled(busy)
+                                .help("Folds this answer into the plan; ticks on surviving tasks are kept")
                             }
                         }
-                        .padding(12)
+                        .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.background.opacity(0.55), in: .rect(cornerRadius: 14))
-                    }
-                    if busy {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text(store.chatBusyID == saved.id ? "Thinking…" : "Updating plan…")
-                                .font(.callout).foregroundStyle(.secondary)
-                        }
+                        .background(.background.opacity(0.6), in: .rect(cornerRadius: 18))
+                        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.separator.opacity(0.4)))
+                        Spacer(minLength: 40)
                     }
                 }
             }
-            HStack {
-                TextField("Ask a follow-up…", text: $question, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...4)
-                    .onSubmit(ask)
-                    .disabled(busy)
-                Button("Ask", action: ask)
-                    .buttonStyle(.glassProminent)
-                    .disabled(busy || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            if busy {
+                HStack(spacing: 10) {
+                    ChatAvatar()
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(store.chatBusyID == saved.id ? "Thinking…" : "Updating the plan…")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(.background.opacity(0.6), in: .rect(cornerRadius: 18))
+                }
             }
+            Color.clear.frame(height: 1).id("chat-bottom")
         }
+    }
+}
+
+private struct ChatAvatar: View {
+    var body: some View {
+        Image(systemName: "sparkles")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(width: 26, height: 26)
+            .background(Color.accentColor.gradient, in: .circle)
+    }
+}
+
+/// Glass composer pinned under the chat thread, styled like the ticket bar.
+private struct ChatComposer: View {
+    let saved: SavedPlan
+    @Environment(PlanStore.self) private var store
+    @Environment(AppSettings.self) private var settings
+    @State private var question = ""
+    @FocusState private var focused: Bool
+
+    private var busy: Bool { store.chatBusyID == saved.id || store.regenerating?.hasPrefix(saved.id) == true }
+    private var canSend: Bool { !busy && !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            TextField("", text: $question, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .lineLimit(1...5)
+                .focused($focused)
+                .onSubmit(ask)
+                .background(alignment: .leading) {
+                    if question.isEmpty {
+                        Text("Ask a follow-up…").foregroundStyle(.tertiary).allowsHitTesting(false)
+                    }
+                }
+                .padding(.vertical, 4)
+            Button(action: ask) {
+                Image(systemName: "arrow.up")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .disabled(!canSend)
+            .keyboardShortcut(.return, modifiers: .command)
+            .help("Send (Return)")
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
+        .frame(maxWidth: 820)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 16)
+        .onAppear { focused = true }
     }
 
     private func ask() {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return }
+        guard !q.isEmpty, !busy else { return }
         question = ""
         store.sendChat(q, in: saved.id, settings: settings)
     }

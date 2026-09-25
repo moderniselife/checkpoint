@@ -16,7 +16,8 @@ struct AIProviderPane: View {
                 Picker("Provider", selection: $settings.provider) {
                     ForEach(LLMProvider.allCases) { Text($0.label).tag($0) }
                 }
-                .onChange(of: settings.provider) { llmState = .idle; fetchedModels = [] }
+                .onChange(of: settings.provider) { llmState = .idle; fetchedModels = []; autoFetch() }
+                .onAppear(perform: autoFetch)
 
                 if settings.provider.hasEditableBaseURL {
                     TextField("Base URL", text: $settings.llmBaseURL, prompt: Text(settings.provider.defaultBaseURL))
@@ -25,17 +26,29 @@ struct AIProviderPane: View {
                 SecureField(settings.provider.requiresKey ? "API key" : "API key (optional)",
                             text: $settings.llmKey, prompt: Text(settings.provider.keyPrompt))
 
-                HStack {
-                    TextField("Model", text: $settings.model, prompt: Text(settings.provider.defaultModel))
-                        .font(.body.monospaced())
-                    modelMenu { settings.model = $0 }
+                LabeledContent("Model") {
+                    ComboBox(text: $settings.model, items: modelOptions, placeholder: settings.provider.defaultModel)
+                        .frame(maxWidth: 280)
                 }
 
                 Picker("Effort", selection: $settings.effort) {
                     ForEach(AppSettings.efforts, id: \.self) { Text($0.capitalized) }
                 }
 
-                TestRow(title: "Test", state: llmState, disabled: !settings.isLLMConfigured, action: testLLM) { msg, _ in msg }
+                HStack {
+                    Button("Test", action: testLLM)
+                        .disabled(!settings.isLLMConfigured || llmState == .testing)
+                    Button("Fetch Models", action: fetchModels)
+                        .disabled(fetchingModels || (settings.provider.requiresKey && settings.llmKey.isEmpty))
+                        .help("List the models \(settings.provider.shortLabel) offers in the Model dropdowns")
+                    if fetchingModels { ProgressView().controlSize(.small) }
+                    switch llmState {
+                    case .idle: EmptyView()
+                    case .testing: ProgressView().controlSize(.small)
+                    case .ok(let msg, _): Label(msg, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    case .failed(let msg): Text(msg).foregroundStyle(.red).font(.caption).lineLimit(3)
+                    }
+                }
             } header: {
                 Text("Provider")
             } footer: {
@@ -49,10 +62,9 @@ struct AIProviderPane: View {
             }
 
             Section {
-                HStack {
-                    TextField("Quick model", text: $settings.quickModel, prompt: Text("same as above"))
-                        .font(.body.monospaced())
-                    modelMenu { settings.quickModel = $0 }
+                LabeledContent("Quick model") {
+                    ComboBox(text: $settings.quickModel, items: modelOptions, placeholder: "same as above")
+                        .frame(maxWidth: 280)
                 }
             } header: {
                 Text("Quick plans")
@@ -63,24 +75,16 @@ struct AIProviderPane: View {
         }
     }
 
-    private func modelMenu(_ pick: @escaping (String) -> Void) -> some View {
-        Menu {
-            let options = fetchedModels.isEmpty && settings.provider == .anthropic
-                ? AppSettings.claudeModels : fetchedModels
-            if options.isEmpty {
-                Text("Fetch models to see what's available")
-            }
-            ForEach(options, id: \.self) { m in
-                Button(m) { pick(m) }
-            }
-            Divider()
-            Button("Fetch models from \(settings.provider.shortLabel)", systemImage: "arrow.down.circle", action: fetchModels)
-        } label: {
-            if fetchingModels { ProgressView().controlSize(.small) } else { Image(systemName: "list.bullet") }
-        }
-        .menuStyle(.button)
-        .fixedSize()
-        .help("Pick a model")
+    /// Quietly fills the dropdowns for providers without a built-in list.
+    private func autoFetch() {
+        guard settings.provider != .anthropic, fetchedModels.isEmpty, !fetchingModels,
+              !settings.provider.requiresKey || !settings.llmKey.isEmpty else { return }
+        fetchModels(quiet: true)
+    }
+
+    /// Fetched models, or the built-in Claude list until a fetch.
+    private var modelOptions: [String] {
+        fetchedModels.isEmpty && settings.provider == .anthropic ? AppSettings.claudeModels : fetchedModels
     }
 
     private var providerNote: String {
@@ -93,7 +97,9 @@ struct AIProviderPane: View {
         }
     }
 
-    private func fetchModels() {
+    private func fetchModels() { fetchModels(quiet: false) }
+
+    private func fetchModels(quiet: Bool) {
         fetchingModels = true
         let config = settings.llmConfig
         Task {
@@ -109,9 +115,9 @@ struct AIProviderPane: View {
                                                         baseURL: config.baseURL).listModels()
                 }
                 fetchedModels = models
-                llmState = .ok("\(models.count) models available", 0)
+                if !quiet { llmState = .ok("\(models.count) models available", 0) }
             } catch {
-                llmState = .failed(error.localizedDescription)
+                if !quiet { llmState = .failed(error.localizedDescription) }
             }
         }
     }

@@ -17,12 +17,30 @@ struct CheckpointApp: App {
         }
         .windowToolbarStyle(.unified)
 
-        Settings {
+        .commands {
+            CommandGroup(replacing: .appSettings) { SettingsCommand() }
+        }
+
+        // A regular window rather than a Settings scene, so it gets the same unified
+        // toolbar as the main window: sidebar toggle beside the traffic lights.
+        Window("Checkpoint Settings", id: SettingsView.windowID) {
             SettingsView()
                 .environment(settings)
                 .environment(inspector)
         }
+        .windowToolbarStyle(.unified)
         .defaultSize(width: 860, height: 620)
         .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
+    }
+}
+
+/// App menu → Settings… (⌘,), opening the settings window.
+private struct SettingsCommand: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Settings…") { openWindow(id: SettingsView.windowID) }
+            .keyboardShortcut(",", modifiers: .command)
     }
 }
