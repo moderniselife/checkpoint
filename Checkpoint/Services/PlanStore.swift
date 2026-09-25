@@ -194,6 +194,104 @@ final class PlanStore {
     }()
 
     private var foldersURL: URL { fileURL.deletingLastPathComponent().appending(path: "folders.json") }
+
+    // MARK: Sync hooks
+
+    /// Called after each save with what changed locally; the sync coordinator listens.
+    @ObservationIgnored var onLocalChange: ((StoreChanges) -> Void)?
+    /// Last state handed to (or received from) sync, used to work out what changed.
+    @ObservationIgnored private var syncedPlans: [String: SavedPlan] = [:]
+    @ObservationIgnored private var syncedFolders: [UUID: PlanFolder] = [:]
+    @ObservationIgnored private var syncedSmart: [UUID: SmartFolder] = [:]
+
+    var snapshot: StoreSnapshot { StoreSnapshot(plans: plans, folders: folders, smartFolders: smartFolders) }
+
+    /// Where evidence files live, for backends that mirror them.
+    var evidenceRootURL: URL { evidenceRoot }
+
+    private func markSynced() {
+        syncedPlans = Dictionary(plans.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        syncedFolders = Dictionary(folders.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        syncedSmart = Dictionary(smartFolders.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    private func emitPlanChanges() {
+        guard let onLocalChange else { syncedPlans = Dictionary(plans.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }); return }
+        var c = StoreChanges()
+        let now = Dictionary(plans.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        c.plans = plans.filter { syncedPlans[$0.id] != $0 }
+        c.deletedPlans = syncedPlans.keys.filter { now[$0] == nil }
+        syncedPlans = now
+        if !c.isEmpty { onLocalChange(c) }
+    }
+
+    private func emitFolderChanges() {
+        let now = Dictionary(folders.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        defer { syncedFolders = now }
+        guard let onLocalChange else { return }
+        var c = StoreChanges()
+        c.folders = folders.filter { syncedFolders[$0.id] != $0 }
+        c.deletedFolders = syncedFolders.keys.filter { now[$0] == nil }
+        if !c.isEmpty { onLocalChange(c) }
+    }
+
+    private func emitSmartChanges() {
+        let now = Dictionary(smartFolders.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        defer { syncedSmart = now }
+        guard let onLocalChange else { return }
+        var c = StoreChanges()
+        c.smartFolders = smartFolders.filter { syncedSmart[$0.id] != $0 }
+        c.deletedSmartFolders = syncedSmart.keys.filter { now[$0] == nil }
+        if !c.isEmpty { onLocalChange(c) }
+    }
+
+    /// Applies changes that came from another device. Nothing is echoed back.
+    func applyRemote(_ c: StoreChanges) {
+        guard !c.isEmpty else { return }
+        for p in c.plans {
+            if let i = plans.firstIndex(where: { $0.id == p.id }) {
+                // A timer running here keeps running; everything else takes the newer copy.
+                var incoming = p
+                if incoming.timerRunningSince == nil, plans[i].timerRunningSince != nil,
+                   incoming.testingSeconds <= plans[i].testingSeconds {
+                    incoming.timerRunningSince = plans[i].timerRunningSince
+                }
+                plans[i] = incoming
+            } else {
+                plans.insert(p, at: 0)
+            }
+            Reminders.sync(p)
+        }
+        for id in c.deletedPlans {
+            plans.removeAll { $0.id == id }
+            if selection == id { selection = nil }
+        }
+        for f in c.folders {
+            if let i = folders.firstIndex(where: { $0.id == f.id }) { folders[i] = f } else { folders.append(f) }
+        }
+        for id in c.deletedFolders {
+            folders.removeAll { $0.id == id }
+            for i in plans.indices where plans[i].folderID == id { plans[i].folderID = nil }
+        }
+        for f in c.smartFolders {
+            if let i = smartFolders.firstIndex(where: { $0.id == f.id }) { smartFolders[i] = f } else { smartFolders.append(f) }
+        }
+        for id in c.deletedSmartFolders { smartFolders.removeAll { $0.id == id } }
+        writeAll()
+        markSynced()
+    }
+
+    /// Replaces a plan's evidence file list after a backend copied files in.
+    func noteRemoteEvidence(planID: String) {
+        // Evidence lists travel inside the plan, so the files just need to exist; nudge views.
+        if let i = plans.firstIndex(where: { $0.id == planID }) { plans[i] = plans[i] }
+    }
+
+    private func writeAll() {
+        if let data = try? JSONEncoder().encode(plans) { try? data.write(to: fileURL, options: .atomic) }
+        if let data = try? JSONEncoder().encode(folders) { try? data.write(to: foldersURL, options: .atomic) }
+        if let data = try? JSONEncoder().encode(smartFolders) { try? data.write(to: smartFoldersURL, options: .atomic) }
+    }
     private var smartFoldersURL: URL { fileURL.deletingLastPathComponent().appending(path: "smartFolders.json") }
 
     init() {
@@ -221,6 +319,7 @@ final class PlanStore {
         // Re-arm due-date banners after relaunch (system keeps them, but this
         // heals any missed cancel/finish races).
         for saved in plans { Reminders.sync(saved) }
+        markSynced()
     }
 
     var selected: SavedPlan? { plans.first { $0.id == selection } }
@@ -622,6 +721,7 @@ final class PlanStore {
     private func saveFolders() {
         guard let data = try? JSONEncoder().encode(folders) else { return }
         try? data.write(to: foldersURL, options: .atomic)
+        emitFolderChanges()
     }
 
     // MARK: - Smart folders (IDEA-101)
@@ -682,6 +782,7 @@ final class PlanStore {
     private func saveSmartFolders() {
         guard let data = try? JSONEncoder().encode(smartFolders) else { return }
         try? data.write(to: smartFoldersURL, options: .atomic)
+        emitSmartChanges()
     }
     var isRunning: Bool { runningKey != nil }
 
@@ -1122,8 +1223,16 @@ final class PlanStore {
     }
 
     private func save() {
+        // Any content change counts as an edit, so "newest wins" across devices is reliable
+        // even for mutations that don't bump updatedAt themselves.
+        for i in plans.indices {
+            if let old = syncedPlans[plans[i].id], old != plans[i], plans[i].updatedAt <= old.updatedAt {
+                plans[i].updatedAt = .now
+            }
+        }
         guard let data = try? JSONEncoder().encode(plans) else { return }
         try? data.write(to: fileURL, options: .atomic)
+        emitPlanChanges()
     }
 }
 

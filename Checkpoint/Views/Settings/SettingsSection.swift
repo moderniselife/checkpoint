@@ -13,6 +13,7 @@ enum SettingsSection: Hashable, Identifiable {
     case customMCP(id: UUID?)   // nil = list, UUID = detail for one tracker
     case testing
     case scenarios
+    case sync
     case advanced
 
     var id: String {
@@ -23,6 +24,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .customMCP(let id): "custom-\(id?.uuidString ?? "list")"
         case .testing: "testing"
         case .scenarios: "scenarios"
+        case .sync: "sync"
         case .advanced: "advanced"
         }
     }
@@ -35,6 +37,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .customMCP: "Custom Servers"
         case .testing: "Testing"
         case .scenarios: "Scenarios"
+        case .sync: "Sync"
         case .advanced: "Advanced"
         }
     }
@@ -47,6 +50,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .customMCP: "Any MCP server — Asana, a wiki, your own tools"
         case .testing: "Default mode and hosted environment"
         case .scenarios: "End-to-end journeys from tickets and code"
+        case .sync: "Your plans on every device"
         case .advanced: "Routing, connections and storage"
         }
     }
@@ -59,6 +63,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .customMCP: "server.rack"
         case .testing: "checkmark.shield"
         case .scenarios: "map"
+        case .sync: "arrow.triangle.2.circlepath.icloud"
         case .advanced: "gearshape"
         }
     }
@@ -71,6 +76,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .customMCP: .teal
         case .testing: .green
         case .scenarios: .orange
+        case .sync: .cyan
         case .advanced: .gray
         }
     }
@@ -84,6 +90,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .customMCP: ["custom", "mcp", "endpoint", "server", "self-hosted"]
         case .testing: ["testing", "mode", "dev", "qa", "environment", "hosted"]
         case .scenarios: ["scenarios", "journeys", "codebase", "repo", "e2e"]
+        case .sync: ["sync", "icloud", "drive", "folder", "devices", "iphone", "ipad", "backup"]
         case .advanced: ["advanced", "default", "tracker", "keychain", "storage", "reset"]
         }
     }
@@ -99,7 +106,7 @@ enum SettingsSection: Hashable, Identifiable {
             case .intelligence: [.aiProvider]
             case .trackers: [.jira, .linear, .customMCP(id: nil)]
             case .workspace: [.testing, .scenarios]
-            case .app: [.advanced]
+            case .app: [.sync, .advanced]
             }
         }
     }
@@ -109,7 +116,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .aiProvider: .intelligence
         case .jira, .linear, .customMCP: .trackers
         case .testing, .scenarios: .workspace
-        case .advanced: .app
+        case .sync, .advanced: .app
         }
     }
 

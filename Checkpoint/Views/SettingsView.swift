@@ -7,6 +7,7 @@ import SwiftUI
 struct SettingsView: View {
     static let windowID = "settings"
     @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var sync
     @State private var selection: SettingsSection? = .aiProvider
     @State private var query = ""
 
@@ -58,6 +59,7 @@ struct SettingsView: View {
         case .aiProvider: settings.isLLMConfigured ? .ok : .warn
         case .jira: settings.isAtlassianConfigured ? .ok : .none
         case .linear: settings.isLinearConfigured ? .ok : .none
+        case .sync: sync.status.isError ? .warn : (sync.mode == .off ? .none : .ok)
         case .customMCP, .testing, .scenarios, .advanced: .none
         }
     }
@@ -76,6 +78,7 @@ struct SettingsView: View {
             }
         case .testing: TestingPane()
         case .scenarios: ScenariosPane()
+        case .sync: SyncPane()
         case .advanced: AdvancedPane()
         }
     }
