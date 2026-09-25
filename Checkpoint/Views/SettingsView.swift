@@ -5,6 +5,7 @@ import SwiftUI
 ///
 /// To add an area: add a `SettingsSection` case and its pane in `detail(for:)`.
 struct SettingsView: View {
+    static let windowID = "settings"
     @Environment(AppSettings.self) private var settings
     @State private var selection: SettingsSection? = .aiProvider
     @State private var query = ""

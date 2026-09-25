@@ -137,6 +137,7 @@ struct Backdrop: View {
 struct EmptyStateView: View {
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 16) {
@@ -152,7 +153,9 @@ struct EmptyStateView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 420)
             if !settings.isConfigured {
-                SettingsLink {
+                Button {
+                    openWindow(id: SettingsView.windowID)
+                } label: {
                     Label("Connect an AI provider + your tracker", systemImage: "key.fill")
                 }
                 .buttonStyle(.glassProminent)
