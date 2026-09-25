@@ -9,136 +9,20 @@ struct PlanView: View {
     @Environment(TicketInspector.self) private var inspector
     @State private var filter: Filter = .todo
     @State private var pane: Pane = .plan
-    /// Quick lenses over the task list (IDEA-001/002).
+    /// Task-list lenses: the smoke subset and P0-only.
     @State private var smokeOnly = false
     @State private var p0Only = false
-    /// Keyboard-first testing (IDEA-029).
+    /// Keyboard-first testing: j/k move, space ticks, f/b/n.
     @State private var selectedTaskID: String?
     @State private var noteTaskID: String?
     @FocusState private var listFocused: Bool
-
-    enum Pane: String, CaseIterable { case plan = "Plan", research = "Research", chat = "Chat" }
     @State private var copied = false
 
+    enum Pane: String, CaseIterable { case plan = "Plan", research = "Research", chat = "Chat" }
     enum Filter: String, CaseIterable { case todo = "To do", all = "All", failed = "Failed", blocked = "Blocked" }
 
     private var plan: TestPlan { saved.plan }
-
-    /// Moves the keyboard selection within the currently visible tasks.
-    private func moveSelection(_ step: Int) {
-        let ids = visibleTasks.map(\.id)
-        guard !ids.isEmpty else { return }
-        let i = selectedTaskID.flatMap(ids.firstIndex(of:)) ?? (step > 0 ? -1 : 0)
-        selectedTaskID = ids[min(max(i + step, 0), ids.count - 1)]
-    }
-
-    private var taskListAccessory: some View {
-        HStack(spacing: 8) {
-            LensToggle(label: "Smoke", icon: "flame", on: $smokeOnly)
-                .help("5-minute smoke subset: highest-risk tasks first (IDEA-001)")
-            LensToggle(label: "P0", icon: "exclamationmark.triangle", on: $p0Only)
-                .help("High-blast-radius tasks only (IDEA-002)")
-            RegenMenu(section: .tasks, saved: saved)
-            Picker("", selection: $filter) {
-                ForEach(Filter.allCases, id: \.self) { Text($0.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 250)
-        }
-    }
-
-    /// Keyboard-focusable task list (IDEA-029).
-    private var taskList: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ForEach(groupedTasks, id: \.key) { group in
-                VStack(alignment: .leading, spacing: 8) {
-                    if groupedTasks.count > 1 || group.key != plan.ticket.key {
-                        TicketTag(key: group.key, title: title(for: group.key), url: url(for: group.key))
-                    }
-                    ForEach(group.tasks) { task in
-                        TaskRow(task: task, saved: saved,
-                                selected: selectedTaskID == task.id,
-                                forceNote: noteTaskID == task.id,
-                                onNoteDone: { if noteTaskID == task.id { noteTaskID = nil } })
-                    }
-                }
-            }
-            Text("Click the list, then j/k move · space tick · f fail · b blocked · n note")
-                .font(.caption).foregroundStyle(.tertiary)
-        }
-        .focusable()
-        .focused($listFocused)
-        .onKeyPress("j", action: { moveSelection(1); return .handled })
-        .onKeyPress("k", action: { moveSelection(-1); return .handled })
-        .onKeyPress(.space, action: { toggleSelected(); return .handled })
-        .onKeyPress("f", action: { verdictSelected(.fail); return .handled })
-        .onKeyPress("b", action: { verdictSelected(.blocked); return .handled })
-        .onKeyPress("n", action: {
-            if let id = selectedTaskID ?? visibleTasks.first?.id { noteTaskID = id }
-            return .handled
-        })
-    }
-
-    private func toggleSelected() {
-        withAnimation(.smooth) { store.toggle(selectedTaskID ?? visibleTasks.first?.id ?? "", in: saved.id) }
-    }
-
-    private func verdictSelected(_ v: TaskVerdict) {
-        let id = selectedTaskID ?? visibleTasks.first?.id ?? ""
-        guard !id.isEmpty else { return }
-        let detail = v == .fail ? (saved.failed[id] ?? "") : (saved.blocked[id] ?? "")
-        withAnimation(.smooth) { store.setVerdict(v, for: id, in: saved.id, detail: detail) }
-    }
-
-    private enum ExportFormat { case markdown, html }
-
-    /// Save panel → writes the file; HTML opens in the browser afterwards.
-    private func export(_ format: ExportFormat) {
-        let panel = NSSavePanel()
-        let ext = format == .html ? "html" : "md"
-        panel.nameFieldStringValue = "\(plan.ticket.key) test plan.\(ext)"
-        panel.allowedContentTypes = [format == .html ? .html : UTType(filenameExtension: "md") ?? .plainText]
-        panel.canCreateDirectories = true
-        panel.message = format == .html ? "A styled, self-contained page you can open, share or print." : "Markdown you can paste into Jira, GitHub or docs."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let ctx = PlanExporter.Context(saved: saved, smokeOnly: smokeOnly)
-        let text = format == .html ? PlanExporter.html(ctx) : PlanExporter.markdown(ctx)
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
-            if format == .html { NSWorkspace.shared.open(url) } else { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-        } catch {
-            store.error = "Couldn't save: \(error.localizedDescription)"
-        }
-    }
     private var detailsOpen: Bool { inspector.currentKey == plan.ticket.key.uppercased() }
-
-    private var visibleTasks: [TestPlan.Task] {
-        var list: [TestPlan.Task]
-        switch filter {
-        case .all: list = plan.tasks
-        case .todo: list = plan.tasks.filter { saved.verdict(of: $0.id) == .todo }
-        case .failed: list = plan.tasks.filter { saved.verdict(of: $0.id) == .fail }
-        case .blocked: list = plan.tasks.filter { saved.verdict(of: $0.id) == .blocked }
-        }
-        if p0Only { list = list.filter { $0.priority == .high } }
-        if smokeOnly {
-            let ids = Set(plan.smokeSubset.map(\.id))
-            list = list.filter { ids.contains($0.id) }
-        }
-        return list
-    }
-
-    /// Group tasks by ticket so epics read child-by-child, keeping plan order.
-    private var groupedTasks: [(key: String, tasks: [TestPlan.Task])] {
-        var order: [String] = []
-        var groups: [String: [TestPlan.Task]] = [:]
-        for t in visibleTasks {
-            if groups[t.ticketKey] == nil { order.append(t.ticketKey) }
-            groups[t.ticketKey, default: []].append(t)
-        }
-        return order.map { ($0, groups[$0]!) }
-    }
 
     var body: some View {
         ScrollView {
@@ -147,20 +31,9 @@ struct PlanView: View {
 
                 if pane == .plan {
                     if let diff = store.planDiff, diff.planID == saved.id {
-                        HStack(spacing: 10) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .foregroundStyle(.blue)
-                            Text("Updated since last run: \(diff.summary)")
-                                .font(.callout)
-                            Spacer(minLength: 8)
-                            Button("Dismiss") { store.clearDiff() }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+                        diffBanner(diff.summary)
                     }
+
                     if !plan.preconditions.isEmpty {
                         Section(title: "Before you start", icon: "wrench.and.screwdriver") {
                             BulletList(items: plan.preconditions)
@@ -169,8 +42,8 @@ struct PlanView: View {
 
                     if !plan.acceptanceCriteria.isEmpty {
                         Section(title: "Acceptance criteria", icon: "target", accessory: {
-                        RegenMenu(section: .ac, saved: saved)
-                    }) {
+                            SectionMenu(saved: saved, section: .ac)
+                        }) {
                             VStack(alignment: .leading, spacing: 10) {
                                 ForEach(plan.acceptanceCriteria) { ac in
                                     CriterionRow(criterion: ac, state: coverage(of: ac),
@@ -184,11 +57,11 @@ struct PlanView: View {
                         }
                     }
 
-                    Section(title: "Test tasks", icon: "checklist", accessory: {
-                        taskListAccessory
-                    }) {
+                    Section(title: "Test tasks", icon: "checklist", accessory: { taskListAccessory }) {
+                        if smokeOnly || p0Only { lensBar }
                         if visibleTasks.isEmpty {
-                            Label("All done — nice.", systemImage: "party.popper")
+                            Label(filter == .todo ? "All done — nice." : "Nothing here.",
+                                  systemImage: filter == .todo ? "party.popper" : "tray")
                                 .foregroundStyle(.secondary)
                                 .padding(.vertical, 8)
                         }
@@ -209,14 +82,11 @@ struct PlanView: View {
 
                     if !plan.edgeCases.isEmpty {
                         Section(title: "Edge cases worth poking", icon: "exclamationmark.triangle", accessory: {
-                            HStack(spacing: 8) {
-                                RegenMenu(section: .edgeCases, saved: saved)
-                                Button("Add more edge cases", systemImage: "plus.circle") {
+                            SectionMenu(saved: saved, section: .edgeCases) {
+                                Button("Add more edge-case tasks", systemImage: "plus.circle") {
                                     withAnimation(.smooth) { store.boostEdgeCases(in: saved.id) }
                                 }
-                                .buttonStyle(.glass)
-                                .controlSize(.small)
-                                .help("Append curated negative-path tasks, skipping near-duplicates (IDEA-017)")
+                                .help("Appends curated negative-path tasks, skipping near-duplicates")
                             }
                         }) {
                             BulletList(items: plan.edgeCases)
@@ -247,107 +117,130 @@ struct PlanView: View {
             .environment(\.ticketTracker, saved.tracker)
             .frame(maxWidth: 820, alignment: .leading)
             .padding(.horizontal, 28)
-            .padding(.top, 140)
+            .padding(.top, 92)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
         .glassScrollIndicator()
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("View", selection: $pane) {
-                    Label("Plan", systemImage: "checklist").tag(Pane.plan)
-                    Label("Research (\(saved.research.filter { $0.kind != .status }.count))", systemImage: "magnifyingglass")
-                        .tag(Pane.research)
-                    Label("Chat\(saved.chat.isEmpty ? "" : " (\(saved.chat.count))")", systemImage: "bubble.left.and.text.bubble.right")
-                        .tag(Pane.chat)
-                }
-                .pickerStyle(.segmented)
-                .labelStyle(.titleOnly)
-                .help("Switch between the test plan and the research that produced it")
+        .toolbar { toolbar }
+    }
+
+    // MARK: Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("View", selection: $pane) {
+                Label("Plan", systemImage: "checklist").tag(Pane.plan)
+                Label("Research (\(saved.research.filter { $0.kind != .status }.count))", systemImage: "magnifyingglass")
+                    .tag(Pane.research)
+                Label(saved.chat.isEmpty ? "Chat" : "Chat (\(saved.chat.count))", systemImage: "bubble.left.and.text.bubble.right")
+                    .tag(Pane.chat)
             }
-            ToolbarItemGroup {
+            .pickerStyle(.segmented)
+            .labelStyle(.titleOnly)
+            .help("The test plan, the research behind it, and follow-up questions")
+        }
+        ToolbarItemGroup {
+            Menu {
+                Button("Copy as Markdown", systemImage: "doc.on.doc") {
+                    copy(PlanExporter.markdown(.init(saved: saved, smokeOnly: smokeOnly)))
+                }
+                Divider()
+                Button("Save as Markdown…", systemImage: "doc.text") { export(.markdown) }
+                Button("Save as HTML Page…", systemImage: "safari") { export(.html) }
+                Divider()
+                Button("Copy Playwright Skeleton", systemImage: "chevron.left.forwardslash.chevron.right") {
+                    copy(PlanExporter.automation(.init(saved: saved), framework: .playwright))
+                }
+                Button("Copy XCTest Skeleton", systemImage: "hammer") {
+                    copy(PlanExporter.automation(.init(saved: saved), framework: .xctest))
+                }
+            } label: {
+                Label(copied ? "Copied" : "Export", systemImage: copied ? "checkmark" : "square.and.arrow.up")
+            }
+            .help("Copy or save this plan, or start an automation suite from it")
+
+            if saved.preset == "quick" {
                 Menu {
-                    Button("Copy as Markdown", systemImage: "doc.on.doc") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(PlanExporter.markdown(.init(saved: saved, smokeOnly: smokeOnly)), forType: .string)
-                        copied = true
-                        Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
-                    }
-                    Divider()
-                    Button("Copy Playwright skeleton", systemImage: "chevron.left.forwardslash.chevron.right") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(PlanExporter.automation(.init(saved: saved), framework: .playwright), forType: .string)
-                        copied = true
-                        Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
-                    }
-                    Button("Copy XCTest skeleton", systemImage: "checkmark.rectangle") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(PlanExporter.automation(.init(saved: saved), framework: .xctest), forType: .string)
-                        copied = true
-                        Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
-                    }
-                    Divider()
-                    Button("Save as Markdown…", systemImage: "doc.text") { export(.markdown) }
-                    Button("Save as HTML Page…", systemImage: "safari") { export(.html) }
+                    Button("Upgrade to Deep", systemImage: "arrow.up.circle", action: rerunDeep)
+                        .help("Re-run on your best model and effort")
                 } label: {
-                    Label(copied ? "Copied" : "Export", systemImage: copied ? "checkmark" : "square.and.arrow.up")
+                    Label("Re-run", systemImage: "arrow.clockwise")
+                } primaryAction: {
+                    rerun()
                 }
-                .help("Copy or save this plan as Markdown or a styled HTML page")
-                Menu {
-                    Button(saved.pinned ? "Unpin" : "Pin", systemImage: saved.pinned ? "pin.slash" : "pin") {
-                        store.togglePin(saved.id)
-                    }
-                    Button(saved.archived ? "Restore from archive" : "Archive", systemImage: saved.archived ? "tray.and.arrow.down" : "archivebox") {
-                        store.toggleArchive(saved.id)
-                    }
-                    Divider()
-                    if saved.dueDate == nil {
-                        Button("Remind me tomorrow", systemImage: "bell") {
-                            store.setDueDate(Calendar.current.date(byAdding: .day, value: 1, to: .now), for: saved.id)
-                        }
-                        Button("Remind me in a week", systemImage: "bell.badge") {
-                            store.setDueDate(Calendar.current.date(byAdding: .day, value: 7, to: .now), for: saved.id)
-                        }
-                    } else {
-                        Button("Clear reminder", systemImage: "bell.slash", role: .destructive) {
-                            store.setDueDate(nil, for: saved.id)
-                        }
-                    }
-                } label: {
-                    Label("Organise", systemImage: "folder.badge.gearshape")
+                .help("Re-run this quick plan, or upgrade it to a deep one")
+            } else {
+                Button("Re-run", systemImage: "arrow.clockwise", action: rerun)
+            }
+
+            if let url = URL(string: plan.ticket.url), url.scheme != nil {
+                Button("Open in \(saved.tracker.label)", systemImage: "arrow.up.right.square") {
+                    NSWorkspace.shared.open(url)
                 }
-                .help("Pin, archive, tags, reminder")
-                Button("Re-run", systemImage: "arrow.clockwise") {
-                    if saved.preset == "quick" {
-                        let q = PlanStore.quickOverrides(settings: settings)
-                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker,
-                                      modelOverride: q.model, effortOverride: q.effort, settings: settings)
-                    } else {
-                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
-                    }
-                }
-                if saved.preset == "quick" {
-                    Button("Upgrade to deep", systemImage: "arrow.up.circle") {
-                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
-                    }
-                    .help("Re-run on your best model and effort")
-                }
-                Button("Mini checklist", systemImage: "rectangle.on.rectangle") {
+            }
+
+            Menu {
+                Button("Mini Checklist", systemImage: "rectangle.on.rectangle") {
                     MiniPanelController.shared.toggle(with: store)
                 }
-                .help("Floating always-on-top checklist for testing in a browser")
-                if let url = URL(string: plan.ticket.url), url.scheme != nil {
-                    Button("Open in \(saved.tracker.label)", systemImage: "arrow.up.right.square") {
-                        NSWorkspace.shared.open(url)
+                .help("A small always-on-top checklist for testing in a browser")
+                Divider()
+                Button(saved.pinned ? "Unpin" : "Pin", systemImage: saved.pinned ? "pin.slash" : "pin") {
+                    store.togglePin(saved.id)
+                }
+                Menu("Remind Me", systemImage: "bell") {
+                    Button("Tomorrow") { remind(days: 1) }
+                    Button("In 3 Days") { remind(days: 3) }
+                    Button("Next Week") { remind(days: 7) }
+                    if saved.dueDate != nil {
+                        Divider()
+                        Button("Clear Reminder", role: .destructive) { store.setDueDate(nil, for: saved.id) }
                     }
                 }
-                Button(detailsOpen ? "Hide ticket details" : "Show ticket details", systemImage: "sidebar.right") {
-                    withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
+                Button(saved.archived ? "Restore from Archive" : "Archive",
+                       systemImage: saved.archived ? "tray.and.arrow.up" : "archivebox") {
+                    store.toggleArchive(saved.id)
                 }
-                .keyboardShortcut("i", modifiers: .command)
+            } label: {
+                Label("More", systemImage: "ellipsis.circle")
             }
+            .help("Mini checklist, pin, reminders, archive")
+
+            Button(detailsOpen ? "Hide ticket details" : "Show ticket details", systemImage: "sidebar.right") {
+                withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
+            }
+            .keyboardShortcut("i", modifiers: .command)
         }
     }
+
+    private func rerun() {
+        if saved.preset == "quick" {
+            let q = PlanStore.quickOverrides(settings: settings)
+            store.analyze(plan.ticket.key, mode: saved.mode, tracker: saved.tracker,
+                          modelOverride: q.model, effortOverride: q.effort, settings: settings)
+        } else {
+            rerunDeep()
+        }
+    }
+
+    private func rerunDeep() {
+        store.analyze(plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
+    }
+
+    private func remind(days: Int) {
+        store.setDueDate(Calendar.current.date(byAdding: .day, value: days, to: .now), for: saved.id)
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = true
+        Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+    }
+
+    // MARK: Header
 
     private var header: some View {
         HStack(alignment: .top, spacing: 20) {
@@ -356,9 +249,8 @@ struct PlanView: View {
                     TicketKeyButton(key: plan.ticket.key, font: .headline.monospaced())
                     ModeBadge(mode: saved.mode)
                     if saved.tracker == .linear { Chip(text: "Linear", tint: .purple) }
-                    if saved.template != "auto" { Chip(text: "Template: \(saved.template.capitalized)", tint: .orange) }
                     if saved.preset == "quick" { Chip(text: "Quick", tint: .teal) }
-                    if let mins = plan.estimatedMinutes { Chip(text: "⏱ ~\(mins) min") }
+                    if saved.template != "auto" { Chip(text: saved.template.capitalized, tint: .orange) }
                     Spacer(minLength: 8)
                     Button {
                         withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
@@ -378,46 +270,195 @@ struct PlanView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                if saved.failedCount > 0 || saved.blockedCount > 0 {
-                    HStack(spacing: 12) {
-                        if saved.failedCount > 0 {
-                            Label("\(saved.failedCount) failed", systemImage: "xmark.circle.fill")
-                                .font(.callout.weight(.medium)).foregroundStyle(.red)
-                        }
-                        if saved.blockedCount > 0 {
-                            Label("\(saved.blockedCount) blocked", systemImage: "exclamationmark.circle.fill")
-                                .font(.callout.weight(.medium)).foregroundStyle(.orange)
-                        }
-                    }
-                }
-                OrganiseRow(saved: saved)
+                HeaderMeta(saved: saved)
+                    .padding(.top, 2)
             }
             Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 10) {
-                HStack(spacing: 16) {
-                    MetricRing(value: saved.progress, label: "tested",
-                               text: "\(saved.tasksDone)/\(plan.tasks.count)", tint: .accentColor)
-                    if !plan.acceptanceCriteria.isEmpty {
-                        MetricRing(value: saved.criteriaProgress, label: "AC met",
-                                   text: "\(saved.criteriaMet)/\(plan.acceptanceCriteria.count)", tint: .teal)
-                    }
-                }
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
-                    Button {
-                        withAnimation(.smooth) { store.toggleTimer(for: saved.id) }
-                    } label: {
-                        Label("\(PlanStore.formatDuration(store.elapsedTesting(saved))) · \(saved.timerRunningSince != nil ? "stop" : "start")",
-                              systemImage: saved.timerRunningSince != nil ? "pause.circle.fill" : "timer")
-                            .font(.callout.weight(.medium))
-                    }
-                    .buttonStyle(.glass)
-                    .controlSize(.small)
-                    .help("Track time spent testing this plan (IDEA-025)")
+            HStack(spacing: 16) {
+                MetricRing(value: saved.progress, label: "tested",
+                           text: "\(saved.tasksDone)/\(plan.tasks.count)", tint: .accentColor)
+                if !plan.acceptanceCriteria.isEmpty {
+                    MetricRing(value: saved.criteriaProgress, label: "AC met",
+                               text: "\(saved.criteriaMet)/\(plan.acceptanceCriteria.count)", tint: .teal)
                 }
             }
         }
         .padding(24)
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
+    }
+
+    private func diffBanner(_ summary: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.blue)
+            Text("Updated since the last run: \(summary)").font(.callout)
+            Spacer(minLength: 8)
+            Text("New and changed tasks are outlined.").font(.caption).foregroundStyle(.secondary)
+            Button {
+                withAnimation(.smooth) { store.clearDiff() }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.tertiary)
+            .help("Dismiss")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .glassEffect(.regular.tint(.blue.opacity(0.12)), in: .rect(cornerRadius: 16))
+    }
+
+    // MARK: Tasks
+
+    private var taskListAccessory: some View {
+        HStack(spacing: 10) {
+            Menu {
+                Toggle(isOn: $smokeOnly.animation(.smooth)) {
+                    Label("Smoke Subset", systemImage: "flame")
+                }
+                Toggle(isOn: $p0Only.animation(.smooth)) {
+                    Label("P0 Only", systemImage: "exclamationmark.triangle")
+                }
+                Divider()
+                Button("Regenerate Tasks", systemImage: "arrow.triangle.2.circlepath") {
+                    store.regenerate(section: .tasks, in: saved.id, settings: settings)
+                }
+                .disabled(store.regenerating != nil || store.chatBusyID != nil)
+                Divider()
+                Text("Keys: j/k move · space tick · f fail · b blocked · n note")
+            } label: {
+                if store.regenerating == saved.id + ":tasks" {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: smokeOnly || p0Only
+                          ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(smokeOnly || p0Only ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                }
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Smoke subset, P0 only, regenerate — click the list to use the keyboard")
+
+            Picker("", selection: $filter) {
+                ForEach(Filter.allCases, id: \.self) { Text($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+    }
+
+    /// Shown only while a lens narrows the list, so it's obvious why tasks are missing.
+    private var lensBar: some View {
+        HStack(spacing: 8) {
+            if smokeOnly { LensChip(label: "Smoke subset", icon: "flame") { smokeOnly = false } }
+            if p0Only { LensChip(label: "P0 only", icon: "exclamationmark.triangle") { p0Only = false } }
+            let mins = visibleTasks.compactMap(\.estimateMin).reduce(0, +)
+            if mins > 0 {
+                Text("about \(mins) min").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var taskList: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach(groupedTasks, id: \.key) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    if groupedTasks.count > 1 || group.key != plan.ticket.key {
+                        TicketTag(key: group.key, title: title(for: group.key), url: url(for: group.key))
+                    }
+                    ForEach(group.tasks) { task in
+                        TaskRow(task: task, saved: saved,
+                                selected: listFocused && selectedTaskID == task.id,
+                                forceNote: noteTaskID == task.id,
+                                onNoteDone: { if noteTaskID == task.id { noteTaskID = nil } })
+                    }
+                }
+            }
+        }
+        .focusable()
+        .focusEffectDisabled()
+        .focused($listFocused)
+        .onKeyPress("j") { moveSelection(1); return .handled }
+        .onKeyPress("k") { moveSelection(-1); return .handled }
+        .onKeyPress(.downArrow) { moveSelection(1); return .handled }
+        .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
+        .onKeyPress(.space) { toggleSelected(); return .handled }
+        .onKeyPress("f") { verdictSelected(.fail); return .handled }
+        .onKeyPress("b") { verdictSelected(.blocked); return .handled }
+        .onKeyPress("n") {
+            if let id = selectedTaskID ?? visibleTasks.first?.id { noteTaskID = id }
+            return .handled
+        }
+    }
+
+    private func moveSelection(_ step: Int) {
+        let ids = visibleTasks.map(\.id)
+        guard !ids.isEmpty else { return }
+        let i = selectedTaskID.flatMap(ids.firstIndex(of:)) ?? (step > 0 ? -1 : 0)
+        selectedTaskID = ids[min(max(i + step, 0), ids.count - 1)]
+    }
+
+    private func toggleSelected() {
+        guard let id = selectedTaskID ?? visibleTasks.first?.id else { return }
+        withAnimation(.smooth) { store.toggle(id, in: saved.id) }
+    }
+
+    private func verdictSelected(_ v: TaskVerdict) {
+        guard let id = selectedTaskID ?? visibleTasks.first?.id else { return }
+        let detail = v == .fail ? (saved.failed[id] ?? "") : (saved.blocked[id] ?? "")
+        withAnimation(.smooth) { store.setVerdict(v, for: id, in: saved.id, detail: detail) }
+    }
+
+    private var visibleTasks: [TestPlan.Task] {
+        var list: [TestPlan.Task]
+        switch filter {
+        case .all: list = plan.tasks
+        case .todo: list = plan.tasks.filter { saved.verdict(of: $0.id) == .todo }
+        case .failed: list = plan.tasks.filter { saved.verdict(of: $0.id) == .fail }
+        case .blocked: list = plan.tasks.filter { saved.verdict(of: $0.id) == .blocked }
+        }
+        if p0Only { list = list.filter { $0.risk == "P0" } }
+        if smokeOnly {
+            let ids = Set(plan.smokeSubset.map(\.id))
+            list = list.filter { ids.contains($0.id) }
+        }
+        return list
+    }
+
+    /// Group tasks by ticket so epics read child-by-child, keeping plan order.
+    private var groupedTasks: [(key: String, tasks: [TestPlan.Task])] {
+        var order: [String] = []
+        var groups: [String: [TestPlan.Task]] = [:]
+        for t in visibleTasks {
+            if groups[t.ticketKey] == nil { order.append(t.ticketKey) }
+            groups[t.ticketKey, default: []].append(t)
+        }
+        return order.map { ($0, groups[$0]!) }
+    }
+
+    // MARK: Export
+
+    private enum ExportFormat { case markdown, html }
+
+    /// Save panel → writes the file; HTML opens in the browser afterwards.
+    private func export(_ format: ExportFormat) {
+        let panel = NSSavePanel()
+        let ext = format == .html ? "html" : "md"
+        panel.nameFieldStringValue = "\(plan.ticket.key) test plan.\(ext)"
+        panel.allowedContentTypes = [format == .html ? .html : UTType(filenameExtension: "md") ?? .plainText]
+        panel.canCreateDirectories = true
+        panel.message = format == .html ? "A styled, self-contained page you can open, share or print." : "Markdown you can paste into Jira, GitHub or docs."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let ctx = PlanExporter.Context(saved: saved, smokeOnly: smokeOnly)
+        let text = format == .html ? PlanExporter.html(ctx) : PlanExporter.markdown(ctx)
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            if format == .html { NSWorkspace.shared.open(url) } else { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        } catch {
+            store.error = "Couldn't save: \(error.localizedDescription)"
+        }
     }
 
     private func coverage(of ac: TestPlan.Criterion) -> CriterionRow.Coverage {
@@ -469,6 +510,166 @@ private struct Section<Content: View, Accessory: View>: View {
     }
 }
 
+/// Quiet `⋯` menu in a section header: regenerate that section, plus any extras.
+/// Ticks on items that survive a regenerate are kept.
+private struct SectionMenu<Extra: View>: View {
+    let saved: SavedPlan
+    let section: PlanStore.RevisionSection
+    @ViewBuilder var extra: Extra
+    @Environment(PlanStore.self) private var store
+    @Environment(AppSettings.self) private var settings
+
+    init(saved: SavedPlan, section: PlanStore.RevisionSection, @ViewBuilder extra: () -> Extra = { EmptyView() }) {
+        self.saved = saved
+        self.section = section
+        self.extra = extra()
+    }
+
+    private var busy: Bool { store.regenerating == saved.id + ":\(section.rawValue)" }
+
+    var body: some View {
+        if busy {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Regenerating…").font(.caption).foregroundStyle(.secondary)
+            }
+        } else {
+            Menu {
+                Button("Regenerate \(section.label.capitalized)", systemImage: "arrow.triangle.2.circlepath") {
+                    store.regenerate(section: section, in: saved.id, settings: settings)
+                }
+                .disabled(store.regenerating != nil || store.chatBusyID != nil)
+                extra
+            } label: {
+                Image(systemName: "ellipsis.circle").foregroundStyle(.secondary)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Regenerate just the \(section.label) — ticks on surviving items are kept")
+        }
+    }
+}
+
+/// One quiet line under the summary: estimate, timer, verdict counts, tags and reminder.
+private struct HeaderMeta: View {
+    let saved: SavedPlan
+    @Environment(PlanStore.self) private var store
+    @State private var editingTags = false
+
+    var body: some View {
+        FlowLayout(spacing: 12) {
+            if let mins = saved.plan.estimatedMinutes {
+                Label("about \(mins) min", systemImage: "clock")
+                    .help("Rough manual-testing estimate for the whole plan")
+            }
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let running = saved.timerRunningSince != nil
+                Button {
+                    withAnimation(.smooth) { store.toggleTimer(for: saved.id) }
+                } label: {
+                    Label(PlanStore.formatDuration(store.elapsedTesting(saved)),
+                          systemImage: running ? "pause.circle.fill" : "stopwatch")
+                        .monospacedDigit()
+                        .foregroundStyle(running ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background { if running { Capsule().fill(.tint.opacity(0.12)) } }
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+                .help(running ? "Pause the testing timer" : "Time how long testing this plan takes")
+            }
+            if saved.failedCount > 0 {
+                Label("\(saved.failedCount) failed", systemImage: "xmark.circle.fill").foregroundStyle(.red)
+            }
+            if saved.blockedCount > 0 {
+                Label("\(saved.blockedCount) blocked", systemImage: "exclamationmark.circle.fill").foregroundStyle(.orange)
+            }
+            if let due = saved.dueDate {
+                Label(due.formatted(.relative(presentation: .named)), systemImage: saved.isOverdue ? "bell.badge.fill" : "bell")
+                    .foregroundStyle(saved.isOverdue ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                    .help("Reminder: \(due.formatted(date: .abbreviated, time: .shortened))")
+            }
+            ForEach(saved.tags.sorted(), id: \.self) { tag in
+                Text(tag)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(.quaternary, in: .capsule)
+            }
+            Button {
+                editingTags = true
+            } label: {
+                Label(saved.tags.isEmpty ? "Add tag" : "Edit tags", systemImage: "tag")
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $editingTags, arrowEdge: .bottom) {
+                TagEditor(saved: saved) { editingTags = false }
+            }
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    }
+}
+
+private struct TagEditor: View {
+    let saved: SavedPlan
+    let done: () -> Void
+    @Environment(PlanStore.self) private var store
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Tags").font(.headline)
+            TextField("Tags", text: $text, prompt: Text("sprint-12, needs-qa"))
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(save)
+            Text("Comma separated. Smart folders can filter on them.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Save", action: save)
+                    .buttonStyle(.glassProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 280)
+        .onAppear { text = saved.tags.sorted().joined(separator: ", ") }
+    }
+
+    private func save() {
+        store.setTags(Set(text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }),
+                      for: saved.id)
+        done()
+    }
+}
+
+/// Removable pill showing an active task-list lens.
+private struct LensChip: View {
+    let label: String
+    let icon: String
+    let remove: () -> Void
+
+    var body: some View {
+        Button {
+            withAnimation(.smooth, remove)
+        } label: {
+            HStack(spacing: 5) {
+                Label(label, systemImage: icon)
+                Image(systemName: "xmark").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+            }
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .glassEffect(.regular.tint(Color.accentColor.opacity(0.2)).interactive(), in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .help("Turn off")
+    }
+}
+
 private struct TaskRow: View {
     let task: TestPlan.Task
     let saved: SavedPlan
@@ -483,32 +684,31 @@ private struct TaskRow: View {
     @State private var noteText = ""
     @State private var reportingBug = false
     @State private var showingWhy = false
+    @State private var dropTargeted = false
 
     private var verdict: TaskVerdict { saved.verdict(of: task.id) }
     private var isDone: Bool { verdict == .pass }
+    private var note: String? { saved.notes[task.id].flatMap { $0.isEmpty ? nil : $0 } }
+    private var attachments: [String] { saved.evidence[task.id] ?? [] }
 
-    /// Derived rationale from priority, coverage and sources (IDEA-086 V1).
+    /// Why the plan includes this task, from its risk, coverage and sources.
     private var whyExplanation: String {
-        var s = ""
-        switch task.priority {
-        case .high: s += "This is a P0 check — it guards the change's main blast radius. "
-        case .medium: s += "This is a P1 check — worth running in a normal pass. "
-        case .low: s += "This is a P2 check — run it when time allows. "
+        var s: String
+        switch task.risk {
+        case "P0": s = "P0: it guards the change's main blast radius, so run it first. "
+        case "P1": s = "P1: worth running in a normal pass. "
+        default: s = "P2: run it when time allows. "
         }
-        if task.covers.isEmpty {
-            s += "It isn't tied to a specific acceptance criterion — it covers the change generally. "
-        } else {
-            s += "It covers \(task.covers.joined(separator: ", ")). "
-        }
-        if task.sources.isEmpty {
-            s += "Source: \(task.ticketKey)."
-        } else {
-            s += "Drawn from " + task.sources.map { "\($0.ticketKey) (\($0.kind): \($0.ref))" }.joined(separator: ", ") + "."
-        }
+        s += task.covers.isEmpty
+            ? "It isn't tied to one acceptance criterion; it covers the change generally. "
+            : "It covers \(task.covers.joined(separator: ", ")). "
+        s += task.sources.isEmpty
+            ? "Source: \(task.ticketKey)."
+            : "Drawn from " + task.sources.map { "\($0.ticketKey) (\($0.kind): \($0.ref))" }.joined(separator: ", ") + "."
         return s
     }
 
-    /// Re-run highlight (IDEA-007): green = new task, orange = changed.
+    /// After a re-run: green outline = new task, orange = changed.
     private var diffMark: Color? {
         guard let d = store.planDiff, d.planID == saved.id else { return nil }
         if d.addedTasks.contains(task.id) { return .green }
@@ -516,17 +716,9 @@ private struct TaskRow: View {
         return nil
     }
 
-    /// Image/file picker for evidence (IDEA-022).
-    private func attachFiles() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.message = "Attach screenshots or files to “\(task.title)”."
-        guard panel.runModal() == .OK else { return }
-        withAnimation(.smooth) {
-            store.attachEvidence(panel.urls, planID: saved.id, taskID: task.id)
-        }
+    private var stroke: Color {
+        if dropTargeted { return .accentColor }
+        return diffMark ?? (selected ? .accentColor : .clear)
     }
 
     private var verdictColor: AnyShapeStyle {
@@ -549,7 +741,7 @@ private struct TaskRow: View {
                     .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
-            .help(verdict == .pass ? "Mark untested" : "Mark passed")
+            .help(verdict == .todo ? "Mark passed" : "Mark untested")
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -560,70 +752,12 @@ private struct TaskRow: View {
                     Spacer(minLength: 8)
                     if !task.area.isEmpty { Chip(text: task.area) }
                     RiskChip(risk: task.risk)
-                    if let mins = task.estimateMin {
-                        Chip(text: "⏱ ~\(mins) min")
-                            .help("Rough manual-testing estimate")
-                    }
-                    PriorityDot(priority: task.priority)
-                    Menu {
-                        ForEach(TaskVerdict.allCases) { v in
-                            Button {
-                                if v == .fail || v == .blocked {
-                                    detailText = v == .fail ? (saved.failed[task.id] ?? "") : (saved.blocked[task.id] ?? "")
-                                    verdictDraft = v
-                                } else {
-                                    withAnimation(.smooth) { store.setVerdict(v, for: task.id, in: saved.id) }
-                                }
-                            } label: {
-                                Label(v.label, systemImage: v.icon)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundStyle(.tertiary)
-                    }
-                    .menuStyle(.button)
-                    .buttonStyle(.plain)
-                    .help("Set outcome: pass, fail, blocked")
-                    .fixedSize()
-                    Button {
-                        showingWhy = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Why this task?")
-                    .fixedSize()
-                    .popover(isPresented: $showingWhy) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Why this task?").font(.headline)
-                            Text(whyExplanation)
-                                .font(.callout)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(16)
-                        .frame(width: 320)
-                    }
+                    actionsMenu
                 }
                 .contentShape(.rect)
                 .onTapGesture { withAnimation(.smooth) { expanded.toggle() } }
 
-                if verdict == .fail {
-                    Label(saved.failed[task.id]?.isEmpty == false ? saved.failed[task.id]! : "Failed — no detail yet",
-                          systemImage: "xmark.octagon.fill")
-                        .font(.callout).foregroundStyle(.red)
-                        .textSelection(.enabled)
-                    Button("Report bug…", systemImage: "ant") { reportingBug = true }
-                        .buttonStyle(.glass)
-                        .controlSize(.small)
-                } else if verdict == .blocked {
-                    Label(saved.blocked[task.id]?.isEmpty == false ? saved.blocked[task.id]! : "Blocked — no reason yet",
-                          systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout).foregroundStyle(.orange)
-                        .textSelection(.enabled)
-                }
+                if verdict == .fail || verdict == .blocked { outcomeCallout }
 
                 if expanded && !isDone {
                     VStack(alignment: .leading, spacing: 5) {
@@ -649,123 +783,51 @@ private struct TaskRow: View {
                     .background(.green.opacity(0.08), in: .rect(cornerRadius: 10))
                     .textSelection(.enabled)
 
-                    if !task.testData.isEmpty {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Image(systemName: "tablecells").foregroundStyle(.blue)
-                            Text(task.testData.joined(separator: "  ·  "))
-                                .font(.callout.monospaced())
-                                .textSelection(.enabled)
-                            Spacer(minLength: 4)
-                            Button {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(task.testData.joined(separator: "\n"), forType: .string)
-                            } label: {
-                                Image(systemName: "doc.on.doc").font(.caption)
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.tertiary)
-                            .help("Copy sample data")
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.blue.opacity(0.07), in: .rect(cornerRadius: 10))
-                    }
+                    if !task.testData.isEmpty { testData }
+                }
 
-                    if !task.covers.isEmpty {
-                        Text("Covers " + task.covers.joined(separator: ", "))
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                if editingNote {
+                    noteEditor
+                } else if let note {
+                    Callout(icon: "note.text", tint: .yellow) {
+                        Text(note).font(.callout).textSelection(.enabled)
+                    } trailing: {
+                        Button("Edit") { noteText = note; editingNote = true }
+                            .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
                     }
-                    if !task.sources.isEmpty {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.turn.down.right").font(.caption2).foregroundStyle(.tertiary)
-                            ForEach(Array(task.sources.enumerated()), id: \.offset) { _, src in
-                                if src.ticketKey == "derived" {
-                                    Text("derived").font(.caption).foregroundStyle(.tertiary)
-                                } else {
-                                    TicketKeyButton(key: src.ticketKey, font: .caption.monospaced())
-                                        .foregroundStyle(.tertiary)
-                                        .help("\(src.kind): \(src.ref)")
-                                }
-                            }
-                        }
-                    }
-                    if let note = saved.notes[task.id], !editingNote {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Image(systemName: "note.text").foregroundStyle(.yellow)
-                            Text(note).font(.callout).textSelection(.enabled)
-                            Spacer(minLength: 4)
-                            Button("Edit") { noteText = note; editingNote = true }
-                                .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.yellow.opacity(0.08), in: .rect(cornerRadius: 10))
-                    }
-                    if editingNote {
-                        TextField("Testing note…", text: $noteText, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.callout)
-                            .lineLimit(2...5)
-                        HStack {
-                            Spacer()
-                            Button("Cancel") { editingNote = false; onNoteDone() }.buttonStyle(.plain).font(.caption)
-                            Button("Save note") {
-                                store.setNote(noteText, for: task.id, in: saved.id)
-                                editingNote = false
-                                onNoteDone()
-                            }
-                            .buttonStyle(.glassProminent).controlSize(.small)
-                        }
-                    }
-                    let attachments = saved.evidence[task.id] ?? []
-                    if !attachments.isEmpty || expanded {
-                        HStack(spacing: 8) {
-                            Image(systemName: "paperclip").foregroundStyle(.tertiary)
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(attachments, id: \.self) { name in
-                                        EvidenceThumb(name: name, saved: saved, taskID: task.id)
-                                    }
-                                    Button {
-                                        attachFiles()
-                                    } label: {
-                                        Label("Attach", systemImage: "plus.circle")
-                                            .font(.caption)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.secondary)
-                                    .help("Attach screenshots or files (IDEA-022)")
-                                }
-                            }
-                            if saved.notes[task.id] == nil && !editingNote {
-                                Spacer(minLength: 4)
-                                Button {
-                                    noteText = ""
-                                    editingNote = true
-                                } label: {
-                                    Image(systemName: "note.text.badge.plus").font(.caption)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.tertiary)
-                                .help("Add a testing note")
+                }
+
+                if !attachments.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(attachments, id: \.self) { name in
+                                EvidenceThumb(name: name, saved: saved, taskID: task.id)
                             }
                         }
                     }
                 }
+
+                if expanded && !isDone { metaLine }
             }
         }
         .padding(12)
         .background(.background.opacity(isDone ? 0.2 : 0.6), in: .rect(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).strokeBorder(diffMark ?? (selected ? .accentColor : .clear), lineWidth: selected ? 2 : 1.5)
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(stroke, lineWidth: selected || dropTargeted ? 2 : 1.5)
         }
-        .onChange(of: forceNote, perform: { on in
+        .dropDestination(for: URL.self) { urls, _ in
+            let files = urls.filter(\.isFileURL)
+            guard !files.isEmpty else { return false }
+            withAnimation(.smooth) { store.attachEvidence(files, planID: saved.id, taskID: task.id) }
+            return true
+        } isTargeted: { dropTargeted = $0 }
+        .onChange(of: forceNote) { _, on in
             if on {
                 noteText = saved.notes[task.id] ?? ""
                 editingNote = true
             }
-        })
+        }
         .sheet(item: $verdictDraft) { draft in
             VerdictSheet(title: draft == .blocked ? "Why is this blocked?" : "What actually happened?",
                          placeholder: draft == .blocked ? "e.g. waiting on staging deploy" : "e.g. card list was empty",
@@ -778,9 +840,173 @@ private struct TaskRow: View {
             BugReportSheet(task: task, saved: saved)
         }
     }
+
+    /// Everything you can do to a task, in one place.
+    private var actionsMenu: some View {
+        Menu {
+            Button("Pass", systemImage: TaskVerdict.pass.icon) { set(.pass) }
+            Button("Fail…", systemImage: TaskVerdict.fail.icon) { set(.fail) }
+            Button("Blocked…", systemImage: TaskVerdict.blocked.icon) { set(.blocked) }
+            if verdict != .todo {
+                Button("Reset to To Do", systemImage: TaskVerdict.todo.icon) { set(.todo) }
+            }
+            Divider()
+            Button(note == nil ? "Add Note" : "Edit Note", systemImage: "note.text") {
+                noteText = note ?? ""
+                editingNote = true
+            }
+            Button("Attach Evidence…", systemImage: "paperclip", action: attachFiles)
+            if verdict == .fail {
+                Button("Report Bug…", systemImage: "ant") { reportingBug = true }
+            }
+            Divider()
+            Button("Why This Task?", systemImage: "questionmark.circle") { showingWhy = true }
+        } label: {
+            Image(systemName: "ellipsis.circle").foregroundStyle(.tertiary)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Outcome, note, evidence — or drop files on the task")
+        .popover(isPresented: $showingWhy) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Why this task?").font(.headline)
+                Text(whyExplanation)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(width: 320)
+        }
+    }
+
+    private func set(_ v: TaskVerdict) {
+        if v == .fail || v == .blocked {
+            detailText = v == .fail ? (saved.failed[task.id] ?? "") : (saved.blocked[task.id] ?? "")
+            verdictDraft = v
+        } else {
+            withAnimation(.smooth) { store.setVerdict(v, for: task.id, in: saved.id) }
+        }
+    }
+
+    private var outcomeCallout: some View {
+        let failed = verdict == .fail
+        let detail = (failed ? saved.failed[task.id] : saved.blocked[task.id]) ?? ""
+        return Callout(icon: failed ? "xmark.octagon.fill" : "exclamationmark.triangle.fill",
+                       tint: failed ? .red : .orange) {
+            Text(detail.isEmpty ? (failed ? "Failed — no detail yet" : "Blocked — no reason yet") : detail)
+                .font(.callout)
+                .foregroundStyle(detail.isEmpty ? .secondary : .primary)
+                .textSelection(.enabled)
+        } trailing: {
+            if failed {
+                Button("Report bug…") { reportingBug = true }
+                    .buttonStyle(.plain).font(.caption.weight(.medium)).foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var testData: some View {
+        Callout(icon: "tablecells", tint: .blue) {
+            Text(task.testData.joined(separator: "  ·  "))
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
+        } trailing: {
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(task.testData.joined(separator: "\n"), forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc").font(.caption)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Copy sample data")
+        }
+    }
+
+    private var noteEditor: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            TextField("Testing note…", text: $noteText, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.callout)
+                .lineLimit(2...5)
+            HStack {
+                Button("Cancel") { editingNote = false; onNoteDone() }
+                    .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                Button("Save note") {
+                    store.setNote(noteText, for: task.id, in: saved.id)
+                    editingNote = false
+                    onNoteDone()
+                }
+                .buttonStyle(.glassProminent).controlSize(.small)
+            }
+        }
+    }
+
+    /// Covers · sources · estimate, on one caption line.
+    private var metaLine: some View {
+        let hasSources = task.sources.contains { $0.ticketKey != "derived" }
+        return HStack(spacing: 6) {
+            if !task.covers.isEmpty {
+                Text("Covers " + task.covers.joined(separator: ", "))
+            }
+            if hasSources {
+                if !task.covers.isEmpty { Text("·") }
+                Text("From")
+                ForEach(Array(task.sources.filter { $0.ticketKey != "derived" }.enumerated()), id: \.offset) { _, src in
+                    TicketKeyButton(key: src.ticketKey, font: .caption.monospaced())
+                        .help("\(src.kind): \(src.ref)")
+                }
+            }
+            if let mins = task.estimateMin {
+                if !task.covers.isEmpty || hasSources { Text("·") }
+                Text("about \(mins) min").help("Rough manual-testing estimate")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.tertiary)
+    }
+
+    private func attachFiles() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.message = "Attach screenshots or files to “\(task.title)”."
+        guard panel.runModal() == .OK else { return }
+        withAnimation(.smooth) { store.attachEvidence(panel.urls, planID: saved.id, taskID: task.id) }
+    }
 }
 
-/// Acceptance criterion with a checkbox: click the seal to mark it met.
+/// Tinted inline box used for expected results, notes, test data and outcomes.
+private struct Callout<Content: View, Trailing: View>: View {
+    let icon: String
+    let tint: Color
+    @ViewBuilder var content: Content
+    @ViewBuilder var trailing: Trailing
+
+    init(icon: String, tint: Color, @ViewBuilder content: () -> Content,
+         @ViewBuilder trailing: () -> Trailing = { EmptyView() }) {
+        self.icon = icon
+        self.tint = tint
+        self.content = content()
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: icon).foregroundStyle(tint)
+            content.fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            trailing
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(tint.opacity(0.08), in: .rect(cornerRadius: 10))
+    }
+}
 
 /// Acceptance criterion with a checkbox: click the seal to mark it met.
 /// While unmet, the seal hints at task coverage (uncovered / pending / ready).
@@ -1084,32 +1310,6 @@ private struct RiskChip: View {
     }
 }
 
-/// Regenerate-one-section button (IDEA-084). Ticks survive via ID merge.
-private struct RegenMenu: View {
-    let section: PlanStore.RevisionSection
-    let saved: SavedPlan
-    @Environment(PlanStore.self) private var store
-    @Environment(AppSettings.self) private var settings
-
-    private var busy: Bool { store.regenerating?.hasPrefix(saved.id) == true }
-
-    var body: some View {
-        Button {
-            store.regenerate(section: section, in: saved.id, settings: settings)
-        } label: {
-            if busy {
-                ProgressView().controlSize(.small)
-            } else {
-                Label("Regenerate \(section.label)", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(busy || store.chatBusyID != nil)
-        .help("Redo just \(section.label) — ticks on surviving items are kept")
-    }
-}
 
 /// Follow-up chat over a finished plan (IDEA-083).
 private struct ChatView: View {
@@ -1183,30 +1383,8 @@ private struct ChatView: View {
     }
 }
 
-/// Small on/off pill for the Smoke / P0 task-list lenses.
-private struct LensToggle: View {
-    let label: String
-    let icon: String
-    @Binding var on: Bool
-
-    var body: some View {
-        Button {
-            withAnimation(.smooth) { on.toggle() }
-        } label: {
-            Label(label, systemImage: icon)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .foregroundStyle(on ? .white : .secondary)
-                .background(on ? Color.accentColor.gradient : Color.clear.gradient,
-                            in: .capsule)
-                .overlay(Capsule().strokeBorder(on ? Color.clear : Color.secondary.opacity(0.4), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct Chip: View {    let text: String
+struct Chip: View {
+    let text: String
     var tint: Color = .secondary
 
     var body: some View {
@@ -1215,61 +1393,6 @@ struct Chip: View {    let text: String
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .glassEffect(.regular.tint(tint.opacity(0.2)), in: .capsule)
-    }
-}
-
-/// Tags + due date row under the plan header (IDEA-102/110).
-private struct OrganiseRow: View {
-    let saved: SavedPlan
-    @Environment(PlanStore.self) private var store
-    @State private var editingTags = false
-    @State private var tagText = ""
-
-    var body: some View {
-        HStack(spacing: 8) {
-            if saved.tags.isEmpty && saved.dueDate == nil && !editingTags {
-                Button("Add tags or reminder…", systemImage: "tag") { tagText = ""; editingTags = true }
-                    .buttonStyle(.link).font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(saved.tags.sorted(), id: \.self) { tag in
-                    Text(tag).font(.caption)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(.quaternary, in: .capsule)
-                }
-                if let due = saved.dueDate {
-                    Label(due.formatted(date: .abbreviated, time: .omitted), systemImage: saved.isOverdue ? "bell.badge.fill" : "bell")
-                        .font(.caption).foregroundStyle(saved.isOverdue ? .red : .secondary)
-                }
-                Button(editingTags ? "Done" : "Edit", systemImage: "tag") {
-                    if editingTags {
-                        store.setTags(Set(tagText.split(separator: ",").map(String.init)), for: saved.id)
-                    } else {
-                        tagText = saved.tags.sorted().joined(separator: ", ")
-                    }
-                    editingTags.toggle()
-                }
-                .buttonStyle(.link).font(.caption)
-            }
-        }
-        if editingTags {
-            TextField("tags, comma separated", text: $tagText, prompt: Text("sprint-12, needs-qa"))
-                .textFieldStyle(.roundedBorder).font(.callout)
-                .onSubmit {
-                    store.setTags(Set(tagText.split(separator: ",").map(String.init)), for: saved.id)
-                    editingTags = false
-                }
-        }
-    }
-}
-
-private struct PriorityDot: View {
-    let priority: TestPlan.Priority
-
-    var body: some View {
-        Circle()
-            .fill(priority == .high ? Color.red : priority == .medium ? .orange : .gray)
-            .frame(width: 8, height: 8)
-            .help("\(priority.rawValue.capitalized) priority")
     }
 }
 
