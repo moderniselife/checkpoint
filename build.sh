@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# Build Checkpoint.app from source.
+# Build Checkpoint from source: the Mac app, the iPhone/iPad app, or both.
 #
-#   ./build.sh                 universal Release build → dist/Checkpoint.app (ad-hoc signed)
+#   ./build.sh                 universal Release Mac build → dist/Checkpoint.app (ad-hoc signed)
+#   ./build.sh --platform ios  iPhone/iPad build → dist/Checkpoint-<version>-iOS.ipa (unsigned)
+#   ./build.sh --platform all  both
 #   ./build.sh --dmg --zip     also package dist/Checkpoint-<version>.dmg / .zip
 #   ./build.sh --install       copy the app to /Applications
 #   ./build.sh --open          launch it when done
 #   ./build.sh --debug         Debug configuration (faster, native arch only)
 #   ./build.sh --sign "Developer ID Application: Name (TEAMID)"   sign with your identity
 #   ./build.sh --version 0.2.0 set the marketing version
+#
+# The iOS .ipa is unsigned: install it with a sideloading tool that signs it with
+# your Apple ID (AltStore, Sideloadly), or open the project in Xcode and run the
+# CheckpointMobile scheme on your device.
 #
 # Requirements: macOS 26+, Xcode 26+, XcodeGen (offered via Homebrew if missing).
 set -euo pipefail
@@ -16,6 +22,7 @@ cd "$(dirname "$0")"
 APP_NAME="Checkpoint"
 CONFIG="Release"
 DMG=0; ZIP=0; INSTALL=0; OPEN=0
+PLATFORM="macos"
 IDENTITY="-"
 VERSION="$(sed -n 's/^ *MARKETING_VERSION: *"\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' project.yml | head -1)"
 
@@ -32,11 +39,18 @@ while [ $# -gt 0 ]; do
     --debug) CONFIG="Debug" ;;
     --sign) IDENTITY="${2:?--sign needs an identity}"; shift ;;
     --version) VERSION="${2:?--version needs a value}"; shift ;;
-    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --platform) PLATFORM="$(echo "${2:?--platform needs macos, ios or all}" | tr '[:upper:]' '[:lower:]')"; shift ;;
+    --ios) PLATFORM="ios" ;;
+    --all) PLATFORM="all" ;;
+    -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "Unknown option: $1 (see ./build.sh --help)" ;;
   esac
   shift
 done
+
+case "$PLATFORM" in macos|mac|ios|iphone|ipad|all) ;; *) fail "--platform must be macos, ios or all" ;; esac
+[ "$PLATFORM" = "mac" ] && PLATFORM="macos"
+case "$PLATFORM" in iphone|ipad) PLATFORM="ios" ;; esac
 
 # --- Prerequisites ---------------------------------------------------------
 [ "$(uname)" = "Darwin" ] || fail "Checkpoint builds on macOS only."
@@ -54,9 +68,46 @@ if ! command -v xcodegen >/dev/null; then
 fi
 
 # --- Build -----------------------------------------------------------------
-bold "Building $APP_NAME $VERSION ($CONFIG)"
 info "Generating Xcode project"
 xcodegen generate --quiet
+mkdir -p build dist
+
+# --- iOS / iPadOS ----------------------------------------------------------
+build_ios() {
+  bold "Building $APP_NAME for iPhone and iPad $VERSION ($CONFIG)"
+  info "Compiling for iOS (unsigned)…"
+  local log="build/build-ios.log"
+  if ! xcodebuild \
+        -project "$APP_NAME.xcodeproj" -scheme CheckpointMobile -configuration "$CONFIG" \
+        -destination 'generic/platform=iOS' -derivedDataPath build \
+        MARKETING_VERSION="$VERSION" \
+        CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM= \
+        build > "$log" 2>&1; then
+    grep -E "error:" "$log" | sort -u | head -20 >&2 || true
+    fail "iOS build failed — full log: $log"
+  fi
+  local app="build/Build/Products/$CONFIG-iphoneos/$APP_NAME.app"
+  [ -d "$app" ] || fail "iOS build produced no app at $app"
+  local stage
+  stage="$(mktemp -d)"
+  mkdir -p "$stage/Payload"
+  cp -R "$app" "$stage/Payload/"
+  rm -f "dist/$APP_NAME-$VERSION-iOS.ipa"
+  (cd "$stage" && zip -qry "$OLDPWD/dist/$APP_NAME-$VERSION-iOS.ipa" Payload)
+  rm -rf "$stage"
+  info "Packaged dist/$APP_NAME-$VERSION-iOS.ipa (unsigned — sign it with AltStore or Sideloadly, or run from Xcode)"
+}
+
+if [ "$PLATFORM" = "ios" ] || [ "$PLATFORM" = "all" ]; then
+  build_ios
+fi
+if [ "$PLATFORM" = "ios" ]; then
+  bold "✓ Done → dist/$APP_NAME-$VERSION-iOS.ipa"
+  exit 0
+fi
+
+# --- macOS -----------------------------------------------------------------
+bold "Building $APP_NAME for Mac $VERSION ($CONFIG)"
 
 ARCH_FLAGS=()
 [ "$CONFIG" = "Release" ] && ARCH_FLAGS=(ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO)

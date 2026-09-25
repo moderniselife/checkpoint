@@ -9,6 +9,8 @@ final class TicketInspector {
         case loading
         case loaded(TicketDetail)
         case failed(String)
+        /// The built-in sample plan's ticket: nothing to fetch.
+        case sample
     }
 
     struct Ref: Hashable {
@@ -132,6 +134,10 @@ final class TicketInspector {
     func refresh() { if let current { load(current) } }
 
     private func load(_ ref: Ref) {
+        if ref.key.uppercased() == SamplePlan.key {
+            states[ref.cacheKey] = .sample
+            return
+        }
         guard let settings, settings.isConfigured(ref.tracker) else {
             states[ref.cacheKey] = .failed("Connect \(ref.tracker.label) in \(Platform.settingsName) to view its issues.")
             return
