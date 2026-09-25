@@ -1,12 +1,9 @@
 import SwiftUI
 
-/// macOS System Settings-style container: searchable sidebar + scrollable
-/// detail. Resizable by design — the sidebar has a bounded width, the detail
-/// is a ScrollView with a centered max-width column, so it fits a 13"
-/// MacBook and stretches on a desktop monitor.
+/// System Settings-style window: a searchable sidebar of areas and a grouped
+/// form for each. Resizable, so it fits a 13" MacBook and grows on a monitor.
 ///
-/// To add a settings area: add a `SettingsSection` case, a row in its group,
-/// and a pane in `detail(for:)` below. See `SettingsSection.swift`.
+/// To add an area: add a `SettingsSection` case and its pane in `detail(for:)`.
 struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
     @State private var selection: SettingsSection? = .aiProvider
@@ -15,86 +12,54 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
+                .navigationSplitViewColumnWidth(min: 190, ideal: 215, max: 280)
         } detail: {
             detail(for: selection ?? .aiProvider)
-                .navigationSplitViewColumnWidth(min: 420, ideal: 640)
         }
-        // Same mesh wash as the main window (cf. Backdrop in ContentView) so
-        // Settings feels like the app, not a system panel. The sidebar list is
-        // translucent and detail ScrollViews are transparent, so it glows through.
-        .background { Backdrop() }
-        // Flexible window: small floor for MacBooks, grows on desktop.
-        // (No fixed .frame(width:) / .fixedSize — that's what clipped before.)
-        .frame(minWidth: 680, idealWidth: 960, minHeight: 480, idealHeight: 620)
+        .frame(minWidth: 680, idealWidth: 860, minHeight: 480, idealHeight: 620)
     }
-
-    // MARK: - Sidebar
 
     private var sidebar: some View {
         List(selection: $selection) {
             ForEach(SettingsSection.Group.allCases, id: \.rawValue) { group in
                 let rows = group.sections.filter { $0.matches(query) }
-                if !rows.isEmpty {
+                let custom = group == .trackers ? customRows : []
+                if !rows.isEmpty || !custom.isEmpty {
                     Section(group.rawValue) {
                         ForEach(rows, id: \.id) { section in
-                            SettingsSidebarRow(
-                                section: section,
-                                selected: selection?.id == section.id,
-                                status: status(for: section)
-                            )
-                            .tag(section)
-                        }
-                        // Custom servers get one row each under Trackers.
-                        if group == .trackers, query.isEmpty || "custom".contains(query.lowercased()) {
-                            ForEach(settings.customTrackers.filter {
-                                query.isEmpty || $0.displayName.localizedCaseInsensitiveContains(query)
-                                    || $0.endpoint.localizedCaseInsensitiveContains(query)
-                            }) { tracker in
-                                let section = SettingsSection.customMCP(id: tracker.id)
-                                HStack(spacing: 10) {
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            .fill(Color.teal.gradient)
-                                            .frame(width: 28, height: 28)
-                                        Image(systemName: "cable.connector")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundStyle(.white)
-                                    }
-                                    Text(tracker.displayName)
-                                        .font(.body)
-                                        .lineLimit(1)
-                                    Spacer(minLength: 4)
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .padding(.leading, 16)
-                                .background(selection?.id == section.id ? Color.accentColor.gradient : Color.clear.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .foregroundStyle(selection?.id == section.id ? .white : .primary)
+                            SettingsSidebarRow(title: section.title, icon: section.icon, tint: section.tint,
+                                               status: status(for: section))
                                 .tag(section)
-                            }
+                        }
+                        ForEach(custom) { tracker in
+                            SettingsSidebarRow(title: tracker.displayName, icon: "server.rack", tint: .teal)
+                                .padding(.leading, 12)
+                                .tag(SettingsSection.customMCP(id: tracker.id))
                         }
                     }
                 }
             }
         }
         .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .searchable(text: $query, prompt: "Search")
-        .navigationTitle("Checkpoint Settings")
+        .searchable(text: $query, placement: .sidebar, prompt: "Search")
+    }
+
+    /// Each custom server gets its own row under Trackers.
+    private var customRows: [CustomMCPTracker] {
+        settings.customTrackers.filter {
+            query.isEmpty || $0.displayName.localizedCaseInsensitiveContains(query)
+                || $0.endpoint.localizedCaseInsensitiveContains(query)
+        }
     }
 
     private func status(for section: SettingsSection) -> StatusDot.State {
         switch section {
         case .aiProvider: settings.isLLMConfigured ? .ok : .warn
-        case .jira: settings.isAtlassianConfigured ? .ok : .warn
-        case .linear: settings.isLinearConfigured ? .ok : .warn
-        case .customMCP: .none
-        case .testing, .scenarios, .advanced: .none
+        case .jira: settings.isAtlassianConfigured ? .ok : .none
+        case .linear: settings.isLinearConfigured ? .ok : .none
+        case .customMCP, .testing, .scenarios, .advanced: .none
         }
     }
-
-    // MARK: - Detail
 
     @ViewBuilder
     private func detail(for section: SettingsSection) -> some View {
@@ -104,7 +69,7 @@ struct SettingsView: View {
         case .linear: LinearPane()
         case .customMCP(let id):
             if let id, settings.customTrackers.contains(where: { $0.id == id }) {
-                CustomMCPDetailPane(trackerID: id, selection: $selection)
+                CustomMCPDetailPane(trackerID: id, selection: $selection).id(id)
             } else {
                 CustomMCPListPane(selection: $selection)
             }

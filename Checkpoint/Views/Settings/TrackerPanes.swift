@@ -10,29 +10,20 @@ struct JiraPane: View {
 
     var body: some View {
         @Bindable var settings = settings
-        SettingsDetailContainer(section: .jira) {
-            SettingsCard(title: "Site") {
-                SettingsRow(label: "Jira site", systemImage: "building.2", tint: .blue) {
-                    TextField("Jira site", text: $settings.site, prompt: Text("yourcompany.atlassian.net"))
-                        .multilineTextAlignment(.trailing)
-                        .font(.body.monospaced())
+        SettingsPane(section: .jira) {
+            Section {
+                TextField("Jira site", text: $settings.site, prompt: Text("yourcompany.atlassian.net"))
+                Picker("Connect with", selection: $settings.atlassianAuth) {
+                    ForEach(AppSettings.AtlassianAuth.allCases) { Text($0.label).tag($0) }
                 }
-                CardDivider()
-                SettingsRow(label: "Connect with", systemImage: "person.badge.key", tint: .orange) {
-                    Picker("Connect with", selection: $settings.atlassianAuth) {
-                        ForEach(AppSettings.AtlassianAuth.allCases) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .onChange(of: settings.atlassianAuth) { testState = .idle; tools = [] }
-                }
-            }
+                .onChange(of: settings.atlassianAuth) { testState = .idle; tools = [] }
 
-            SettingsCard(title: "Account") {
                 switch settings.atlassianAuth {
                 case .oauth:
                     HStack {
                         if let user = settings.atlassianUser {
-                            Label(user, systemImage: "person.crop.circle.badge.checkmark").foregroundStyle(.green)
+                            Label(user, systemImage: "person.crop.circle.badge.checkmark")
+                                .foregroundStyle(.green)
                             Spacer()
                             Button("Sign out", action: signOut)
                         } else {
@@ -44,46 +35,27 @@ struct JiraPane: View {
                         }
                         if signingIn { ProgressView().controlSize(.small) }
                     }
-                    .padding(.horizontal, 16).padding(.vertical, 10)
                 case .apiToken:
-                    SettingsRow(label: "Email", systemImage: "envelope", tint: .secondary) {
-                        TextField("Email", text: $settings.atlassianEmail, prompt: Text("you@company.com"))
-                            .multilineTextAlignment(.trailing)
-                    }
-                    CardDivider()
-                    SettingsRow(label: "API token", systemImage: "key", tint: .secondary) {
-                        SecureField("API token", text: $settings.atlassianToken)
-                            .multilineTextAlignment(.trailing)
-                    }
+                    TextField("Email", text: $settings.atlassianEmail, prompt: Text("you@company.com"))
+                    SecureField("API token", text: $settings.atlassianToken)
                 }
-            } footer: {
-                if settings.atlassianAuth == .apiToken {
-                    Link("Create an Atlassian API token", destination: URL(string: "https://id.atlassian.com/manage-profile/security/api-tokens")!)
-                    Text("Your org admin must allow API-token auth for the Rovo MCP server.").foregroundStyle(.secondary)
-                } else {
-                    Text("Opens Atlassian's consent screen in your browser, then returns here. Tokens refresh automatically.").foregroundStyle(.secondary)
-                }
-                Text("Checkpoint only ever uses read-only tools.").foregroundStyle(.secondary)
-            }
 
-            SettingsCard(title: "MCP tools") {
-                HStack {
-                    Button("Test connection", action: test)
-                        .buttonStyle(.glass)
-                        .disabled(!settings.isAtlassianConfigured || testState == .testing)
-                    switch testState {
-                    case .idle: Text("Checks auth and lists tools.").font(.caption).foregroundStyle(.secondary)
-                    case .testing: ProgressView().controlSize(.small)
-                    case .ok(let who, let n): Label("\(who) — \(n) read-only tools", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
-                    case .failed(let msg): Text(msg).foregroundStyle(.red).font(.caption).lineLimit(3)
+                TestRow(title: "Test connection", state: testState, disabled: !settings.isAtlassianConfigured,
+                        action: test) { who, n in "\(who) — \(n) read-only tools" }
+                MCPToolsView(tools: tools)
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    if settings.atlassianAuth == .apiToken {
+                        Link("Create an Atlassian API token", destination: URL(string: "https://id.atlassian.com/manage-profile/security/api-tokens")!)
+                        Text("Your org admin must allow API-token auth for the Rovo MCP server.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Opens Atlassian's consent screen in your browser, then returns here. Tokens refresh automatically.")
+                            .foregroundStyle(.secondary)
                     }
-                    Spacer()
+                    Text("Checkpoint only ever uses read-only tools.").foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                if !tools.isEmpty {
-                    CardDivider()
-                    MCPToolsView(tools: tools)
-                }
+                .font(.caption)
             }
         }
     }
@@ -117,9 +89,8 @@ struct JiraPane: View {
             do {
                 let all = try await client.authenticatedTools()
                 let who = try await client.whoAmI()
-                let readOnly = all.filter { PlanGenerator.isReadOnly($0.name) }
                 tools = all.sorted { $0.name < $1.name }
-                testState = .ok(who, readOnly.count)
+                testState = .ok(who, all.filter { PlanGenerator.isReadOnly($0.name) }.count)
             } catch {
                 tools = []
                 testState = .failed(error.localizedDescription)
@@ -138,16 +109,13 @@ struct LinearPane: View {
 
     var body: some View {
         @Bindable var settings = settings
-        SettingsDetailContainer(section: .linear) {
-            SettingsCard(title: "Account") {
-                SettingsRow(label: "Connect with", systemImage: "person.badge.key", tint: .indigo) {
-                    Picker("Connect with", selection: $settings.linearAuth) {
-                        ForEach(AppSettings.LinearAuth.allCases) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .onChange(of: settings.linearAuth) { linearState = .idle; tools = [] }
+        SettingsPane(section: .linear) {
+            Section {
+                Picker("Connect with", selection: $settings.linearAuth) {
+                    ForEach(AppSettings.LinearAuth.allCases) { Text($0.label).tag($0) }
                 }
-                CardDivider()
+                .onChange(of: settings.linearAuth) { linearState = .idle; tools = [] }
+
                 switch settings.linearAuth {
                 case .oauth:
                     HStack {
@@ -164,38 +132,22 @@ struct LinearPane: View {
                         }
                         if linearSigningIn { ProgressView().controlSize(.small) }
                     }
-                    .padding(.horizontal, 16).padding(.vertical, 10)
                 case .apiKey:
-                    SettingsRow(label: "API key", systemImage: "key", tint: .secondary) {
-                        SecureField("API key", text: $settings.linearAPIKey, prompt: Text("lin_api_…"))
-                            .multilineTextAlignment(.trailing)
-                    }
+                    SecureField("API key", text: $settings.linearAPIKey, prompt: Text("lin_api_…"))
                 }
-            } footer: {
-                if settings.linearAuth == .apiKey {
-                    Link("Create a Linear API key", destination: URL(string: "https://linear.app/settings/account/security")!)
-                }
-                Text("Uses Linear's read-only MCP endpoint with a read-only scope — Checkpoint can't change anything in Linear. Pasted links pick Jira or Linear automatically.").foregroundStyle(.secondary)
-            }
 
-            SettingsCard(title: "MCP tools") {
-                HStack {
-                    Button("Test connection", action: testLinear)
-                        .buttonStyle(.glass)
-                        .disabled(!settings.isLinearConfigured || linearState == .testing)
-                    switch linearState {
-                    case .idle: Text("Lists Linear's read-only tools.").font(.caption).foregroundStyle(.secondary)
-                    case .testing: ProgressView().controlSize(.small)
-                    case .ok(_, let n): Label("Connected — \(n) read-only tools", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
-                    case .failed(let msg): Text(msg).foregroundStyle(.red).font(.caption).lineLimit(3)
+                TestRow(title: "Test connection", state: linearState, disabled: !settings.isLinearConfigured,
+                        action: testLinear) { _, n in "Connected — \(n) read-only tools" }
+                MCPToolsView(tools: tools)
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    if settings.linearAuth == .apiKey {
+                        Link("Create a Linear API key", destination: URL(string: "https://linear.app/settings/account/security")!)
                     }
-                    Spacer()
+                    Text("Uses Linear's read-only MCP endpoint with a read-only scope — Checkpoint can't change anything in Linear. Pasted links pick Jira or Linear automatically.")
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                if !tools.isEmpty {
-                    CardDivider()
-                    MCPToolsView(tools: tools)
-                }
+                .font(.caption)
             }
         }
     }
@@ -208,7 +160,7 @@ struct LinearPane: View {
             do {
                 try await MCPOAuth.linear.signIn()
                 settings.linearUser = "Signed in"
-                testLinear()
+                testLinear()   // replaces "Signed in" with your name when Linear offers get_user
             } catch MCPOAuth.OAuthError.cancelled {
             } catch {
                 linearState = .failed(error.localizedDescription)
@@ -241,6 +193,7 @@ struct LinearPane: View {
         }
     }
 
+    /// Best-effort display name via Linear's `get_user` tool ("me").
     nonisolated private static func linearViewerName(_ client: MCPClient, tools: [MCPClient.Tool]) async -> String? {
         guard let tool = tools.first(where: { $0.name == "get_user" }) else { return nil }
         let props = tool.inputSchema["properties"]
@@ -252,61 +205,58 @@ struct LinearPane: View {
     }
 }
 
-// MARK: - Custom MCP trackers
+// MARK: - Custom MCP servers
 
-/// Generic pane for any MCP server. Proves the modularity story: endpoint +
-/// optional bearer token → tools/list → read-only mapping. No code changes.
+/// Any MCP server over Streamable HTTP: endpoint + optional bearer token,
+/// then tools/list decides what Checkpoint may read.
 struct CustomMCPListPane: View {
     @Environment(AppSettings.self) private var settings
     @Binding var selection: SettingsSection?
     @State private var showingAdd = false
 
     var body: some View {
-        @Bindable var settings = settings
-        SettingsDetailContainer(section: .customMCP(id: nil)) {
-            SettingsCard(title: "Servers (\(settings.customTrackers.count))") {
+        SettingsPane(section: .customMCP(id: nil)) {
+            Section {
                 if settings.customTrackers.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("No custom servers yet.")
-                            .foregroundStyle(.secondary)
-                        Text("Add any MCP server that speaks Streamable HTTP. Checkpoint reads its tools and uses the read-only ones, just like Jira and Linear.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Button("Add MCP server…", systemImage: "plus") { showingAdd = true }
-                            .buttonStyle(.glassProminent)
-                            .padding(.top, 4)
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 12)
-                } else {
-                    ForEach(settings.customTrackers) { tracker in
-                        Button { selection = .customMCP(id: tracker.id) } label: {
-                            HStack {
-                                Image(systemName: "cable.connector").foregroundStyle(.teal)
-                                VStack(alignment: .leading) {
-                                    Text(tracker.displayName).foregroundStyle(.primary)
-                                    Text(tracker.endpoint).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
-                            }
-                            .padding(.horizontal, 16).padding(.vertical, 10)
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    HStack {
-                        Spacer()
-                        Button("Add MCP server…", systemImage: "plus") { showingAdd = true }
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    Text("No servers yet.").foregroundStyle(.secondary)
                 }
+                ForEach(settings.customTrackers) { tracker in
+                    Button { selection = .customMCP(id: tracker.id) } label: {
+                        HStack(spacing: 10) {
+                            SettingsIconTile(icon: "server.rack", tint: .teal)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(tracker.displayName)
+                                Text(tracker.endpoint)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1).truncationMode(.middle)
+                            }
+                            Spacer()
+                            if tracker.useForResearch {
+                                Text("Research").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
+                HStack {
+                    Spacer()
+                    Button("Add Server…", systemImage: "plus") { showingAdd = true }
+                }
+            } header: {
+                Text("Servers")
             } footer: {
-                Text("Format: Streamable HTTP endpoint with tools/list + tools/call. Auth is an optional bearer token stored in the Keychain. Routing uses the match hint (e.g. “asana”) when tracker links look alike.")
+                Text("Any MCP server over Streamable HTTP with tools/list and tools/call. Checkpoint only calls its read-only tools. Tokens are kept in the Keychain.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .sheet(isPresented: $showingAdd) {
             CustomTrackerEditor { name, endpoint, hint, token in
                 settings.addCustomTracker(name: name, endpoint: endpoint, matchHint: hint, token: token)
                 showingAdd = false
+                if let added = settings.customTrackers.last { selection = .customMCP(id: added.id) }
             }
         }
     }
@@ -318,91 +268,65 @@ struct CustomMCPDetailPane: View {
     @Environment(AppSettings.self) private var settings
     @State private var state: ConnectionTestState = .idle
     @State private var tools: [MCPClient.Tool] = []
-    @State private var token: String = ""
+    @State private var token = ""
+    @State private var confirmingRemove = false
 
-    private var tracker: CustomMCPTracker? {
-        settings.customTrackers.first { $0.id == trackerID }
+    private var tracker: CustomMCPTracker? { settings.customTrackers.first { $0.id == trackerID } }
+
+    private func binding<T>(_ key: WritableKeyPath<CustomMCPTracker, T>) -> Binding<T> {
+        Binding(
+            get: { tracker![keyPath: key] },
+            set: { guard var t = tracker else { return }; t[keyPath: key] = $0; settings.updateCustomTracker(t) }
+        )
     }
 
     var body: some View {
-        @Bindable var settings = settings
-        Group {
-            if let tracker {
-                SettingsDetailContainer(section: .customMCP(id: tracker.id)) {
-                    SettingsCard(title: "Server") {                        SettingsRow(label: "Name", systemImage: "tag", tint: .teal) {
-                            TextField("Name", text: Binding(
-                                get: { tracker.name },
-                                set: { var t = tracker; t.name = $0; settings.updateCustomTracker(t) }
-                            )).multilineTextAlignment(.trailing)
-                        }
-                        CardDivider()
-                        SettingsRow(label: "Endpoint", systemImage: "link", tint: .blue) {
-                            TextField("Endpoint", text: Binding(
-                                get: { tracker.endpoint },
-                                set: { var t = tracker; t.endpoint = $0; settings.updateCustomTracker(t) }
-                            ), prompt: Text("https://mcp.example.com/mcp"))
-                                .multilineTextAlignment(.trailing)
-                                .font(.body.monospaced())
-                        }
-                        CardDivider()
-                        SettingsRow(label: "Match hint", systemImage: "magnifyingglass", tint: .orange) {
-                            TextField("Match hint", text: Binding(
-                                get: { tracker.matchHint },
-                                set: { var t = tracker; t.matchHint = $0; settings.updateCustomTracker(t) }
-                            ), prompt: Text("e.g. asana"))
-                                .multilineTextAlignment(.trailing)
-                        }
-                        CardDivider()
-                        SettingsRow(label: "Token", systemImage: "key", tint: .secondary) {
-                            SecureField("Bearer token (optional)", text: $token, prompt: Text("optional"))
-                                .multilineTextAlignment(.trailing)
-                                .onChange(of: tracker.id, initial: true) { token = settings.customToken(for: tracker) }
-                                .onChange(of: token) { settings.setCustomToken(token, for: tracker) }
-                        }
-                    }
-                    SettingsCard(title: "Research") {
-                        SettingsRow(label: "Use for research", systemImage: "magnifyingglass", tint: .teal) {
-                            Toggle("Use for research", isOn: Binding(
-                                get: { tracker.useForResearch },
-                                set: { var t = tracker; t.useForResearch = $0; settings.updateCustomTracker(t) }
-                            ))
-                            .labelsHidden()
-                        }
-                    } footer: {
-                        Text("Offers this server's read-only tools to the planner alongside tracker tools. Cited in task sources.")
-                    }
-                    SettingsCard(title: "MCP tools") {
-                        HStack {
-                            Button("List tools", action: listTools)
-                                .buttonStyle(.glass)
-                                .disabled(state == .testing || tracker.endpoint.isEmpty)
-                            switch state {
-                            case .idle: Text("Reads tools/list from this server.").font(.caption).foregroundStyle(.secondary)
-                            case .testing: ProgressView().controlSize(.small)
-                            case .ok(_, let n): Label("\(n) tools found", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
-                            case .failed(let msg): Text(msg).foregroundStyle(.red).font(.caption).lineLimit(4)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        if !tools.isEmpty {
-                            CardDivider()
-                            MCPToolsView(tools: tools)
-                        }
-                    }
-                    SettingsCard(title: "Danger") {
-                        Button("Remove server", role: .destructive) {
-                            settings.removeCustomTracker(tracker)
-                            selection = .customMCP(id: nil)
-                        }
-                        .padding(.horizontal, 16).padding(.vertical, 10)
+        if let tracker {
+            SettingsPane(section: .customMCP(id: tracker.id), title: tracker.displayName) {
+                Section {
+                    TextField("Name", text: binding(\.name), prompt: Text("e.g. Asana"))
+                    TextField("Endpoint", text: binding(\.endpoint), prompt: Text("https://mcp.example.com/mcp"))
+                        .font(.body.monospaced())
+                    SecureField("Bearer token", text: $token, prompt: Text("optional"))
+                        .onAppear { token = settings.customToken(for: tracker) }
+                        .onChange(of: token) { settings.setCustomToken(token, for: tracker) }
+                    TextField("Match hint", text: binding(\.matchHint), prompt: Text("e.g. asana"))
+                } header: {
+                    Text("Server")
+                } footer: {
+                    Text("The match hint routes pasted links containing it (like “asana”) to this server.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Toggle("Use while researching plans", isOn: binding(\.useForResearch))
+                    TestRow(title: "List tools", state: state, disabled: tracker.endpoint.isEmpty,
+                            action: listTools) { _, n in "\(n) read-only tools" }
+                    MCPToolsView(tools: tools)
+                } footer: {
+                    Text("When on, the planner can also read from this server's read-only tools, and tasks cite it as a source.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                Section {
+                    HStack {
+                        Spacer()
+                        Button("Remove Server…", role: .destructive) { confirmingRemove = true }
                     }
                 }
-            } else {
-                ContentUnavailableView("Server removed", systemImage: "cable.connector.slash", description: Text("Pick another server from the list."))
             }
+            .confirmationDialog("Remove \(tracker.displayName)?", isPresented: $confirmingRemove) {
+                Button("Remove", role: .destructive) {
+                    settings.removeCustomTracker(tracker)
+                    selection = .customMCP(id: nil)
+                }
+            } message: {
+                Text("Its token is deleted from the Keychain.")
+            }
+        } else {
+            ContentUnavailableView("Server removed", systemImage: "server.rack",
+                                   description: Text("Pick another server from the sidebar."))
         }
-        .onChange(of: trackerID) { state = .idle; tools = [] }
     }
 
     private func listTools() {
@@ -415,8 +339,7 @@ struct CustomMCPDetailPane: View {
             do {
                 let listed = try await client.listTools()
                 tools = listed.sorted { $0.name < $1.name }
-                let ro = listed.filter { PlanGenerator.isReadOnly($0.name) }.count
-                state = .ok("", ro)
+                state = .ok("", listed.filter { PlanGenerator.isReadOnly($0.name) }.count)
             } catch {
                 tools = []
                 state = .failed(error.localizedDescription)
@@ -434,24 +357,34 @@ private struct CustomTrackerEditor: View {
     @State private var token = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Add MCP server").font(.headline)
-            TextField("Name (e.g. Asana)", text: $name)
-            TextField("Endpoint (https://…/mcp)", text: $endpoint)
-                .font(.body.monospaced())
-            TextField("Match hint (optional, e.g. asana)", text: $hint)
-            SecureField("Bearer token (optional)", text: $token)
-            Text("Checkpoint calls tools/list to discover what this server offers, then only uses read-only tools for planning.")
-                .font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    TextField("Name", text: $name, prompt: Text("e.g. Asana"))
+                    TextField("Endpoint", text: $endpoint, prompt: Text("https://…/mcp"))
+                        .font(.body.monospaced())
+                    SecureField("Bearer token", text: $token, prompt: Text("optional"))
+                    TextField("Match hint", text: $hint, prompt: Text("optional, e.g. asana"))
+                } header: {
+                    Text("Add MCP server")
+                } footer: {
+                    Text("Checkpoint reads tools/list to see what the server offers, and only ever calls read-only tools.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Add server") { onSave(name, endpoint, hint, token) }
+                Button("Add Server") { onSave(name, endpoint, hint, token) }
+                    .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(URL(string: endpoint)?.scheme == nil)
             }
+            .padding([.horizontal, .bottom], 20)
         }
-        .padding(20)
-        .frame(width: 400)
+        .frame(width: 440)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

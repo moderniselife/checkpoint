@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Sidebar destinations, grouped like macOS System Settings.
 ///
-/// Adding a new settings area = add a case here + its detail pane in
-/// `SettingsDetail.swift`. Built-in trackers (Jira/Linear) each get a case;
+/// Adding a new settings area = add a case here + its pane in
+/// `SettingsView.detail(for:)`. Built-in trackers (Jira/Linear) each get a case;
 /// user-added endpoints are covered by the single `.customMCP` case which
 /// lists every `CustomMCPTracker`.
 enum SettingsSection: Hashable, Identifiable {
@@ -32,7 +32,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .aiProvider: "AI Provider"
         case .jira: "Jira"
         case .linear: "Linear"
-        case .customMCP: "Custom MCP"
+        case .customMCP: "Custom Servers"
         case .testing: "Testing"
         case .scenarios: "Scenarios"
         case .advanced: "Advanced"
@@ -44,10 +44,10 @@ enum SettingsSection: Hashable, Identifiable {
         case .aiProvider: "Model, key and effort used to write plans"
         case .jira: "Atlassian Rovo MCP — issues, comments, specs"
         case .linear: "Linear read-only MCP — issues and comments"
-        case .customMCP: "Any MCP server speaking tools/list + tools/call"
+        case .customMCP: "Any MCP server — Asana, a wiki, your own tools"
         case .testing: "Default mode and hosted environment"
         case .scenarios: "End-to-end journeys from tickets and code"
-        case .advanced: "Defaults, storage and connection overview"
+        case .advanced: "Routing, connections and storage"
         }
     }
 
@@ -56,7 +56,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .aiProvider: "brain.head.profile"
         case .jira: "square.stack.3d.up"
         case .linear: "line.3.horizontal.decrease.circle"
-        case .customMCP: "cable.connector"
+        case .customMCP: "server.rack"
         case .testing: "checkmark.shield"
         case .scenarios: "map"
         case .advanced: "gearshape"
