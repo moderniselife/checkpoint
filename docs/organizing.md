@@ -18,7 +18,7 @@
 - **Search** matches key, title, folder and tags. The filter menu in the *Test plans* header
   sorts (updated, progress, key or AC met) and narrows by mode, tracker, progress and tag.
 - **Pin** active plans to the top section; **archive** finished ones out of sight (restorable).
-- **Tags** are freeform (`sprint-12`, `needs-qa`), added under the plan summary.
+- **Tags** are freeform (`sprint-12`, `needs-qa`), added from the tag line under the plan summary, **More → Tags…**, the sidebar right-click menu or **⌘T**.
 - The **Dashboard** (top of the sidebar) shows rolling-7-day stats, an 8-week trend and everything
   in progress — computed from last-touched times, no setup.
 

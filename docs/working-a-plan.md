@@ -13,8 +13,8 @@ The header counts passes on its rings and calls out failures and blocks.
 
 ## Finding things in a big plan
 
-- **To do / All / Failed / Blocked** filter, and next to it a filter menu with **Smoke** (5-minute
-  top-risk subset) and **P0** lenses. Active lenses show as removable pills above the list.
+- The glass pill on **Test tasks** switches **To do / All / Failed / Blocked** (with counts) and holds
+  the **Smoke** (5-minute top-risk subset) and **P0** lenses. Active lenses show as removable pills above the list.
 - **Estimates** under each task and in the header size the run; **sample data** blocks copy valid/invalid/boundary inputs.
 - **Source links** under each task jump to the ticket, comment or page it came from; **Why this task?**
   in its ⋯ menu explains why it exists.
@@ -34,7 +34,7 @@ The header counts passes on its rings and calls out failures and blocks.
 
 - **Chat tab**: ask follow-ups ("what about admins?"). Answers stay in the thread; **Update plan
   from this** folds an answer back into the plan with ticks intact.
-- **Regenerate** (the ⋯ on Acceptance criteria and Edge cases, the filter menu on Test tasks) redoes
+- **Regenerate** (the ⋯ on Acceptance criteria and Edge cases, the task pill on Test tasks) redoes
   just that section.
 - Chat and regen use the same ID-preserving merge as re-runs.
 
