@@ -66,8 +66,7 @@ struct JiraPane: View {
         Task {
             defer { signingIn = false }
             do {
-                try await MCPOAuth.atlassian.signIn()
-                settings.atlassianUser = (try? await settings.makeMCPClient().whoAmI()) ?? "Signed in"
+                try await settings.signInAtlassian()
             } catch MCPOAuth.OAuthError.cancelled {
             } catch {
                 testState = .failed(error.localizedDescription)
@@ -76,8 +75,7 @@ struct JiraPane: View {
     }
 
     private func signOut() {
-        Task { await MCPOAuth.atlassian.signOut() }
-        settings.atlassianUser = nil
+        settings.signOutAtlassian()
         testState = .idle
         tools = []
     }
@@ -158,9 +156,8 @@ struct LinearPane: View {
         Task {
             defer { linearSigningIn = false }
             do {
-                try await MCPOAuth.linear.signIn()
-                settings.linearUser = "Signed in"
-                testLinear()   // replaces "Signed in" with your name when Linear offers get_user
+                try await settings.signInLinear()
+                testLinear()
             } catch MCPOAuth.OAuthError.cancelled {
             } catch {
                 linearState = .failed(error.localizedDescription)
@@ -169,8 +166,7 @@ struct LinearPane: View {
     }
 
     private func linearSignOut() {
-        Task { await MCPOAuth.linear.signOut() }
-        settings.linearUser = nil
+        settings.signOutLinear()
         linearState = .idle
         tools = []
     }
@@ -183,7 +179,7 @@ struct LinearPane: View {
                 let listed = try await client.listTools()
                 tools = listed.sorted { $0.name < $1.name }
                 linearState = .ok("", listed.count)
-                if settings.linearAuth == .oauth, let me = await Self.linearViewerName(client, tools: listed) {
+                if settings.linearAuth == .oauth, let me = await AppSettings.linearViewerName(client, tools: listed) {
                     settings.linearUser = me
                 }
             } catch {
@@ -193,16 +189,6 @@ struct LinearPane: View {
         }
     }
 
-    /// Best-effort display name via Linear's `get_user` tool ("me").
-    nonisolated private static func linearViewerName(_ client: MCPClient, tools: [MCPClient.Tool]) async -> String? {
-        guard let tool = tools.first(where: { $0.name == "get_user" }) else { return nil }
-        let props = tool.inputSchema["properties"]
-        let arg = ["query", "id", "userId"].first { props?[$0] != nil } ?? "query"
-        guard let r = try? await client.callTool("get_user", arguments: .object([arg: "me"])), !r.isError,
-              let json = try? JSONCoding.decoder.decode(JSONValue.self, from: Data(r.text.utf8)) else { return nil }
-        let user = json["user"] ?? json
-        return user["displayName"]?.stringValue ?? user["name"]?.stringValue
-    }
 }
 
 // MARK: - Custom MCP servers

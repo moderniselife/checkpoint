@@ -4,7 +4,10 @@ struct ContentView: View {
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
     @AppStorage("panelWidth") private var panelWidth = 460.0
+    @AppStorage("onboardingComplete") private var onboarded = false
     @State private var dragStartWidth: Double?
+    /// Width of the detail area; the ticket panel never takes more than 45% of it.
+    @State private var detailWidth: Double = 1200
 
     var body: some View {
         @Bindable var store = store
@@ -16,7 +19,7 @@ struct ContentView: View {
                 main
                 if inspector.isOpen {
                     TicketPanel()
-                        .frame(width: panelWidth)
+                        .frame(width: max(320, min(panelWidth, detailWidth * 0.45)))
                         .padding(.vertical, 12)
                         .padding(.trailing, 12)
                         .overlay(alignment: .leading) { resizeHandle }
@@ -24,6 +27,7 @@ struct ContentView: View {
                 }
             }
             .background { Backdrop() }
+            .onGeometryChange(for: Double.self) { $0.size.width } action: { detailWidth = $0 }
             .animation(.smooth(duration: 0.35), value: inspector.isOpen)
             .toolbar {
                 if !inspector.isOpen && !inspector.tabs.isEmpty {
@@ -37,6 +41,11 @@ struct ContentView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: Binding(get: { !onboarded }, set: { if !$0 { onboarded = true } })) {
+            OnboardingView { onboarded = true }
+                .frame(width: 860, height: 700)
+                .interactiveDismissDisabled()
         }
     }
 

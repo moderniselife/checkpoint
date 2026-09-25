@@ -125,27 +125,11 @@ struct AIProviderPane: View {
     /// Sends a tiny prompt to prove the key, URL and model all work.
     private func testLLM() {
         llmState = .testing
-        let config = settings.llmConfig
+        let model = settings.llmConfig.model
         Task {
             do {
-                let reply: String
-                switch config.provider.style {
-                case .anthropic:
-                    let client = ClaudeClient(apiKey: config.apiKey, baseURL: config.baseURL, sendBearer: config.provider != .anthropic)
-                    let r = try await client.createMessage([
-                        "model": .string(config.model), "max_tokens": 64,
-                        "messages": [["role": "user", "content": "Reply with just: OK"]],
-                    ], betas: [])
-                    reply = (r["content"]?.arrayValue ?? []).compactMap { $0["text"]?.stringValue }.joined()
-                case .openAIChat:
-                    let client = OpenAIChatClient(provider: config.provider, apiKey: config.apiKey, baseURL: config.baseURL)
-                    reply = try await client.stream([
-                        "model": .string(config.model),
-                        "messages": [["role": "user", "content": "Reply with just: OK"]],
-                    ]) { _ in }.text
-                }
-                let short = reply.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40)
-                llmState = .ok("\(config.model) replied “\(short.isEmpty ? "…" : short)”", 0)
+                let reply = try await settings.testModel().prefix(40)
+                llmState = .ok("\(model) replied “\(reply.isEmpty ? "…" : reply)”", 0)
             } catch {
                 llmState = .failed(error.localizedDescription)
             }
