@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 
 /// Maps Linear MCP `get_issue` / `list_comments` output onto `TicketDetail`.
 /// Linear's MCP output shape isn't formally documented, so every field is read

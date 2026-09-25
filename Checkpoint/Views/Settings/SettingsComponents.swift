@@ -131,6 +131,7 @@ struct MCPToolsView: View {
     }
 }
 
+#if os(macOS)
 /// Native combo box: type any value, or pick one from the dropdown.
 struct ComboBox: NSViewRepresentable {
     @Binding var text: String
@@ -186,3 +187,29 @@ struct ComboBox: NSViewRepresentable {
         }
     }
 }
+#else
+/// iOS: a text field with a menu of known values.
+struct ComboBox: View {
+    @Binding var text: String
+    var items: [String]
+    var placeholder: String = ""
+    var monospaced = true
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField(placeholder, text: $text)
+                .multilineTextAlignment(.trailing)
+                .font(monospaced ? .body.monospaced() : .body)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if !items.isEmpty {
+                Menu {
+                    ForEach(items, id: \.self) { m in Button(m) { text = m } }
+                } label: {
+                    Image(systemName: "chevron.up.chevron.down").font(.caption)
+                }
+            }
+        }
+    }
+}
+#endif

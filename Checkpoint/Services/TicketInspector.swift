@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import Observation
 
@@ -306,7 +305,7 @@ actor AttachmentLoader {
             req.setValue("image/*", forHTTPHeaderField: "Accept")
             guard let (data, response) = try? await URLSession.shared.data(for: req),
                   (response as? HTTPURLResponse)?.statusCode == 200,
-                  NSImage(data: data) != nil else { continue }
+                  PlatformImage(data: data) != nil else { continue }
             cache[cacheKey] = data
             return data
         }

@@ -207,8 +207,9 @@ struct ScenariosPane: View {
         SettingsPane(section: .scenarios) {
             Section {
                 Picker("Scenarios", selection: $settings.scenarioMode) {
-                    ForEach(ScenarioMode.allCases) { Text($0.label).tag($0) }
+                    ForEach(ScenarioMode.available) { Text($0.label).tag($0) }
                 }
+                if AppSettings.supportsCodebase {
                 HStack {
                     if let path = settings.codebasePath {
                         Label((path as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
@@ -221,6 +222,7 @@ struct ScenariosPane: View {
                         Spacer()
                         Button("Choose Codebase…") { settings.chooseCodebase() }
                     }
+                }
                 }
             } footer: {
                 Text("Adds 3–6 end-to-end user journeys to each plan. From related tickets uses your tracker only; tickets + codebase also reads a local repo — read-only, and only the folder you choose.")

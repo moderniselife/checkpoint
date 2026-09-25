@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 /// Floating Liquid Glass panel on the right showing everything about one ticket.
 struct TicketPanel: View {
@@ -77,13 +76,12 @@ struct TicketPanel: View {
                 .help("Refresh")
             if let url = currentURL {
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    Platform.copy(url.absoluteString)
                 } label: { Image(systemName: "link") }
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                     .help("Copy link")
-                Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.right") }
+                Button { Platform.open(url) } label: { Image(systemName: "arrow.up.right") }
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                     .help("Open in \(inspector.current?.tracker.label ?? "tracker")")
@@ -491,7 +489,7 @@ private struct AttachmentsGrid: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 10)], spacing: 10) {
                 ForEach(attachments) { a in
                     AttachmentTile(attachment: a) {
-                        if a.isImage { preview = a } else if let url = settings.browserURL(for: a) { NSWorkspace.shared.open(url) }
+                        if a.isImage { preview = a } else if let url = settings.browserURL(for: a) { Platform.open(url) }
                     }
                 }
             }
@@ -508,7 +506,7 @@ private struct AttachmentTile: View {
     let attachment: TicketDetail.Attachment
     let action: () -> Void
     @Environment(AppSettings.self) private var settings
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
 
     var body: some View {
         Button(action: action) {
@@ -516,7 +514,7 @@ private struct AttachmentTile: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10).fill(.quaternary.opacity(0.5))
                     if let image {
-                        Image(nsImage: image).resizable().scaledToFill()
+                        Image(platformImage: image).resizable().scaledToFill()
                     } else {
                         Image(systemName: icon).font(.title).foregroundStyle(.secondary)
                     }
@@ -533,7 +531,7 @@ private struct AttachmentTile: View {
         .task(id: attachment.id) {
             guard attachment.isImage else { return }
             if let data = await AttachmentLoader.shared.data(for: attachment, full: false, creds: settings.attachmentCredentials) {
-                image = NSImage(data: data)
+                image = PlatformImage(data: data)
             }
         }
     }
@@ -553,7 +551,7 @@ private struct AttachmentPreview: View {
     let attachment: TicketDetail.Attachment
     @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
     @State private var failed = false
 
     var body: some View {
@@ -571,7 +569,7 @@ private struct AttachmentPreview: View {
             Group {
                 if let image {
                     ScrollView([.horizontal, .vertical]) {
-                        Image(nsImage: image).resizable().scaledToFit()
+                        Image(platformImage: image).resizable().scaledToFit()
                             .frame(maxWidth: max(image.size.width, 400))
                     }
                 } else if failed {
@@ -586,7 +584,7 @@ private struct AttachmentPreview: View {
         .frame(minWidth: 640, minHeight: 480)
         .task {
             if let data = await AttachmentLoader.shared.data(for: attachment, full: true, creds: settings.attachmentCredentials) {
-                image = NSImage(data: data)
+                image = PlatformImage(data: data)
             } else {
                 failed = true
             }
@@ -607,7 +605,7 @@ private struct ExternalLinkRow: View {
     let link: TicketDetail.ExternalLink
 
     var body: some View {
-        Button { NSWorkspace.shared.open(link.url) } label: {
+        Button { Platform.open(link.url) } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon).foregroundStyle(.tint).frame(width: 18)
                 VStack(alignment: .leading, spacing: 1) {
@@ -721,7 +719,7 @@ private struct TicketTab: View {
             Button("Close Other Tabs") { inspector.closeOtherTabs(ref) }
             if let url = detail?.webURL ?? (ref.tracker == .jira ? settings.browseURL(for: ref.key) : nil) {
                 Divider()
-                Button("Open in \(ref.tracker.label)") { NSWorkspace.shared.open(url) }
+                Button("Open in \(ref.tracker.label)") { Platform.open(url) }
             }
         }
     }

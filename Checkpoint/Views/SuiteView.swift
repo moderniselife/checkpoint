@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 /// Regression suite builder (IDEA-015): merge several plans (or a whole
 /// folder tree) into one deduplicated run. The suite is transient — ticks live
@@ -92,8 +91,7 @@ struct SuiteBuilderSheet: View {
                 Spacer()
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(copied ? "Copied" : "Copy as Markdown", systemImage: copied ? "checkmark" : "doc.on.doc") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(RegressionSuite.markdown(folderName: folder.name, suite: suite, ticks: ticks), forType: .string)
+                    Platform.copy(RegressionSuite.markdown(folderName: folder.name, suite: suite, ticks: ticks))
                     copied = true
                 }
                 .buttonStyle(.glassProminent)
