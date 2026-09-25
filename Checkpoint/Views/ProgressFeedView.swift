@@ -75,8 +75,8 @@ struct ProgressFeedView: View {
                 .environment(\.ticketTracker, store.runningTracker)
                 .animation(.smooth(duration: 0.3), value: store.feed)
                 .frame(maxWidth: 720, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.top, 96)
+                .padding(.horizontal, PageLayout.side)
+                .padding(.top, PageLayout.feedTop)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity)
             }

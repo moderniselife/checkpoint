@@ -33,6 +33,9 @@ struct PlanView: View {
         ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                #if os(iOS)
+                panePicker
+                #endif
                 header
 
                 if pane == .plan {
@@ -122,8 +125,8 @@ struct PlanView: View {
             }
             .environment(\.ticketTracker, saved.tracker)
             .frame(maxWidth: 820, alignment: .leading)
-            .padding(.horizontal, 28)
-            .padding(.top, 92)
+            .padding(.horizontal, PageLayout.side)
+            .padding(.top, PageLayout.top)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
@@ -148,6 +151,72 @@ struct PlanView: View {
 
     // MARK: Toolbar
 
+    private var panePicker: some View {
+        Picker("View", selection: $pane) {
+            Label("Plan", systemImage: "checklist").tag(Pane.plan)
+            Label("Research (\(saved.research.filter { $0.kind != .status }.count))", systemImage: "magnifyingglass")
+                .tag(Pane.research)
+            Label(saved.chat.isEmpty ? "Chat" : "Chat (\(saved.chat.count))", systemImage: "bubble.left.and.text.bubble.right")
+                .tag(Pane.chat)
+        }
+        .pickerStyle(.segmented)
+        .labelStyle(.titleOnly)
+        .labelsHidden()
+    }
+
+    #if os(iOS)
+    /// iOS: the ticket-details button, and every other action in one menu.
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button("Ticket Details", systemImage: "info.circle") {
+                withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
+            }
+            Menu {
+                Menu("Export", systemImage: "square.and.arrow.up") {
+                    Button("Share as Markdown…", systemImage: "doc.text") { export(.markdown) }
+                    Button("Share as HTML Page…", systemImage: "safari") { export(.html) }
+                    Divider()
+                    Button("Copy as Markdown", systemImage: "doc.on.doc") {
+                        copy(PlanExporter.markdown(.init(saved: saved, smokeOnly: smokeOnly)))
+                    }
+                    Button("Copy Playwright Skeleton", systemImage: "chevron.left.forwardslash.chevron.right") {
+                        copy(PlanExporter.automation(.init(saved: saved), framework: .playwright))
+                    }
+                    Button("Copy XCTest Skeleton", systemImage: "hammer") {
+                        copy(PlanExporter.automation(.init(saved: saved), framework: .xctest))
+                    }
+                }
+                Button("Re-run", systemImage: "arrow.clockwise", action: rerun)
+                if saved.preset == "quick" {
+                    Button("Upgrade to Deep", systemImage: "arrow.up.circle", action: rerunDeep)
+                }
+                if let url = URL(string: plan.ticket.url), url.scheme != nil {
+                    Button("Open in \(saved.tracker.label)", systemImage: "arrow.up.right.square") { Platform.open(url) }
+                }
+                Divider()
+                Button(saved.pinned ? "Unpin" : "Pin", systemImage: saved.pinned ? "pin.slash" : "pin") {
+                    store.togglePin(saved.id)
+                }
+                Button("Tags…", systemImage: "tag") { editingTags = true }
+                Menu("Remind Me", systemImage: "bell") {
+                    Button("Tomorrow") { remind(days: 1) }
+                    Button("In 3 Days") { remind(days: 3) }
+                    Button("Next Week") { remind(days: 7) }
+                    if saved.dueDate != nil {
+                        Button("Clear Reminder", role: .destructive) { store.setDueDate(nil, for: saved.id) }
+                    }
+                }
+                Button(saved.archived ? "Restore from Archive" : "Archive",
+                       systemImage: saved.archived ? "tray.and.arrow.up" : "archivebox") {
+                    store.toggleArchive(saved.id)
+                }
+            } label: {
+                Label(copied ? "Copied" : "More", systemImage: copied ? "checkmark" : "ellipsis")
+            }
+        }
+    }
+    #else
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .principal) {
@@ -238,6 +307,7 @@ struct PlanView: View {
             .keyboardShortcut("i", modifiers: .command)
         }
     }
+    #endif
 
     private func rerun() {
         if saved.preset == "quick" {
@@ -265,54 +335,87 @@ struct PlanView: View {
 
     // MARK: Header
 
+    /// Narrow (iPhone, or a squeezed window): rings move under the title.
+    private var narrowHeader: Bool { headerWidth < 520 }
+
     private var header: some View {
-        HStack(alignment: .top, spacing: 20) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    TicketKeyButton(key: plan.ticket.key, font: .headline.monospaced())
-                    ModeBadge(mode: saved.mode)
-                    if saved.tracker == .linear { Chip(text: "Linear", tint: .purple) }
-                    if saved.preset == "quick" { Chip(text: "Quick", tint: .teal) }
-                    if saved.template != "auto" { Chip(text: saved.template.capitalized, tint: .orange) }
-                    Spacer(minLength: 8)
-                    Button {
-                        withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
-                    } label: {
-                        Label(detailsOpen ? "Hide details" : "Ticket details", systemImage: "sidebar.right")
-                            .labelStyle(headerWidth < 600 ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
-                            .lineLimit(1)
-                            .font(.callout.weight(.medium))
-                    }
-                    .buttonStyle(.glass)
-                    .help("Show everything on the ticket (⌘I)")
-                    Chip(text: plan.ticket.type)
-                    Chip(text: plan.ticket.status, tint: .blue)
-                }
-                Text(plan.ticket.title)
-                    .font(.title.weight(.semibold))
-                    .textSelection(.enabled)
-                Text(plan.summary)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                HeaderMeta(saved: saved) { editingTags = true }
-                    .padding(.top, 2)
+        let chips = Group {
+            TicketKeyButton(key: plan.ticket.key, font: .headline.monospaced())
+            ModeBadge(mode: saved.mode)
+            if saved.tracker == .linear { Chip(text: "Linear", tint: .purple) }
+            if saved.preset == "quick" { Chip(text: "Quick", tint: .teal) }
+            if saved.template != "auto" { Chip(text: saved.template.capitalized, tint: .orange) }
+        }
+        let detailsButton = Button {
+            withAnimation(.smooth) { inspector.toggle(plan.ticket.key, tracker: saved.tracker) }
+        } label: {
+            Label(detailsOpen ? "Hide details" : "Ticket details", systemImage: "sidebar.right")
+                .labelStyle(headerWidth < 600 ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                .lineLimit(1)
+                .font(.callout.weight(.medium))
+        }
+        .buttonStyle(.glass)
+        .help("Show everything on the ticket (⌘I)")
+        let rings = HStack(spacing: 16) {
+            MetricRing(value: saved.progress, label: "tested",
+                       text: "\(saved.tasksDone)/\(plan.tasks.count)", tint: .accentColor)
+            if !plan.acceptanceCriteria.isEmpty {
+                MetricRing(value: saved.criteriaProgress, label: "AC met",
+                           text: "\(saved.criteriaMet)/\(plan.acceptanceCriteria.count)", tint: .teal)
             }
-            Spacer(minLength: 0)
-            HStack(spacing: 16) {
-                MetricRing(value: saved.progress, label: "tested",
-                           text: "\(saved.tasksDone)/\(plan.tasks.count)", tint: .accentColor)
-                if !plan.acceptanceCriteria.isEmpty {
-                    MetricRing(value: saved.criteriaProgress, label: "AC met",
-                               text: "\(saved.criteriaMet)/\(plan.acceptanceCriteria.count)", tint: .teal)
+        }
+        let text = Group {
+            Text(plan.ticket.title)
+                .font(narrowHeader ? .title2.weight(.semibold) : .title.weight(.semibold))
+                .textSelection(.enabled)
+            Text(plan.summary)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        return Group {
+            if narrowHeader {
+                VStack(alignment: .leading, spacing: 12) {
+                    FlowLayout(spacing: 8) {
+                        chips
+                        Chip(text: plan.ticket.type)
+                        Chip(text: plan.ticket.status, tint: .blue)
+                    }
+                    text
+                    HStack(alignment: .center) {
+                        rings
+                        Spacer(minLength: 8)
+                        // iPhone has ⓘ in the toolbar already.
+                        if Platform.isMac { detailsButton }
+                    }
+                    HeaderMeta(saved: saved) { editingTags = true }
+                }
+            } else {
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            chips
+                            Spacer(minLength: 8)
+                            detailsButton
+                            Chip(text: plan.ticket.type)
+                            Chip(text: plan.ticket.status, tint: .blue)
+                        }
+                        text
+                        HeaderMeta(saved: saved) { editingTags = true }
+                            .padding(.top, 2)
+                    }
+                    Spacer(minLength: 0)
+                    rings
                 }
             }
         }
-        .padding(24)
+        .padding(narrowHeader ? 18 : 24)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { headerWidth = $0 }
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
         .popover(isPresented: $editingTags, arrowEdge: .bottom) {
             TagEditor(saved: saved)
+                .presentationCompactAdaptation(.popover)
         }
         .background {
             Button("") { editingTags = true }
@@ -375,8 +478,10 @@ struct PlanView: View {
                 store.regenerate(section: .tasks, in: saved.id, settings: settings)
             }
             .disabled(store.regenerating != nil || store.chatBusyID != nil)
+            #if os(macOS)
             Divider()
             Text("Keys: j/k move · space pass · f fail · b blocked · n note")
+            #endif
         } label: {
             HStack(spacing: 6) {
                 if store.regenerating == saved.id + ":tasks" {
@@ -791,6 +896,16 @@ private struct TaskRow: View {
     @State private var reportingBug = false
     @State private var showingWhy = false
     @State private var dropTargeted = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// iPhone: area and risk chips sit under the title so it gets the width.
+    private var compactRow: Bool {
+        #if os(iOS)
+        sizeClass == .compact
+        #else
+        false
+        #endif
+    }
     #if os(iOS)
     @State private var choosingEvidence = false
     @State private var showingPhotos = false
@@ -863,12 +978,20 @@ private struct TaskRow: View {
                         .strikethrough(isDone)
                         .foregroundStyle(isDone ? .secondary : .primary)
                     Spacer(minLength: 8)
-                    if !task.area.isEmpty { Chip(text: task.area) }
-                    RiskChip(risk: task.risk)
+                    if !compactRow {
+                        if !task.area.isEmpty { Chip(text: task.area) }
+                        RiskChip(risk: task.risk)
+                    }
                     actionsMenu
                 }
                 .contentShape(.rect)
                 .onTapGesture { withAnimation(.smooth) { expanded.toggle() } }
+                if compactRow {
+                    HStack(spacing: 6) {
+                        if !task.area.isEmpty { Chip(text: task.area) }
+                        RiskChip(risk: task.risk)
+                    }
+                }
 
                 if verdict == .fail || verdict == .blocked { outcomeCallout }
 
@@ -1030,6 +1153,7 @@ private struct TaskRow: View {
             }
             .padding(16)
             .frame(width: 320)
+            .presentationCompactAdaptation(.popover)
         }
     }
 
@@ -1174,8 +1298,18 @@ private struct CriterionRow: View {
     let saved: SavedPlan
     let toggle: () -> Void
     @Environment(PlanStore.self) private var store
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var hovering = false
     @State private var showingVague = false
+
+    /// iPhone: the flag, gap-fill button and source sit under the text instead of beside it.
+    private var stackMeta: Bool {
+        #if os(iOS)
+        sizeClass == .compact
+        #else
+        false
+        #endif
+    }
 
     /// Advisory vagueness flag: very short text or hedged wording.
     static func vagueness(_ text: String) -> String? {
@@ -1210,56 +1344,75 @@ private struct CriterionRow: View {
             Text(criterion.id)
                 .font(.callout.monospaced().weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text(criterion.text)
-                .strikethrough(isMet, color: .secondary)
-                .foregroundStyle(isMet ? .secondary : .primary)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            if !isMet, let vague = Self.vagueness(criterion.text) {
-                Button {
-                    showingVague = true
-                } label: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+            if stackMeta {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(criterion.text)
+                        .strikethrough(isMet, color: .secondary)
+                        .foregroundStyle(isMet ? .secondary : .primary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 10) { meta }
+                        .font(.caption)
                 }
-                .buttonStyle(.plain)
-                .help("Possibly ambiguous (\(vague)) — see draft questions")
-                .popover(isPresented: $showingVague) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Possibly ambiguous (\(vague))").font(.headline)
-                        ForEach(drafts, id: \.self) { q in
-                            Text("• " + q).font(.callout).textSelection(.enabled)
-                        }
-                        Button("Copy questions") {
-                            Platform.copy(drafts.joined(separator: "\n"))
-                        }
-                        .buttonStyle(.glass)
-                        .controlSize(.small)
-                    }
-                    .padding(16)
-                    .frame(width: 340)
-                }
-            }
-            if !isMet && state == .uncovered {
-                Button {
-                    withAnimation(.smooth) { store.suggestTask(for: criterion.id, in: saved.id) }
-                } label: {
-                    Image(systemName: "plus.circle")
-                        .foregroundStyle(.blue)
-                }
-                .buttonStyle(.plain)
-                .help("Draft the missing task for this criterion")
-            }
-            if criterion.source == "derived" {
-                Chip(text: "derived", tint: .orange)
-                    .help("No explicit AC on the ticket — inferred from the description.")
             } else {
-                TicketKeyButton(key: criterion.source, font: .caption.monospaced())
-                    .foregroundStyle(.tertiary)
+                Text(criterion.text)
+                    .strikethrough(isMet, color: .secondary)
+                    .foregroundStyle(isMet ? .secondary : .primary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                meta
             }
         }
         .animation(.smooth(duration: 0.15), value: hovering)
+    }
+
+    @ViewBuilder
+    private var meta: some View {
+        if !isMet, let vague = Self.vagueness(criterion.text) {
+            Button {
+                showingVague = true
+            } label: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .help("Possibly ambiguous (\(vague)) — see draft questions")
+            .popover(isPresented: $showingVague) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Possibly ambiguous (\(vague))").font(.headline)
+                    ForEach(drafts, id: \.self) { q in
+                        Text("• " + q).font(.callout).textSelection(.enabled)
+                    }
+                    Button("Copy questions") {
+                        Platform.copy(drafts.joined(separator: "\n"))
+                    }
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+                }
+                .padding(16)
+                .frame(width: 340)
+                .presentationCompactAdaptation(.popover)
+            }
+        }
+        if !isMet && state == .uncovered {
+            Button {
+                withAnimation(.smooth) { store.suggestTask(for: criterion.id, in: saved.id) }
+            } label: {
+                Image(systemName: "plus.circle")
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+            .help("Draft the missing task for this criterion")
+        }
+        if criterion.source == "derived" {
+            Chip(text: "derived", tint: .orange)
+                .help("No explicit AC on the ticket — inferred from the description.")
+        } else {
+            TicketKeyButton(key: criterion.source, font: .caption.monospaced())
+                .foregroundStyle(.tertiary)
+        }
+    
     }
 
     private var icon: String {
@@ -1619,7 +1772,7 @@ private struct ChatComposer: View {
         .padding(.vertical, 8)
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
         .frame(maxWidth: 820)
-        .padding(.horizontal, 28)
+        .padding(.horizontal, PageLayout.side)
         .padding(.bottom, 16)
         .onAppear { focused = true }
     }
@@ -1825,13 +1978,14 @@ private struct CriteriaLegend: View {
     let hasUncovered: Bool
 
     var body: some View {
-        HStack(spacing: 14) {
-            Label("Click to mark met", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+        FlowLayout(spacing: 14) {
+            Label(Platform.isMac ? "Click to mark met" : "Tap to mark met", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
             Label("Tests to do", systemImage: "seal")
             Label("Tests done", systemImage: "checkmark.seal")
             if hasUncovered {
-                Label("No test task covers it — verify manually or ask", systemImage: "exclamationmark.circle")
+                Label("No test task covers it", systemImage: "exclamationmark.circle")
                     .foregroundStyle(.orange)
+                    .help("Verify it manually, or ask for a task from the ⊕ next to it")
             }
         }
         .font(.caption2)

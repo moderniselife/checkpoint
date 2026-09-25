@@ -464,7 +464,7 @@ final class PlanStore {
         plans[i].dueDate = date
         plans[i].updatedAt = .now
         save()
-        if date == nil { Reminders.cancel(planID: planID) } else { Reminders.sync(plans[i]) }
+        if date == nil { Reminders.cancel(planID: planID) } else { Reminders.sync(plans[i], askPermission: true) }
     }
 
     // MARK: - Re-run diff (IDEA-007)

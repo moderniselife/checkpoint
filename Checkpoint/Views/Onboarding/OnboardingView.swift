@@ -489,7 +489,10 @@ private struct AIPage: View {
                     } label: {
                         HStack(spacing: 6) {
                             Text(p == .openAICompatible ? "Local model" : p.shortLabel)
-                            if p == .anthropic { Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow) }
+                            if p == .anthropic {
+                                Image(systemName: "star.fill").font(.caption2)
+                                    .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(.yellow))
+                            }
                         }
                         .font(.callout.weight(on ? .semibold : .regular))
                         .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
@@ -704,7 +707,7 @@ private struct SyncPage: View {
                            selected: sync.mode == .iCloud) { sync.setMode(.iCloud) }
                     .disabled(!sync.iCloudAvailable)
                 SyncChoice(title: "Sync folder", icon: "folder.fill", tint: .blue,
-                           text: sync.folderPath.map { "Using \($0)" } ?? "Pick a folder in iCloud Drive — free, works anywhere.",
+                           text: sync.folderPath.map { "Using \($0)" } ?? "A folder in iCloud Drive. Free.",
                            badge: sync.iCloudAvailable ? nil : "Recommended",
                            selected: sync.mode == .folder) {
                     if sync.hasFolder { sync.setMode(.folder) } else { pickingFolder = true }
