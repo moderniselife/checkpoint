@@ -128,9 +128,16 @@ final class SyncCoordinator {
         #else
         let options: URL.BookmarkCreationOptions = []
         #endif
-        guard let data = try? url.bookmarkData(options: options, includingResourceValuesForKeys: nil, relativeTo: nil) else {
-            status = .failed("Couldn't keep access to that folder.")
-            return
+        let data: Data
+        do {
+            data = try url.bookmarkData(options: options, includingResourceValuesForKeys: nil, relativeTo: nil)
+        } catch {
+            // Unsandboxed builds (and some network shares) refuse scoped bookmarks; a plain one still works there.
+            guard let plain = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) else {
+                status = .failed("Couldn't keep access to that folder: \(error.localizedDescription)")
+                return
+            }
+            data = plain
         }
         folderBookmark = data
         folderPath = Self.displayPath(url)
@@ -163,7 +170,8 @@ final class SyncCoordinator {
         #else
         let options: URL.BookmarkResolutionOptions = []
         #endif
-        guard let url = try? URL(resolvingBookmarkData: data, options: options, relativeTo: nil, bookmarkDataIsStale: &stale) else {
+        guard let url = (try? URL(resolvingBookmarkData: data, options: options, relativeTo: nil, bookmarkDataIsStale: &stale))
+                ?? (try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)) else {
             return nil
         }
         _ = url.startAccessingSecurityScopedResource()
@@ -188,6 +196,14 @@ final class SyncCoordinator {
         }
         if path.contains("/Mobile Documents/") || path.contains("CloudDocs") { return "iCloud Drive › \(url.lastPathComponent)" }
         // iOS "On My iPhone" lives in the File Provider Storage of Files.
+        // OneDrive / Google Drive / Dropbox desktop apps live in ~/Library/CloudStorage/<Provider-Account>.
+        if let r = path.range(of: "/Library/CloudStorage/") {
+            let parts = path[r.upperBound...].split(separator: "/").map(String.init)
+            if let provider = parts.first {
+                let name = provider.replacingOccurrences(of: "-", with: " – ", options: [], range: provider.range(of: "-"))
+                return ([name] + parts.dropFirst()).joined(separator: " › ")
+            }
+        }
         if path.contains("File Provider Storage") {
             let tail = path.components(separatedBy: "File Provider Storage").last ?? ""
             return (Platform.isMac ? "On My Mac" : "On My iPhone") + tail.replacingOccurrences(of: "/", with: " › ")
@@ -195,21 +211,55 @@ final class SyncCoordinator {
         return (path as NSString).abbreviatingWithTildeInPath
     }
 
+    /// Set by `requestFolder()` on iOS; the view shows the Files folder picker.
+    var wantsFolderPicker = false
+
+    /// Where the Mac folder panel starts.
+    enum FolderStart {
+        /// iCloud Drive — personal devices.
+        case iCloudDrive
+        /// ~/Library/CloudStorage — OneDrive, Google Drive, Dropbox, Box desktop apps.
+        case cloudStorage
+        case anywhere
+    }
+
+    /// "Choose a sync folder": the Mac opens a panel straight away, iOS shows the Files picker
+    /// (which lists iCloud Drive, OneDrive, Google Drive, Dropbox… as locations).
+    func requestFolder(start: FolderStart = .iCloudDrive) {
+        #if os(macOS)
+        chooseFolder(start: start)
+        #else
+        wantsFolderPicker = true
+        #endif
+    }
+
     #if os(macOS)
     /// Mac: a folder picker that opens in iCloud Drive, the recommended place.
-    func chooseFolder() {
+    func chooseFolder(start: FolderStart = .iCloudDrive) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "Sync Here"
-        panel.message = "Pick a folder for Checkpoint to sync through — iCloud Drive works on every Apple device. A “Checkpoint” folder is made inside it."
-        if let pw = getpwuid(getuid()), let home = pw.pointee.pw_dir {
-            let drive = URL(fileURLWithPath: String(cString: home)).appending(path: "Library/Mobile Documents/com~apple~CloudDocs")
-            if FileManager.default.fileExists(atPath: drive.path) { panel.directoryURL = drive }
+        panel.message = start == .cloudStorage
+            ? "Pick a folder in OneDrive, Google Drive, Dropbox or Box. A “Checkpoint” folder is made inside it."
+            : "Pick a folder for Checkpoint to sync through. A “Checkpoint” folder is made inside it."
+        if start != .anywhere, let pw = getpwuid(getuid()), let home = pw.pointee.pw_dir {
+            let base = URL(fileURLWithPath: String(cString: home))
+            panel.directoryURL = start == .cloudStorage
+                ? base.appending(path: "Library/CloudStorage", directoryHint: .isDirectory)
+                : base.appending(path: "Library/Mobile Documents/com~apple~CloudDocs", directoryHint: .isDirectory)
         }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        useFolder(url)
+        // Non-blocking, attached to the front window when there is one.
+        let finish: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.useFolder(url)
+        }
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            panel.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+            panel.begin(completionHandler: finish)
+        }
     }
     #endif
 }
