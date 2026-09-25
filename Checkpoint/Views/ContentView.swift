@@ -149,6 +149,7 @@ struct EmptyStateView: View {
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.showSettings) private var showSettings
 
     var body: some View {
         VStack(spacing: 16) {
@@ -165,7 +166,11 @@ struct EmptyStateView: View {
                 .frame(maxWidth: 420)
             if !settings.isConfigured {
                 Button {
+                    #if os(macOS)
                     openWindow(id: SettingsView.windowID)
+                    #else
+                    showSettings()
+                    #endif
                 } label: {
                     Label("Connect an AI provider + your tracker", systemImage: "key.fill")
                 }
