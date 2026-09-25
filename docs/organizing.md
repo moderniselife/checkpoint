@@ -15,26 +15,26 @@
 
 ## Finding plans
 
-- **Search** matches key, title, folder and tags; the filter menu narrows by mode, tracker,
-  progress and tag; **sort** orders by updated, progress, key or AC met.
+- **Search** matches key, title, folder and tags. The filter menu in the *Test plans* header
+  sorts (updated, progress, key or AC met) and narrows by mode, tracker, progress and tag.
 - **Pin** active plans to the top section; **archive** finished ones out of sight (restorable).
-- **Tags** are freeform (`sprint-12`, `needs-qa`), edited in the plan header.
+- **Tags** are freeform (`sprint-12`, `needs-qa`), added under the plan summary.
 - The **Dashboard** (top of the sidebar) shows rolling-7-day stats, an 8-week trend and everything
   in progress — computed from last-touched times, no setup.
 
 ## Reminders
 
-Set **tomorrow / in a week** (or clear) from the Organise menu. You get a morning notification on
+Set **tomorrow / in a week** (or clear) from the plan toolbar's **More** (⋯) menu. You get a morning notification on
 the due day plus an overdue badge in the sidebar. Permission is asked only the first time you set
 one; saying no keeps dates and badges, just no banners. Finishing a plan retires its reminder.
 
 ## Batch work
 
-- **Import** (sidebar button): Jira JQL search, epic children, or a pasted list of keys/links.
+- **Plan several tickets** (**+** in the *Test plans* header): Jira JQL search, epic children, or a pasted list of keys/links.
   Each issue gets its own plan in a new folder, run sequentially with progress, cancel, and an
   error summary at the end. Linear views work via paste.
 - **Plan each child** (ticket panel): same engine, pre-filled from the epic's children.
-- **Regression suites** (folder overview → Build suite): merge a folder's plans into one deduplicated
+- **Regression suites** (folder page → **Build regression suite**): merge a folder's plans into one deduplicated
   run with local ticks and Markdown export. Suites are transient by design — source plans stay canonical.
 
 **When to use what:** import for sprint planning, epic-children for breakdowns, suites for release day.

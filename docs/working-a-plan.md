@@ -13,33 +13,35 @@ The header counts passes on its rings and calls out failures and blocks.
 
 ## Finding things in a big plan
 
-- **To do / All / Failed / Blocked** filter plus **Smoke** (5-minute top-risk subset) and **P0** lenses.
-- **Estimates** (⏱) and header totals size the run; **sample data** blocks copy valid/invalid/boundary inputs.
-- **Source links** under each task jump to the ticket, comment or page it came from; the ⓘ button
-  explains why the task exists.
+- **To do / All / Failed / Blocked** filter, and next to it a filter menu with **Smoke** (5-minute
+  top-risk subset) and **P0** lenses. Active lenses show as removable pills above the list.
+- **Estimates** under each task and in the header size the run; **sample data** blocks copy valid/invalid/boundary inputs.
+- **Source links** under each task jump to the ticket, comment or page it came from; **Why this task?**
+  in its ⋯ menu explains why it exists.
 - Amber ⚠ flags mark **vague acceptance criteria** with draft questions for the PM/dev; the ⊕ on an
   uncovered criterion drafts the missing task in one click. **Add more edge cases** appends curated
   negative paths without duplicating.
 
 ## Notes, evidence, timer
 
-- **Notes** (pencil icon, or `n`): freeform observations per task, included in exports.
-- **Evidence** (paperclip): drag screenshots or files onto a task. Thumbnails preview inline;
+- **Notes** (⋯ → Add Note, or `n`): freeform observations per task, included in exports.
+- **Evidence** (⋯ → Attach Evidence, or drag screenshots or files onto a task). Thumbnails preview inline;
   Markdown lists them, HTML embeds small images.
-- **Timer** (header chip): start/stop time-on-task. It persists across launches, auto-pauses on quit,
+- **Timer** (stopwatch under the plan summary): start/stop time-on-task. It persists across launches, auto-pauses on quit,
   and totals into exports.
 
 ## Asking for changes
 
 - **Chat tab**: ask follow-ups ("what about admins?"). Answers stay in the thread; **Update plan
   from this** folds an answer back into the plan with ticks intact.
-- **Regenerate** buttons redo just tasks, acceptance criteria or edge cases.
+- **Regenerate** (the ⋯ on Acceptance criteria and Edge cases, the filter menu on Test tasks) redoes
+  just that section.
 - Chat and regen use the same ID-preserving merge as re-runs.
 
 ## Keyboard and mini panel
 
 Click the task list, then **j/k** move, **space** ticks, **f** fails, **b** blocks, **n** notes.
-The toolbar **pop-out** opens a floating always-on-top checklist that ticks live while you test
+**More** (⋯) → **Mini Checklist** in the plan toolbar opens a floating always-on-top checklist that ticks live while you test
 in a browser — same store, no sync step.
 
 ## Bug reports

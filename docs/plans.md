@@ -29,12 +29,13 @@ Toggle in the input bar (**⌘⇧M**), default in Settings → Testing.
 ## Effort, templates, presets
 
 - **Effort** (Settings → AI provider: low/medium/high/xhigh) steers reasoning depth on providers
-  that support it — and everywhere it caps how long a runaway thinker may yap before Checkpoint
+  that support it — and everywhere it caps how long a runaway thinker may run before Checkpoint
   cuts it off and moves on. Local models that think forever are bounded by this.
-- **Templates** (input-bar menu: Auto/Bug/Feature/Epic) reshape the plan — bugs lead with
+- **Templates** (the options menu at the end of the ticket field: Auto/Bug/Feature/Epic) reshape the plan — bugs lead with
   reproduction, features with happy path, epics stay grouped per child. Auto follows the ticket type.
-- **Quick vs Deep** (input-bar toggle): Quick uses a cheaper model at low effort for trivial tickets;
-  Deep uses your best setup. Quick plans carry a chip with a one-click **Upgrade to deep**.
+- **Quick vs Deep** (same options menu): Quick uses a cheaper model at low effort for trivial tickets;
+  Deep uses your best setup. Set the quick model in Settings → AI Provider. Quick plans carry a chip,
+  and **Re-run** offers **Upgrade to Deep**. The menu lights up while anything differs from the defaults.
 - **House rules** (Settings → Testing): standing instructions appended to every prompt,
   e.g. "always check Safari, use tenant X".
 

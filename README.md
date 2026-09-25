@@ -31,16 +31,40 @@ No more opening ten tabs and flipping back and forth.
   metrics: tasks tested and AC met (header rings, sidebar, folder roll-ups, Markdown export).
 - **Copy as Markdown** for Jira comments / PRs. **Re-run** keeps ticks and met criteria that survive.
 - **Live research feed** — see each ticket it opens and expand its reasoning as it works.
+- **Quick or Deep**, and a **template** (Bug / Feature / Epic) when the ticket type isn't enough —
+  both in the small options menu at the end of the ticket field. **House rules** in Settings ride along
+  with every plan.
 
-### Folders
+### Working a plan
+- **Verdicts** — pass, fail (with what actually happened) or blocked (with why), from each task's ⋯ menu.
+  A failed task turns into a pre-filled **bug report** you can copy.
+- **Notes and evidence** — add a note, or drop screenshots and files straight onto a task.
+- **Smoke and P0 lenses** — cut a big plan down to the 5-minute top-risk subset, or just the P0s.
+  Tasks carry risk badges, time estimates, sample test data and links to the comment or page they came from.
+- **Timer** — track time spent testing; it totals into exports.
+- **Chat** — ask follow-ups about the plan and fold good answers back in. Regenerate just the tasks,
+  acceptance criteria or edge cases; ticks survive.
+- **Keyboard** — j/k to move, space to pass, f/b/n for fail, blocked and note.
+- **Mini checklist** — a small always-on-top panel to tick through while you test in a browser.
+- **Automation skeletons** — copy a Playwright or XCTest starting point from the Export menu.
+
+See [docs/working-a-plan.md](docs/working-a-plan.md) for the details.
+
+### Folders and finding things
 Organise plans into folders nested to any depth, each with a colour.
-- **＋ folder** button in the sidebar header; right-click a folder for *New Subfolder*, *Edit*, *Move*, *Delete*
+- **＋** in the sidebar header makes a folder, a **smart folder** (live rule: label, component,
+  fix version or epic) or plans a whole sprint, epic or pasted list in one go. Right-click a folder for *New Subfolder*, *Edit*, *Move*, *Delete*
   (deleting moves its contents up a level).
 - **Drag** plans and folders onto folders, or onto the *Test plans* header to move them to the top level.
   Right-click → **Move To** gives a nested menu too.
 - Folders show rolled-up tested counts; selecting one opens an overview with breadcrumb, tested / AC-met
   rings, subfolders and plans.
 - New plans land in the folder you're looking at.
+- **Search, sort and filter** the sidebar; **pin**, **tag**, **archive** and set **reminders** on plans.
+- The **Dashboard** shows the last week of testing, an 8-week trend and everything in progress.
+- Build a deduplicated **regression suite** from a folder's plans for release day.
+
+See [docs/organizing.md](docs/organizing.md).
 
 ### Dev vs QA mode
 Toggle in the input bar (**⌘⇧M**); default in Settings.
@@ -79,10 +103,14 @@ Plans, Dev/QA mode, the research feed, the ticket panel, folders and AC tracking
 The panel adapts to each tracker: Jira adds work log, history and time tracking; Linear shows its
 project, cycle, estimate, sub-issues, relations, link attachments (PRs, Figma…) and uploaded files.
 
+**Custom MCP servers** (Settings → Custom Servers) add anything else that speaks MCP over HTTP —
+as a tracker of its own, or as an extra read-only research source whose findings get cited in tasks.
+
 ### Read-only by design
 Checkpoint can never change your tickets:
 - **Jira** — only `get*` / `search*` / `fetch` / `lookup*` / `list*` MCP tools are exposed to Claude.
 - **Linear** — uses Linear's `/mcp/readonly` endpoint with a `read` OAuth scope, enforced by Linear.
+- **Custom servers** — only read-only tools, by the same name rules as Jira.
 
 ---
 
