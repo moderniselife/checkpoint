@@ -35,8 +35,17 @@ verified, what's known to be rough, and how to fix things when they break.
 | Read-only tool allowlist (Jira) | ✅ | `PlanGenerator.isReadOnly` | Only `get*`/`search*`/`fetch`/`lookup*`/`list*` exposed |
 | Streaming responses (SSE) with message reassembly | ✅ | `ClaudeClient.streamMessage` | Fixture-tested (thinking + signature, split tool JSON, text); watch a live run |
 | Prompt caching, server-side refusal fallbacks (`fallbacks: "default"`) | ✅ | `PlanGenerator.run` | Cache hits visible in API usage; fallback only on refusals |
-| Model + effort picker | ✅ | Settings → Anthropic | Change model, re-run |
+| Model + effort picker | ✅ | Settings → AI Provider | Change model, re-run |
 | Re-run keeps ticked tasks / met criteria that still exist | ✅ | `PlanStore.analyze` | Tick, re-run, ticks remain |
+| Re-run diff banner + added/changed highlights | 🧪 | `PlanDiff`, `PlanStore.planDiff` | Re-run a changed ticket |
+| Smoke subset lens (top-6 by risk) + P0/P1/P2 badges + P0 filter | 🧪 | `TestPlan.smokeSubset`, `LensChip` | Test tasks → filter menu → Smoke / P0 |
+| Sample data, time estimates, source citations per task | 🧪 | `Task.testData/estimateMin/sources` | Fresh runs; older plans lack fields |
+| Ambiguity flags with draft questions; one-click coverage gap fill | 🧪 | `CriterionRow` | Amber flag / plus on uncovered AC |
+| Edge-case booster (curated, dupe-checked) | 🧪 | `PlanStore.boostEdgeCases` | Edge cases ⋯ → Add more edge-case tasks |
+| Team house rules appended to every prompt | 🧪 | `AppSettings.houseRules` | Settings → Testing |
+| Bug/feature/epic templates with input-bar override | 🧪 | `PlanGenerator.PlanTemplate` | Options menu at the end of the ticket field |
+| Copy Playwright / XCTest skeletons | 🧪 | `PlanExporter.automation` | Export menu |
+| Regression suite builder (dedupe merge, local ticks, Markdown) | 🧪 | `SuiteView.swift` | Folder page → Build regression suite |
 | Copy as Markdown (tasks + AC checkboxes) | ✅ | `PlanExporter.markdown` | Toolbar → Export → Copy as Markdown |
 | Save as Markdown (`.md`) with status header, emoji sections, scenarios, sources | 🧪 | `PlanExporter.markdown` | Export → Save as Markdown… |
 | Save as HTML page — Liquid Glass, light/dark, print, browser-tickable with live rings | 🧪 | `PlanExporter.html` | Export → Save as HTML Page… (rendered in Chrome light + dark) |
@@ -58,6 +67,13 @@ verified, what's known to be rough, and how to fix things when they break.
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
 | Tickable test tasks, grouped per ticket for epics | ✅ | `PlanView.TaskRow` | Tick tasks; ring updates |
+| Pass / Fail / Blocked verdicts per task (actual + reason, filters, header counts) | 🧪 | `SavedPlan.failed/blocked`, `TaskRow` verdict menu | Task ⋯ menu; To do/Failed/Blocked filter |
+| Notes per task (inline editor, exports, `n` shortcut) | 🧪 | `SavedPlan.notes` | Task ⋯ → Add Note, or `n` |
+| Evidence capture (attach, thumbnails, Markdown + HTML embed) | 🧪 | `PlanStore.attachEvidence`, `EvidenceThumb` | Task ⋯ → Attach Evidence, or drop files on a task |
+| Testing timer (live chip, persists, auto-pause, exports) | 🧪 | `PlanStore.toggleTimer` | Stopwatch under the plan summary |
+| Bug report from failed task (pre-filled, copy) | 🧪 | `BugReportSheet` | “Report bug…” on failed tasks |
+| Floating mini checklist (always-on-top, live ticks) | 🧪 | `MiniPanel.swift` | Plan toolbar → More → Mini Checklist |
+| Keyboard-first testing (j/k/space/f/b/n) | 🧪 | `PlanView.taskList` | Click the task list first |
 | To do / All filter | ✅ | `PlanView` | Segmented control |
 | Acceptance criteria as checkboxes (met state) | ✅ | `CriterionRow`, `PlanStore.toggleCriterion` | Click a seal → green + strikethrough |
 | AC coverage hints + legend | ✅ | `CriteriaLegend` | Orange ⚠︎ = no task covers it |
@@ -105,6 +121,15 @@ verified, what's known to be rough, and how to fix things when they break.
 | Nested "Move To" menus | ✅ | `MoveMenu` | Right-click plan |
 | Folder overview (breadcrumb, rolled-up rings, subfolder cards) | ✅ | `FolderOverview.swift` | Select a folder |
 | New plans land in the selected folder | ✅ | `PlanStore.analyze` | — |
+| Search & filter plans (key/title/folder/tag + mode/tracker/progress) | 🧪 | `SidebarView` search + `PlanStore.matches` | Sidebar search + filter menu |
+| Sort plans (updated, progress, key, AC met) | 🧪 | `PlanStore.sidebarSort` | Filter menu in the Test plans header |
+| Pin / favourite (Pinned section) | 🧪 | `SavedPlan.pinned`, `PlanStore.togglePin` | Right-click → Pin |
+| Archive (hidden by default, restorable) | 🧪 | `SavedPlan.archived`, `PlanStore.toggleArchive` | Right-click → Archive |
+| Tags on plans (editor, chips, filter) | 🧪 | `SavedPlan.tags`, `HeaderMeta` | Add tag, under the plan summary |
+| Due dates with local notifications + overdue badges | 🧪 | `SavedPlan.dueDate`, `Reminders.swift` | Plan toolbar → More → Remind Me |
+| Batch planning: JQL sprint import, epic children, paste-a-list → one plan each in a folder | 🧪 | `BatchSheet.swift`, `PlanStore.startBatch` | Test plans header ＋ → Plan Several Tickets; panel “Plan each child” |
+| Smart folders (label/component/fix-version/epic rules, live, convertible) | 🧪 | `SmartFolder.swift`, `PlanStore.smartFolders` | Test plans header ＋ → New Smart Folder; old plans need a re-run for metadata |
+| Testing dashboard (7-day stats, 8-week trend, in progress) | 🧪 | `DashboardView.swift` | Sidebar Dashboard |
 
 ### 1.7 Connections & auth
 
@@ -136,6 +161,12 @@ verified, what's known to be rough, and how to fix things when they break.
 | Local OpenAI-compatible (Ollama, LM Studio, vLLM, llama.cpp) | 🧪 | same | Fixture-tested; try `http://localhost:11434/v1` |
 | Local Anthropic-compatible (LiteLLM, gateways) | 🧪 | `runAnthropic` compatible branch | Fixture-tested end to end |
 | Per-provider key/model/base URL, Fetch models, Test | 🧪 | Settings → AI provider | Switch providers; each keeps its setup |
+| Quick model preset at low effort | 🧪 | `AppSettings.quickModel` | Ticket-field options menu → Quick; model in Settings → AI Provider |
+| Cost readout per plan (tokens + ≈$) | 🧪 | `LLMUsage`, research log stat | Plan → Research tab |
+| Follow-up chat with plan updates | 🧪 | `PlanChat`, Chat tab | Plan toolbar → Chat |
+| Regenerate one section (tasks/AC/edge cases) | 🧪 | `PlanStore.regenerate` | ⋯ on AC / Edge cases; Test tasks filter menu |
+| Why-this-task rationale popovers | 🧪 | `TaskRow` ⋯ menu | Task ⋯ → Why This Task? |
+| Custom MCP servers as research sources | 🧪 | `CustomMCPTracker.useForResearch` | Custom server → Use for research |
 | Strip-and-retry unsupported params (reasoning effort, JSON schema…) | 🧪 | `OpenAIChatClient.stream` | Fixture 400 on `reasoning_effort` recovered |
 | Gemini-safe tool schemas | 🧪 | `PlanGenerator.cleanSchema` | Unit-checked |
 
@@ -232,7 +263,8 @@ verified, what's known to be rough, and how to fix things when they break.
 
 ### Where data lives
 - Plans: `~/Library/Containers/com.josephshenton.checkpoint/Data/Library/Application Support/Checkpoint/plans.json`
-- Folders: same directory, `folders.json`
+- Folders: same directory, `folders.json`; smart folders: `smartFolders.json`
+- Task evidence: same directory, `evidence/<planID>/<taskID>/`
 - Keys/tokens: macOS Keychain, service `com.josephshenton.checkpoint`
 - Preferences (mode, model, open tabs, panel width…): the app's `UserDefaults`
 
