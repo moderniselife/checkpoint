@@ -131,6 +131,7 @@ struct PlanView: View {
             .frame(maxWidth: .infinity)
         }
         .glassScrollIndicator()
+        .drivesScrollChrome()
         .safeAreaInset(edge: .bottom) {
             if pane == .chat { ChatComposer(saved: saved) }
         }
@@ -140,6 +141,14 @@ struct PlanView: View {
         .onChange(of: saved.chat.count) {
             guard pane == .chat else { return }
             withAnimation(.smooth) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+        }
+        .onChange(of: pane) {
+            guard pane == .chat else { return }
+            // Let the thread lay out first, then land on the newest message.
+            Task {
+                try? await Task.sleep(for: .milliseconds(60))
+                proxy.scrollTo("chat-bottom", anchor: .bottom)
+            }
         }
         .onChange(of: store.chatBusyID) {
             guard pane == .chat else { return }
@@ -1774,7 +1783,8 @@ private struct ChatComposer: View {
         .frame(maxWidth: 820)
         .padding(.horizontal, PageLayout.side)
         .padding(.bottom, 16)
-        .onAppear { focused = true }
+        // Mac: ready to type. iOS: no keyboard until you tap the field.
+        .onAppear { if Platform.isMac { focused = true } }
     }
 
     private func ask() {
@@ -1912,7 +1922,7 @@ private struct ResearchLog: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
-                FlowLayout(spacing: 10) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], alignment: .leading, spacing: 10) {
                     Stat(value: "\(tickets.count)", label: tickets.count == 1 ? "ticket read" : "tickets read", icon: "ticket")
                     Stat(value: "\(tools.count)", label: tools.count == 1 ? "lookup" : "lookups", icon: "arrow.down.doc")
                     Stat(value: "\(thoughts)", label: thoughts == 1 ? "thought" : "thoughts", icon: "brain")
@@ -1920,12 +1930,13 @@ private struct ResearchLog: View {
                         Stat(value: Duration.seconds(d).formatted(.units(allowed: [.minutes, .seconds], width: .narrow)),
                              label: "research time", icon: "clock")
                     }
-                    if let u = saved.usage, !u.isEmpty {
-                        Stat(value: u.display(provider: LLMProvider(rawValue: saved.usageProvider) ?? .anthropic,
-                                              model: saved.usageModel),
-                             label: "model cost", icon: "dollarsign.circle")
-                            .help("Tokens + approximate cost for the run that produced this plan")
-                    }
+                }
+                if let u = saved.usage, !u.isEmpty {
+                    // Long value ("48.2k in · 6.1k out · ≈$1.18"), so it gets a full-width tile.
+                    Stat(value: u.display(provider: LLMProvider(rawValue: saved.usageProvider) ?? .anthropic,
+                                          model: saved.usageModel),
+                         label: "model cost", icon: "dollarsign.circle")
+                        .help("Tokens + approximate cost for the run that produced this plan")
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(items) { item in
@@ -1965,7 +1976,8 @@ private struct Stat: View {
                 Text(label).font(.caption).foregroundStyle(.secondary)
             }
             .lineLimit(1)
-            .fixedSize()
+            .minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

@@ -11,6 +11,7 @@ struct MobileRootView: View {
     @AppStorage("onboardingComplete") private var onboarded = false
     @State private var showingSettings = false
     @State private var columns: NavigationSplitViewVisibility = .all
+    @State private var chrome = ScrollChrome()
 
     private var phone: Bool { sizeClass == .compact }
 
@@ -35,12 +36,17 @@ struct MobileRootView: View {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background { Backdrop().ignoresSafeArea() }
+                .environment(\.scrollChrome, chrome)
+                .onChange(of: store.selection) { chrome.show() }
                 .safeAreaInset(edge: .top) {
                     if !phone {
                         TicketInputBar()
                             .padding(.horizontal, 20)
                             .padding(.top, 6)
                             .padding(.bottom, 8)
+                            .offset(y: chrome.barHidden ? -90 : 0)
+                            .opacity(chrome.barHidden ? 0 : 1)
+                            .allowsHitTesting(!chrome.barHidden)
                     }
                 }
         }

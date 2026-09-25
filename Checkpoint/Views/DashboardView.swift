@@ -129,6 +129,7 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity)
         }
         .glassScrollIndicator()
+        .drivesScrollChrome()
     }
 }
 

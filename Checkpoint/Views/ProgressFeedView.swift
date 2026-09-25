@@ -232,7 +232,8 @@ struct FeedRow: View {
                 .disabled(key == nil)
                 .help(key.map { "Show \($0) details" } ?? "")
         case .thinking:
-            let multiline = item.detail.contains("\n") || item.detail.count > 160
+            // Anything past a short line can be cut off on a phone, so let it expand.
+            let multiline = item.detail.contains("\n") || item.detail.count > 60
             VStack(alignment: .leading, spacing: 6) {
                 Button {
                     withAnimation(.smooth) { expanded.toggle() }
@@ -293,14 +294,18 @@ struct FeedRow: View {
             .frame(width: 16)
             .transition(.scale.combined(with: .opacity))
             Text(item.title)
+                .lineLimit(1)
+                .fixedSize()
             if !item.detail.isEmpty {
                 Text(item.detail)
                     .font(.callout.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    // Ticket keys and other short details are never cut.
+                    .fixedSize(horizontal: item.detail.count <= 20, vertical: false)
             }
-            if key != nil {
+            if key != nil && Platform.isMac {
                 Image(systemName: "sidebar.right").font(.caption).foregroundStyle(.tertiary)
             }
         }

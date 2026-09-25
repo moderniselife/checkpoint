@@ -813,11 +813,11 @@ final class PlanStore {
             return
         }
         guard settings.isLLMConfigured else {
-            error = "Set up an AI provider in Settings (⌘,) — \(settings.provider.label) needs \(settings.provider.requiresKey ? "an API key and " : "")a model."
+            error = "Set up an AI provider in \(Platform.settingsName) — \(settings.provider.label) needs \(settings.provider.requiresKey ? "an API key and " : "")a model."
             return
         }
         guard settings.isConfigured(tracker) else {
-            error = "Connect \(tracker.label) in Settings (⌘,) to analyze \(tracker.label) issues."
+            error = "Connect \(tracker.label) in \(Platform.settingsName) to analyze \(tracker.label) issues."
             return
         }
         task?.cancel()
@@ -942,7 +942,7 @@ final class PlanStore {
             return
         }
         guard settings.isLLMConfigured, settings.isConfigured(tracker) else {
-            error = "Connect an AI provider and \(tracker.label) in Settings (⌘,) first."
+            error = "Connect an AI provider and \(tracker.label) in \(Platform.settingsName) first."
             return
         }
         let folder = createFolder(named: folderName, in: selectedFolder?.id ?? selected?.folderID)

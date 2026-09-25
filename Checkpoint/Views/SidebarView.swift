@@ -603,6 +603,7 @@ struct SmartFolderOverview: View {
             .frame(maxWidth: .infinity)
         }
         .glassScrollIndicator()
+        .drivesScrollChrome()
         .sheet(isPresented: $editing) {
             SmartFolderEditor(smart: smart) { editing = false }
                 .environment(store)
