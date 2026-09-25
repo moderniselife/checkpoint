@@ -24,6 +24,9 @@ final class MiniPanelController: NSObject {
                 backing: .buffered, defer: false)
             p.level = .floating
             p.title = "Checklist"
+            p.titleVisibility = .hidden
+            p.titlebarAppearsTransparent = true
+            p.isMovableByWindowBackground = true
             p.isReleasedWhenClosed = false
             p.minSize = NSSize(width: 260, height: 200)
             panel = p
@@ -49,32 +52,40 @@ private struct MiniChecklistView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                if candidates.count > 1 {
-                    Menu {
-                        ForEach(candidates) { saved in
-                            Button("\(saved.plan.ticket.key) — \(saved.plan.ticket.title)") {
-                                planID = saved.id
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                    if candidates.count > 1 {
+                        Menu {
+                            ForEach(candidates) { saved in
+                                Button("\(saved.plan.ticket.key) — \(saved.plan.ticket.title)") {
+                                    planID = saved.id
+                                }
                             }
+                        } label: {
+                            Text(current?.plan.ticket.key ?? "Checklist")
+                                .font(.headline.monospaced())
                         }
-                    } label: {
-                        Label(current?.plan.ticket.key ?? "Checklist", systemImage: "list.bullet")
-                            .font(.headline)
-                            .lineLimit(1)
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .fixedSize()
+                        .help("Switch plan")
+                    } else {
+                        Text(current?.plan.ticket.key ?? "Checklist").font(.headline.monospaced())
                     }
-                    .menuStyle(.button)
-                    .buttonStyle(.plain)
-                } else {
-                    Label(current?.plan.ticket.key ?? "Checklist", systemImage: "list.bullet")
-                        .font(.headline)
-                        .lineLimit(1)
+                    if let current {
+                        Text(current.plan.ticket.title)
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 4)
                 if let current {
+                    Text("\(current.tasksDone)/\(current.plan.tasks.count)")
+                        .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                     ProgressRing(value: current.progress, lineWidth: 4)
                         .frame(width: 22, height: 22)
                 }
             }
+            .padding(.horizontal, 4)
             if let current {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
@@ -92,9 +103,10 @@ private struct MiniChecklistView: View {
                                     .strikethrough(current.done.contains(task.id))
                                     .foregroundStyle(current.done.contains(task.id) ? .secondary : .primary)
                             }
-                            .padding(8)
+                            .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                            .background(.background.opacity(current.done.contains(task.id) ? 0.2 : 0.6),
+                                        in: .rect(cornerRadius: 12))
                         }
                     }
                 }
