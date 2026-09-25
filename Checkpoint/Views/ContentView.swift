@@ -44,7 +44,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: Binding(get: { !onboarded }, set: { if !$0 { onboarded = true } })) {
             OnboardingView { onboarded = true }
-                .frame(width: 860, height: 700)
+                .frame(width: 820, height: 640)
                 .interactiveDismissDisabled()
         }
     }
