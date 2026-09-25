@@ -11,66 +11,61 @@ struct TicketInputBar: View {
 
     var body: some View {
         GlassEffectContainer(spacing: 12) {
-            VStack(spacing: 10) {
-                // Row 1: the field gets the full width; Analyze never squeezes it.
-                HStack(spacing: 12) {
-                    HStack(spacing: 10) {
-                        if settings.isAtlassianConfigured && settings.isLinearConfigured {
-                            TrackerMenu()
-                        } else {
-                            Image(systemName: "ticket")
-                                .foregroundStyle(.secondary)
-                        }
-                        // Custom placeholder: macOS hides the built-in one as soon as the field
-                        // is focused, and this field auto-focuses, so it was never visible.
-                        TextField("", text: $input)
-                            .textFieldStyle(.plain)
-                            .font(.title3)
-                            .background(alignment: .leading) {
-                                if input.isEmpty {
-                                    Text(placeholder)
-                                        .font(.title3)
-                                        .foregroundStyle(.tertiary)
-                                        .allowsHitTesting(false)
-                                }
-                            }
-                            .focused($focused)
-                            .onSubmit(submit)
-                            .disabled(store.isRunning)
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 12)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    .glassEffectID("field", in: glass)
-
-                    if store.isRunning {
-                        Button("Stop", systemImage: "stop.fill") { store.cancel() }
-                            .buttonStyle(.glass)
-                            .controlSize(.extraLarge)
-                            .glassEffectID("action", in: glass)
-                    } else {
-                        Button("Analyze", systemImage: "sparkles", action: submit)
-                            .buttonStyle(.glassProminent)
-                            .controlSize(.extraLarge)
-                            .keyboardShortcut(.return, modifiers: .command)
-                            .disabled(PlanStore.extractKey(input) == nil)
-                            .glassEffectID("action", in: glass)
-                    }
-                }
-                // Row 2: option pills get their own line so nothing ever squishes.
+            HStack(spacing: 12) {
                 HStack(spacing: 10) {
-                    ModeToggle()
-                        .glassEffectID("mode", in: glass)
-                    TemplateMenu(template: $template)
-                        .glassEffectID("template", in: glass)
-                    QuickDeepToggle(quick: $quick)
-                        .glassEffectID("depth", in: glass)
-                    ScenarioMenu()
-                        .glassEffectID("scenarios", in: glass)
+                    if settings.isAtlassianConfigured && settings.isLinearConfigured {
+                        TrackerMenu()
+                    } else {
+                        Image(systemName: "ticket")
+                            .foregroundStyle(.secondary)
+                    }
+                    // Custom placeholder: macOS hides the built-in one as soon as the field
+                    // is focused, and this field auto-focuses, so it was never visible.
+                    TextField("", text: $input)
+                        .textFieldStyle(.plain)
+                        .font(.title3)
+                        .background(alignment: .leading) {
+                            if input.isEmpty {
+                                Text(placeholder)
+                                    .font(.title3)
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .focused($focused)
+                        .onSubmit(submit)
+                        .disabled(store.isRunning)
+                    PlanOptionsMenu(template: $template, quick: $quick)
+                }
+                .padding(.leading, 18)
+                .padding(.trailing, 8)
+                .padding(.vertical, 12)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .glassEffectID("field", in: glass)
+
+                ModeToggle()
+                    .glassEffectID("mode", in: glass)
+
+                ScenarioMenu()
+                    .glassEffectID("scenarios", in: glass)
+
+                if store.isRunning {
+                    Button("Stop", systemImage: "stop.fill") { store.cancel() }
+                        .buttonStyle(.glass)
+                        .controlSize(.extraLarge)
+                        .glassEffectID("action", in: glass)
+                } else {
+                    Button("Analyze", systemImage: "sparkles", action: submit)
+                        .buttonStyle(.glassProminent)
+                        .controlSize(.extraLarge)
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .disabled(PlanStore.extractKey(input) == nil)
+                        .glassEffectID("action", in: glass)
                 }
             }
         }
-        .frame(maxWidth: 720)
+        .frame(maxWidth: 760)
         .animation(.smooth, value: store.isRunning)
         .onAppear { focused = true }
         .background {
@@ -98,31 +93,6 @@ struct TicketInputBar: View {
             store.analyze(input, template: template == .auto ? nil : template, settings: settings)
         }
         if store.error == nil { input = "" }
-    }
-}
-
-/// Quick (cheap, low effort) vs Deep (best model + effort) plans.
-private struct QuickDeepToggle: View {
-    @Binding var quick: Bool
-    @Environment(PlanStore.self) private var store
-
-    var body: some View {
-        Button {
-            withAnimation(.smooth) { quick.toggle() }
-        } label: {
-            Label(quick ? "Quick" : "Deep", systemImage: quick ? "hare" : "tortoise")
-                .font(.callout.weight(quick ? .semibold : .regular))
-                .foregroundStyle(quick ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background { if quick { Capsule().fill(Color.teal.gradient) } }
-        }
-        .buttonStyle(.plain)
-        .fixedSize()
-        .padding(4)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .disabled(store.isRunning)
-        .help(quick ? "Quick plan: cheaper model at low effort" : "Deep plan: your best model and effort")
     }
 }
 
@@ -189,37 +159,48 @@ private struct TrackerMenu: View {
     }
 }
 
-/// Plan shape override: auto (from ticket type), bug, feature or epic.
-private struct TemplateMenu: View {
+/// Quiet in-field menu for per-run options: plan shape and Quick vs Deep.
+/// Shows just an icon until something differs from the defaults.
+private struct PlanOptionsMenu: View {
     @Binding var template: PlanGenerator.PlanTemplate
+    @Binding var quick: Bool
     @Environment(PlanStore.self) private var store
 
+    private var summary: String? {
+        let parts = [quick ? "Quick" : nil, template == .auto ? nil : template.label].compactMap(\.self)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
-        let forced = template != .auto
         Menu {
-            ForEach(PlanGenerator.PlanTemplate.allCases, id: \.self) { t in
-                Button {
-                    template = t
-                } label: {
-                    Label(t.label, systemImage: template == t ? "checkmark" : "doc.badge.gearshape")
+            Picker("Depth", selection: $quick) {
+                Label("Deep — best model and effort", systemImage: "tortoise").tag(false)
+                Label("Quick — cheaper model, low effort", systemImage: "hare").tag(true)
+            }
+            .pickerStyle(.inline)
+            Picker("Plan shape", selection: $template) {
+                ForEach(PlanGenerator.PlanTemplate.allCases, id: \.self) { t in
+                    Text(t == .auto ? "Auto (from ticket type)" : t.label).tag(t)
                 }
             }
+            .pickerStyle(.inline)
         } label: {
-            Label(forced ? template.label : "Template", systemImage: "doc.badge.gearshape")
-                .font(.callout.weight(forced ? .semibold : .regular))
-                .foregroundStyle(forced ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background { if forced { Capsule().fill(Color.orange.gradient) } }
+            HStack(spacing: 5) {
+                Image(systemName: "slider.horizontal.3")
+                if let summary { Text(summary).font(.callout.weight(.semibold)) }
+            }
+            .foregroundStyle(summary == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.white))
+            .padding(.horizontal, summary == nil ? 6 : 10)
+            .padding(.vertical, 5)
+            .background { if summary != nil { Capsule().fill(Color.orange.gradient) } }
+            .contentShape(.capsule)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .padding(4)
-        .glassEffect(.regular.interactive(), in: .capsule)
         .disabled(store.isRunning)
-        .help("Plan shape: auto follows the ticket type")
+        .help(summary.map { "This run: \($0)" } ?? "Run options: Quick or Deep, and plan shape")
     }
 }
 
