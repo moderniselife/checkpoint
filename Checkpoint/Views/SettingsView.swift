@@ -33,7 +33,7 @@ struct SettingsView: View {
                     Section(group.rawValue) {
                         ForEach(rows, id: \.id) { section in
                             SettingsSidebarRow(title: section.title, icon: section.icon, tint: section.tint,
-                                               status: status(for: section))
+                                               logo: section.logo, status: status(for: section))
                                 .tag(section)
                         }
                         ForEach(custom) { tracker in
