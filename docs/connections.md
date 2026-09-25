@@ -19,7 +19,7 @@ model and URL; **Fetch models** lists what's actually available; **Test** proves
 - **Jira**: Sign in with Atlassian (OAuth, recommended) or email + API token (needs your org admin
   to allow API-token auth for the Rovo MCP server). **Test connection** lists the server's tools.
 - **Linear**: Sign in (read-scope OAuth) or API key, against Linear's read-only endpoint.
-- **Custom MCP** (Settings → Trackers): any Streamable-HTTP MCP server — endpoint plus optional
+- **Custom MCP** (Settings → Custom Servers): any Streamable-HTTP MCP server — endpoint plus optional
   bearer token. **List tools** shows what it offers with read-only badges. Two jobs:
   - as a *tracker* via match hint (inputs containing it route there), or
   - as a *research source* ("Use for research") whose read-only tools join plan research with citations.
