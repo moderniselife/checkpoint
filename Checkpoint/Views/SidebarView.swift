@@ -23,21 +23,12 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var store = store
         List(selection: $store.selection) {
-            Section {
-                HStack(spacing: 8) {
-                    Image(systemName: "chart.bar.fill")
-                        .foregroundStyle(.indigo.gradient)
-                        .frame(width: 22)
-                    Text("Dashboard")
-                    Spacer(minLength: 4)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(store.selection == PlanStore.dashboardTag ? Color.accentColor.gradient : Color.clear.gradient,
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .foregroundStyle(store.selection == PlanStore.dashboardTag ? .white : .primary)
-                .tag(PlanStore.dashboardTag)
+            Label {
+                Text("Dashboard")
+            } icon: {
+                Image(systemName: "chart.bar.fill").foregroundStyle(.indigo.gradient)
             }
+            .tag(PlanStore.dashboardTag)
             if let key = store.runningKey {
                 Section("Analyzing") {
                     HStack {
@@ -67,26 +58,13 @@ struct SidebarView: View {
                     }
                 }
             }
-            if !store.smartFolders.isEmpty || isFiltering {
+            if !store.smartFolders.isEmpty {
                 Section {
                     ForEach(store.smartFolders) { smart in
                         SmartFolderRow(smart: smart, editingSmartFolder: $editingSmartFolder)
                     }
                 } header: {
-                    HStack {
-                        Text("Smart folders")
-                        Spacer()
-                        Button {
-                            let f = store.createSmartFolder()
-                            editingSmartFolder = f.id
-                        } label: {
-                            Image(systemName: "folder.badge.gearshape")
-                        }
-                        .buttonStyle(.plain)
-                        .help("New smart folder")
-                    }
-                    .padding(.vertical, 2)
-                    .padding(.horizontal, 4)
+                    Text("Smart folders")
                 }
             }
             Section {
@@ -105,32 +83,28 @@ struct SidebarView: View {
                 HStack {
                     Text("Test plans")
                     Spacer()
-                    Button {
-                        showingBatch = true
-                    } label: {
-                        Image(systemName: "tray.and.arrow.down")
-                    }
-                    .buttonStyle(.plain)
-                    .help("Import a sprint or batch-plan issues")
+                    filterMenu
                     Menu {
-                        Picker("Sort", selection: $store.sidebarSort) {
-                            ForEach(PlanStore.SidebarSort.allCases) { Text($0.label).tag($0) }
+                        Button("New Folder", systemImage: "folder.badge.plus") {
+                            let f = store.createFolder(in: nil)
+                            editingFolder = f.id
                         }
-                        Toggle("Ascending", isOn: $store.sidebarSortAscending)
+                        Button("New Smart Folder", systemImage: "folder.badge.gearshape") {
+                            let f = store.createSmartFolder()
+                            editingSmartFolder = f.id
+                        }
+                        Divider()
+                        Button("Plan Several Tickets…", systemImage: "square.stack.3d.down.right") {
+                            showingBatch = true
+                        }
                     } label: {
-                        Image(systemName: "arrow.up.arrow.down")
+                        Image(systemName: "plus")
                     }
                     .menuStyle(.button)
                     .buttonStyle(.plain)
-                    .help("Sort plans")
-                    Button {
-                        let f = store.createFolder(in: nil)
-                        editingFolder = f.id
-                    } label: {
-                        Image(systemName: "folder.badge.plus")
-                    }
-                    .buttonStyle(.plain)
-                    .help("New folder")
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("New folder, smart folder, or plan a whole sprint")
                 }
                 .padding(.vertical, 2)
                 .padding(.horizontal, 4)
@@ -153,48 +127,51 @@ struct SidebarView: View {
                 ContentUnavailableView("No plans yet", systemImage: "tray", description: Text("Analyze a ticket to start."))
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Picker("Mode", selection: Binding(
-                        get: { modeFilter },
-                        set: { modeFilter = $0 }
-                    )) {
-                        Text("All modes").tag(nil as TestMode?)
-                        ForEach(TestMode.allCases) { Text($0.label).tag($0 as TestMode?) }
-                    }
-                    Picker("Tracker", selection: Binding(
-                        get: { trackerFilter },
-                        set: { trackerFilter = $0 }
-                    )) {
-                        Text("All trackers").tag(nil as Tracker?)
-                        ForEach(Tracker.allCases) { Text($0.label).tag($0 as Tracker?) }
-                    }
-                    Picker("Progress", selection: $progressFilter) {
-                        ForEach(PlanStore.SidebarProgressFilter.allCases) { Text($0.label).tag($0) }
-                    }
-                    if !store.allTags.isEmpty {
-                        Picker("Tag", selection: Binding(
-                            get: { tagFilter },
-                            set: { tagFilter = $0 }
-                        )) {
-                            Text("All tags").tag(nil as String?)
-                            ForEach(store.allTags, id: \.self) { Text($0).tag($0 as String?) }
-                        }
-                    }
-                    Toggle("Show archived", isOn: $showArchived)
-                    if isFiltering {
-                        Button("Clear filters", systemImage: "xmark.circle") {
-                            query = ""; modeFilter = nil; trackerFilter = nil
-                            progressFilter = .all; tagFilter = nil
-                        }
-                    }
-                } label: {
-                    Image(systemName: isFiltering ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                }
-                .help("Filter plans")
+    }
+
+    /// Sort + filters in one header menu; the icon fills while a filter is on.
+    private var filterMenu: some View {
+        @Bindable var store = store
+        return Menu {
+            Picker("Sort By", selection: $store.sidebarSort) {
+                ForEach(PlanStore.SidebarSort.allCases) { Text($0.label).tag($0) }
             }
+            Toggle("Ascending", isOn: $store.sidebarSortAscending)
+            Divider()
+            Picker("Mode", selection: $modeFilter) {
+                Text("All Modes").tag(nil as TestMode?)
+                ForEach(TestMode.allCases) { Text($0.label).tag($0 as TestMode?) }
+            }
+            Picker("Tracker", selection: $trackerFilter) {
+                Text("All Trackers").tag(nil as Tracker?)
+                ForEach(Tracker.allCases) { Text($0.label).tag($0 as Tracker?) }
+            }
+            Picker("Progress", selection: $progressFilter) {
+                ForEach(PlanStore.SidebarProgressFilter.allCases) { Text($0.label).tag($0) }
+            }
+            if !store.allTags.isEmpty {
+                Picker("Tag", selection: $tagFilter) {
+                    Text("All Tags").tag(nil as String?)
+                    ForEach(store.allTags, id: \.self) { Text($0).tag($0 as String?) }
+                }
+            }
+            Toggle("Show Archived", isOn: $showArchived)
+            if isFiltering {
+                Divider()
+                Button("Clear Filters", systemImage: "xmark.circle") {
+                    query = ""; modeFilter = nil; trackerFilter = nil
+                    progressFilter = .all; tagFilter = nil
+                }
+            }
+        } label: {
+            Image(systemName: isFiltering ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                .foregroundStyle(isFiltering ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
         }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Sort and filter plans")
     }
 
     private func visiblePlans(_ folder: UUID?) -> [SavedPlan] {
@@ -529,48 +506,69 @@ private struct SmartFolderEditor: View {
     }
 }
 
-/// Contents of a smart folder: live rule summary + matching plans.
+/// Contents of a smart folder: the live rule, rolled-up progress and matching plans.
 struct SmartFolderOverview: View {
     let smart: SmartFolder
     @Environment(PlanStore.self) private var store
     @State private var editing = false
 
     var body: some View {
+        let plans = store.plans(matching: smart)
+        let tasksDone = plans.reduce(0) { $0 + $1.tasksDone }
+        let tasksTotal = plans.reduce(0) { $0 + $1.plan.tasks.count }
+        let acMet = plans.reduce(0) { $0 + $1.criteriaMet }
+        let acTotal = plans.reduce(0) { $0 + $1.plan.acceptanceCriteria.count }
+
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Image(systemName: "folder.fill.badge.gearshape")
-                        .font(.title)
-                        .foregroundStyle(.teal.gradient)
-                    VStack(alignment: .leading) {
-                        Text(smart.name).font(.title2.weight(.semibold))
-                        Text("\(smart.kind.label): \(smart.value) · updates live")
-                            .font(.callout).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Edit rule…") { editing = true }
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label {
+                            Text(smart.name).font(.largeTitle.weight(.semibold))
+                        } icon: {
+                            Image(systemName: "folder.fill.badge.gearshape").foregroundStyle(.teal.gradient)
+                        }
+                        Text("\(smart.kind.label) is “\(smart.value)” · \(plans.count) plan\(plans.count == 1 ? "" : "s") · updates live")
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Button("Edit Rule…", systemImage: "slider.horizontal.3") { editing = true }
+                            Button("Convert to Folder", systemImage: "folder") { store.convertSmartFolder(smart.id) }
+                                .help("Freeze the current matches into a normal folder")
+                        }
                         .buttonStyle(.glass)
-                    Button("Convert to folder") { store.convertSmartFolder(smart.id) }
-                        .buttonStyle(.glassProminent)
+                        .controlSize(.small)
+                    }
+                    Spacer(minLength: 0)
+                    HStack(spacing: 16) {
+                        MetricRing(value: tasksTotal == 0 ? 0 : Double(tasksDone) / Double(tasksTotal),
+                                   label: "tested", text: "\(tasksDone)/\(tasksTotal)")
+                        MetricRing(value: acTotal == 0 ? 0 : Double(acMet) / Double(acTotal),
+                                   label: "AC met", text: "\(acMet)/\(acTotal)", tint: .teal)
+                    }
                 }
                 .padding(24)
                 .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 28))
-                let plans = store.plans(matching: smart)
-                if plans.isEmpty {
-                    ContentUnavailableView("No matching plans", systemImage: "folder.badge.questionmark",
-                                           description: Text("Plans whose ticket has \(smart.kind.label.lowercased()) “\(smart.value)” appear here. Old plans need a re-run to record ticket metadata."))
-                } else {
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Plans", systemImage: "checklist").font(.headline)
+                    if plans.isEmpty {
+                        Text("Plans whose ticket has \(smart.kind.label.lowercased()) “\(smart.value)” appear here. Plans made before ticket metadata was saved need a re-run.")
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(plans) { saved in
-                        SidebarRow(saved: saved)
-                            .tag(saved.id)
-                            .contentShape(.rect)
-                            .onTapGesture { store.selection = saved.id }
+                        Button { store.selection = saved.id } label: {
+                            SidebarRow(saved: saved)
+                                .padding(12)
+                                .background(.background.opacity(0.55), in: .rect(cornerRadius: 14))
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
             .frame(maxWidth: 820, alignment: .leading)
             .padding(.horizontal, 28)
-            .padding(.top, 140)
+            .padding(.top, 92)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
@@ -651,25 +649,14 @@ struct SidebarRow: View {
                         Image(systemName: "bell.badge.fill").font(.caption2).foregroundStyle(.red)
                             .help("Overdue")
                     } else if saved.dueDate != nil {
-                        Image(systemName: "bell").font(.caption2).foregroundStyle(.secondary)
-                            .help("Has due date")
+                        Image(systemName: "bell").font(.caption2).foregroundStyle(.tertiary)
+                            .help("Reminder set")
                     }
                 }
                 Text(saved.plan.ticket.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                if !saved.tags.isEmpty {
-                    HStack(spacing: 4) {
-                        ForEach(saved.tags.sorted().prefix(3), id: \.self) { tag in
-                            Text(tag)
-                                .font(.caption2)
-                                .padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(.quaternary, in: .capsule)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
             }
             Spacer(minLength: 4)
             CriteriaCount(saved: saved)
