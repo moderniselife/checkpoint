@@ -67,6 +67,10 @@ struct ContentView: View {
                         PlanView(saved: saved).id(saved.id)
                     } else if let folder = store.selectedFolder {
                         FolderOverview(folder: folder)
+                    } else if let smart = store.selectedSmartFolder {
+                        SmartFolderOverview(smart: smart).id(smart.id)
+                    } else if store.showingDashboard {
+                        DashboardView()
                     } else {
                         EmptyStateView()
                     }

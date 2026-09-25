@@ -153,7 +153,7 @@ private struct TicketDetailView: View {
 
                 if !detail.children.isEmpty {
                     PanelCard(title: "Child issues (\(detail.children.count))", icon: "list.bullet.indent") {
-                        ChildIssuesView(children: detail.children)
+                        ChildIssuesView(children: detail.children, parentKey: detail.key, tracker: detail.tracker)
                     }
                 }
 
@@ -739,7 +739,12 @@ private struct TicketTab: View {
 /// Epic children with a done / in-progress / to-do breakdown and a filter.
 private struct ChildIssuesView: View {
     let children: [TicketDetail.LinkedIssue]
+    var parentKey: String = ""
+    var tracker: Tracker = .jira
+    @Environment(PlanStore.self) private var store
+    @Environment(AppSettings.self) private var settings
     @State private var filter = "all"
+    @State private var showingBatch = false
 
     private var counts: (done: Int, active: Int, todo: Int) {
         (children.filter { $0.category == "done" }.count,
@@ -780,6 +785,16 @@ private struct ChildIssuesView: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(shown) { LinkedRow(issue: $0) }
             }
+            Button("Plan each child", systemImage: "tray.and.arrow.down") { showingBatch = true }
+                .buttonStyle(.glass)
+                .controlSize(.small)
+                .disabled(store.batchRunning)
+        }
+        .sheet(isPresented: $showingBatch) {
+            BatchSheet(initialKeys: children.map(\.key), initialTracker: tracker,
+                       initialFolderName: "\(parentKey) children")
+                .environment(store)
+                .environment(settings)
         }
     }
 }

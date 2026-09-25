@@ -7,10 +7,37 @@ struct SidebarView: View {
     @Environment(AppSettings.self) private var settings
     @State private var editingFolder: UUID?
     @State private var rootDropTargeted = false
+    @State private var query = ""
+    @State private var modeFilter: TestMode?
+    @State private var trackerFilter: Tracker?
+    @State private var progressFilter: PlanStore.SidebarProgressFilter = .all
+    @State private var tagFilter: String?
+    @State private var showArchived = false
+    @State private var showingBatch = false
+    @State private var editingSmartFolder: UUID?
+
+    private var isFiltering: Bool {
+        !query.isEmpty || modeFilter != nil || trackerFilter != nil || progressFilter != .all || tagFilter != nil
+    }
 
     var body: some View {
         @Bindable var store = store
         List(selection: $store.selection) {
+            Section {
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.bar.fill")
+                        .foregroundStyle(.indigo.gradient)
+                        .frame(width: 22)
+                    Text("Dashboard")
+                    Spacer(minLength: 4)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(store.selection == PlanStore.dashboardTag ? Color.accentColor.gradient : Color.clear.gradient,
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .foregroundStyle(store.selection == PlanStore.dashboardTag ? .white : .primary)
+                .tag(PlanStore.dashboardTag)
+            }
             if let key = store.runningKey {
                 Section("Analyzing") {
                     HStack {
@@ -20,17 +47,82 @@ struct SidebarView: View {
                     }
                 }
             }
-            Section {
-                ForEach(store.childFolders(of: nil)) { folder in
-                    FolderTreeRow(folder: folder, editingFolder: $editingFolder)
+            if !store.pinnedPlans.isEmpty && !isFiltering {
+                Section("Pinned") {
+                    ForEach(store.pinnedPlans) { saved in
+                        PlanRow(saved: saved)
+                    }
                 }
-                ForEach(store.plans(in: nil)) { saved in
+            }
+            if store.batchRunning {
+                Section("Batch") {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("\(store.batchLabel) · \(store.runningKey ?? "")")
+                            .font(.body.monospaced())
+                        Spacer(minLength: 4)
+                        Button("Cancel", role: .destructive) { store.cancelBatch() }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            if !store.smartFolders.isEmpty || isFiltering {
+                Section {
+                    ForEach(store.smartFolders) { smart in
+                        SmartFolderRow(smart: smart, editingSmartFolder: $editingSmartFolder)
+                    }
+                } header: {
+                    HStack {
+                        Text("Smart folders")
+                        Spacer()
+                        Button {
+                            let f = store.createSmartFolder()
+                            editingSmartFolder = f.id
+                        } label: {
+                            Image(systemName: "folder.badge.gearshape")
+                        }
+                        .buttonStyle(.plain)
+                        .help("New smart folder")
+                    }
+                    .padding(.vertical, 2)
+                    .padding(.horizontal, 4)
+                }
+            }
+            Section {
+                ForEach(visibleFolders(nil)) { folder in
+                    FolderTreeRow(folder: folder, editingFolder: $editingFolder,
+                                  query: query, modeFilter: modeFilter, trackerFilter: trackerFilter,
+                                  progressFilter: progressFilter, tagFilter: tagFilter, showArchived: showArchived)
+                }
+                ForEach(visiblePlans(nil)) { saved in
                     PlanRow(saved: saved)
+                }
+                if isFiltering && visiblePlans(nil).isEmpty && visibleFolders(nil).isEmpty {
+                    ContentUnavailableView.search(text: query)
                 }
             } header: {
                 HStack {
                     Text("Test plans")
                     Spacer()
+                    Button {
+                        showingBatch = true
+                    } label: {
+                        Image(systemName: "tray.and.arrow.down")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Import a sprint or batch-plan issues")
+                    Menu {
+                        Picker("Sort", selection: $store.sidebarSort) {
+                            ForEach(PlanStore.SidebarSort.allCases) { Text($0.label).tag($0) }
+                        }
+                        Toggle("Ascending", isOn: $store.sidebarSortAscending)
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .help("Sort plans")
                     Button {
                         let f = store.createFolder(in: nil)
                         editingFolder = f.id
@@ -50,10 +142,74 @@ struct SidebarView: View {
             }
         }
         .glassScrollIndicator()
+        .searchable(text: $query, prompt: "Search plans")
+        .sheet(isPresented: $showingBatch) {
+            BatchSheet()
+                .environment(store)
+                .environment(settings)
+        }
         .overlay {
             if store.plans.isEmpty && store.folders.isEmpty && !store.isRunning {
                 ContentUnavailableView("No plans yet", systemImage: "tray", description: Text("Analyze a ticket to start."))
             }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Picker("Mode", selection: Binding(
+                        get: { modeFilter },
+                        set: { modeFilter = $0 }
+                    )) {
+                        Text("All modes").tag(nil as TestMode?)
+                        ForEach(TestMode.allCases) { Text($0.label).tag($0 as TestMode?) }
+                    }
+                    Picker("Tracker", selection: Binding(
+                        get: { trackerFilter },
+                        set: { trackerFilter = $0 }
+                    )) {
+                        Text("All trackers").tag(nil as Tracker?)
+                        ForEach(Tracker.allCases) { Text($0.label).tag($0 as Tracker?) }
+                    }
+                    Picker("Progress", selection: $progressFilter) {
+                        ForEach(PlanStore.SidebarProgressFilter.allCases) { Text($0.label).tag($0) }
+                    }
+                    if !store.allTags.isEmpty {
+                        Picker("Tag", selection: Binding(
+                            get: { tagFilter },
+                            set: { tagFilter = $0 }
+                        )) {
+                            Text("All tags").tag(nil as String?)
+                            ForEach(store.allTags, id: \.self) { Text($0).tag($0 as String?) }
+                        }
+                    }
+                    Toggle("Show archived", isOn: $showArchived)
+                    if isFiltering {
+                        Button("Clear filters", systemImage: "xmark.circle") {
+                            query = ""; modeFilter = nil; trackerFilter = nil
+                            progressFilter = .all; tagFilter = nil
+                        }
+                    }
+                } label: {
+                    Image(systemName: isFiltering ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                }
+                .help("Filter plans")
+            }
+        }
+    }
+
+    private func visiblePlans(_ folder: UUID?) -> [SavedPlan] {
+        store.sortPlans(store.plans(in: folder).filter {
+            store.matches($0, query: query, mode: modeFilter, tracker: trackerFilter,
+                          progress: progressFilter, tag: tagFilter, showArchived: showArchived)
+        })
+    }
+
+    private func visibleFolders(_ parent: UUID?) -> [PlanFolder] {
+        store.childFolders(of: parent).filter { folder in
+            if !isFiltering { return true }
+            // Keep a folder if it or any descendant matches.
+            if visiblePlans(folder.id).count > 0 { return true }
+            return visibleFolders(folder.id).count > 0
         }
     }
 }
@@ -64,6 +220,12 @@ struct SidebarView: View {
 private struct FolderTreeRow: View {
     let folder: PlanFolder
     @Binding var editingFolder: UUID?
+    var query = ""
+    var modeFilter: TestMode?
+    var trackerFilter: Tracker?
+    var progressFilter: PlanStore.SidebarProgressFilter = .all
+    var tagFilter: String?
+    var showArchived = false
     @Environment(PlanStore.self) private var store
     @State private var dropTargeted = false
 
@@ -78,15 +240,41 @@ private struct FolderTreeRow: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: expanded) {
-            ForEach(store.childFolders(of: folder.id)) { child in
-                FolderTreeRow(folder: child, editingFolder: $editingFolder)
+            ForEach(visibleChildren) { child in
+                FolderTreeRow(folder: child, editingFolder: $editingFolder,
+                              query: query, modeFilter: modeFilter, trackerFilter: trackerFilter,
+                              progressFilter: progressFilter, tagFilter: tagFilter, showArchived: showArchived)
             }
-            ForEach(store.plans(in: folder.id)) { saved in
+            ForEach(visiblePlans) { saved in
                 PlanRow(saved: saved)
             }
         } label: {
             label
         }
+    }
+
+    private var visiblePlans: [SavedPlan] {
+        store.sortPlans(store.plans(in: folder.id).filter {
+            store.matches($0, query: query, mode: modeFilter, tracker: trackerFilter,
+                          progress: progressFilter, tag: tagFilter, showArchived: showArchived)
+        })
+    }
+
+    private var visibleChildren: [PlanFolder] {
+        store.childFolders(of: folder.id).filter { child in
+            let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            if q.isEmpty && modeFilter == nil && trackerFilter == nil && progressFilter == .all && tagFilter == nil { return true }
+            if visiblePlansInTree(child) { return true }
+            return false
+        }
+    }
+
+    private func visiblePlansInTree(_ folder: PlanFolder) -> Bool {
+        if !store.sortPlans(store.plans(in: folder.id).filter {
+            store.matches($0, query: query, mode: modeFilter, tracker: trackerFilter,
+                          progress: progressFilter, tag: tagFilter, showArchived: showArchived)
+        }).isEmpty { return true }
+        return store.childFolders(of: folder.id).contains { visiblePlansInTree($0) }
     }
 
     private var label: some View {
@@ -234,6 +422,166 @@ private struct MoveMenuItems: View {
     }
 }
 
+// MARK: - Smart folders (IDEA-101)
+
+private struct SmartFolderRow: View {
+    let smart: SmartFolder
+    @Binding var editingSmartFolder: UUID?
+    @Environment(PlanStore.self) private var store
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "folder.fill.badge.gearshape")
+                .foregroundStyle(.teal.gradient)
+            Text(smart.name).lineLimit(1)
+            Spacer(minLength: 4)
+            let n = store.plans(matching: smart).count
+            if n > 0 {
+                Text("\(n)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 1)
+        .contentShape(.rect)
+        .tag(PlanStore.smartFolderTag(smart.id))
+        .popover(isPresented: Binding(
+            get: { editingSmartFolder == smart.id },
+            set: { if !$0 { editingSmartFolder = nil } }
+        ), arrowEdge: .trailing) {
+            SmartFolderEditor(smart: smart) { editingSmartFolder = nil }
+        }
+        .contextMenu {
+            Button("Edit Smart Folder…", systemImage: "pencil") { editingSmartFolder = smart.id }
+            Button("Convert to Static Folder", systemImage: "folder") { store.convertSmartFolder(smart.id) }
+            Divider()
+            Button("Delete Smart Folder", systemImage: "trash", role: .destructive) { store.deleteSmartFolder(smart.id) }
+        }
+    }
+}
+
+/// Rule editor: kind + value with suggestions from known ticket metadata.
+private struct SmartFolderEditor: View {
+    let smart: SmartFolder
+    let dismiss: () -> Void
+    @Environment(PlanStore.self) private var store
+    @State private var name = ""
+    @State private var kind: SmartFolder.Kind = .label
+    @State private var value = ""
+    @FocusState private var focused: Bool
+
+    private var suggestions: [String] {
+        switch kind {
+        case .label: store.allLabels
+        case .component: store.allComponents
+        case .fixVersion: store.allFixVersions
+        case .epic: store.plans.map { $0.plan.ticket.key }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Smart folder").font(.headline)
+            TextField("Name", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit(save)
+            Picker("Rule", selection: $kind) {
+                ForEach(SmartFolder.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            TextField(kind.valuePrompt, text: $value)
+                .textFieldStyle(.roundedBorder)
+                .font(.body.monospaced())
+                .onSubmit(save)
+            if !suggestions.isEmpty {
+                Text("Known values: \(suggestions.prefix(8).joined(separator: ", "))\(suggestions.count > 8 ? "…" : "")")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Membership updates live as new plans arrive. Old plans have no ticket metadata — re-run them to fill it in.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Button("Cancel", action: dismiss)
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                Button("Save", action: save)
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(18)
+        .frame(width: 340)
+        .onAppear(perform: {
+            name = smart.name
+            kind = smart.kind
+            value = smart.value
+            focused = true
+        })
+    }
+
+    private func save() {
+        store.updateSmartFolder(smart.id, name: name, kind: kind, value: value)
+        dismiss()
+    }
+}
+
+/// Contents of a smart folder: live rule summary + matching plans.
+struct SmartFolderOverview: View {
+    let smart: SmartFolder
+    @Environment(PlanStore.self) private var store
+    @State private var editing = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Image(systemName: "folder.fill.badge.gearshape")
+                        .font(.title)
+                        .foregroundStyle(.teal.gradient)
+                    VStack(alignment: .leading) {
+                        Text(smart.name).font(.title2.weight(.semibold))
+                        Text("\(smart.kind.label): \(smart.value) · updates live")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Edit rule…") { editing = true }
+                        .buttonStyle(.glass)
+                    Button("Convert to folder") { store.convertSmartFolder(smart.id) }
+                        .buttonStyle(.glassProminent)
+                }
+                .padding(24)
+                .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 28))
+                let plans = store.plans(matching: smart)
+                if plans.isEmpty {
+                    ContentUnavailableView("No matching plans", systemImage: "folder.badge.questionmark",
+                                           description: Text("Plans whose ticket has \(smart.kind.label.lowercased()) “\(smart.value)” appear here. Old plans need a re-run to record ticket metadata."))
+                } else {
+                    ForEach(plans) { saved in
+                        SidebarRow(saved: saved)
+                            .tag(saved.id)
+                            .contentShape(.rect)
+                            .onTapGesture { store.selection = saved.id }
+                    }
+                }
+            }
+            .frame(maxWidth: 820, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.top, 140)
+            .padding(.bottom, 40)
+            .frame(maxWidth: .infinity)
+        }
+        .glassScrollIndicator()
+        .sheet(isPresented: $editing) {
+            SmartFolderEditor(smart: smart) { editing = false }
+                .environment(store)
+        }
+    }
+}
+
 // MARK: - Plan rows
 
 private struct PlanRow: View {
@@ -255,12 +603,25 @@ private struct PlanRow: View {
                                   tracker: saved.tracker, settings: settings)
                 }
                 Button("Re-run", systemImage: "arrow.clockwise") {
-                    store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
+                    if saved.preset == "quick" {
+                        let q = PlanStore.quickOverrides(settings: settings)
+                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker,
+                                      modelOverride: q.model, effortOverride: q.effort, settings: settings)
+                    } else {
+                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
+                    }
                 }
                 if let url = URL(string: saved.plan.ticket.url) {
                     Link("Open in \(saved.tracker.label)", destination: url)
                 }
                 MoveMenu(title: "Move To") { store.movePlan(saved.id, to: $0) }
+                Divider()
+                Button(saved.pinned ? "Unpin" : "Pin", systemImage: saved.pinned ? "pin.slash" : "pin") {
+                    store.togglePin(saved.id)
+                }
+                Button(saved.archived ? "Restore from archive" : "Archive", systemImage: saved.archived ? "tray.and.arrow.down" : "archivebox") {
+                    store.toggleArchive(saved.id)
+                }
                 Divider()
                 Button("Delete", systemImage: "trash", role: .destructive) { store.delete(saved.id) }
             }
@@ -276,6 +637,9 @@ struct SidebarRow: View {
                 .frame(width: 18, height: 18)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
+                    if saved.pinned {
+                        Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.orange)
+                    }
                     Text(saved.plan.ticket.key)
                         .font(.body.monospaced().weight(.medium))
                     ModeBadge(mode: saved.mode, compact: true)
@@ -283,16 +647,35 @@ struct SidebarRow: View {
                         Image(systemName: Tracker.linear.icon).font(.caption2).foregroundStyle(.purple)
                             .help("Linear")
                     }
+                    if saved.isOverdue {
+                        Image(systemName: "bell.badge.fill").font(.caption2).foregroundStyle(.red)
+                            .help("Overdue")
+                    } else if saved.dueDate != nil {
+                        Image(systemName: "bell").font(.caption2).foregroundStyle(.secondary)
+                            .help("Has due date")
+                    }
                 }
                 Text(saved.plan.ticket.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if !saved.tags.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(saved.tags.sorted().prefix(3), id: \.self) { tag in
+                            Text(tag)
+                                .font(.caption2)
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(.quaternary, in: .capsule)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
             Spacer(minLength: 4)
             CriteriaCount(saved: saved)
         }
         .padding(.vertical, 2)
+        .opacity(saved.archived ? 0.55 : 1)
     }
 }
 

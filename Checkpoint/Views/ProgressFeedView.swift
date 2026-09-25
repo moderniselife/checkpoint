@@ -3,6 +3,10 @@ import SwiftUI
 struct ProgressFeedView: View {
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
+    /// Follows the bottom only while the user is already there. Scrolling up
+    /// to read (or to collapse a long thought) pauses auto-scroll; scrolling
+    /// back down resumes it.
+    @State private var pinnedToBottom = true
 
     /// Consecutive tool calls are grouped into one wrapping row of chips.
     private enum Segment: Identifiable {
@@ -72,12 +76,18 @@ struct ProgressFeedView: View {
                 .animation(.smooth(duration: 0.3), value: store.feed)
                 .frame(maxWidth: 720, alignment: .leading)
                 .padding(.horizontal, 24)
-                .padding(.top, 96)
+                .padding(.top, 140)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity)
             }
             .glassScrollIndicator()
+            .onScrollGeometryChange(for: CGFloat.self, of: { geo in
+                max(0, geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height)
+            }, action: { _, distanceFromBottom in
+                pinnedToBottom = distanceFromBottom < 60
+            })
             .onChange(of: store.feed) {
+                guard pinnedToBottom else { return }
                 withAnimation(.smooth) { proxy.scrollTo("bottom", anchor: .bottom) }
             }
         }
