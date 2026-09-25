@@ -62,7 +62,9 @@ See [docs/sync.md](docs/sync.md).
 
 ### A proper welcome
 First launch walks you through how you test, your AI provider (with a live key test), Jira and Linear
-sign-in, and sync, all skippable. **Help → Welcome to Checkpoint…** replays it.
+sign-in, and sync, all skippable, then offers a **guided tour**: a spotlight over the real UI explaining
+each part, using a sample plan if you don't have one yet. The **Help** menu has the tour, guides, a
+keyboard-shortcuts window and a link to report issues.
 
 ### Folders and finding things
 Organise plans into folders nested to any depth, each with a colour.

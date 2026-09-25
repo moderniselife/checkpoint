@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
+    @Environment(\.tourGuide) private var tour
     @AppStorage("panelWidth") private var panelWidth = 460.0
     @AppStorage("onboardingComplete") private var onboarded = false
     @State private var dragStartWidth: Double?
@@ -49,10 +50,14 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: Binding(get: { !onboarded }, set: { if !$0 { onboarded = true } })) {
-            OnboardingView { onboarded = true }
-                .frame(width: 820, height: 640)
-                .interactiveDismissDisabled()
+            OnboardingView { takeTour in
+                onboarded = true
+                if takeTour { Task { try? await Task.sleep(for: .milliseconds(450)); tour?.start() } }
+            }
+            .frame(width: 820, height: 640)
+            .interactiveDismissDisabled()
         }
+        .tourOverlay(tour)
     }
 
     /// Below this the plan would get too narrow beside the panel.
@@ -173,6 +178,7 @@ struct EmptyStateView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(\.openWindow) private var openWindow
     @Environment(\.showSettings) private var showSettings
+    @Environment(\.tourGuide) private var tour
 
     var body: some View {
         VStack(spacing: 16) {
@@ -200,6 +206,14 @@ struct EmptyStateView: View {
                 .buttonStyle(.glassProminent)
                 .padding(.top, 8)
             }
+            HStack(spacing: 10) {
+                Button("Explore a Sample Plan", systemImage: "doc.text.magnifyingglass") {
+                    withAnimation(.smooth) { store.openSamplePlan() }
+                }
+                Button("Take the Tour", systemImage: "hand.point.up.left") { tour?.start() }
+            }
+            .buttonStyle(.glass)
+            .padding(.top, settings.isConfigured ? 8 : 0)
         }
         .padding(40)
     }

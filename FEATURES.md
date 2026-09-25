@@ -192,6 +192,8 @@ verified, what's known to be rough, and how to fix things when they break.
 | iCloud sync via CKSyncEngine, gated on `CHECKPOINT_CLOUDKIT_CONTAINER` | 🔍 | `Services/Sync/CloudKitSync.swift` | Needs a paid team + container; see docs/sync.md |
 | Sync settings page and onboarding step (iCloud disabled with a reason when unavailable) | 🧪 | `SyncPane`, `OnboardingView` | Folder picked on the iOS simulator; status shows up to date |
 | Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | 🧪 | `Views/Onboarding/OnboardingView.swift` | Clicked through on iPhone simulator; Mac sheet on first launch |
+| Guided spotlight tour (10 stops, opens a sample plan if needed) | 🧪 | `Shared/TourGuide.swift`, `Models/SamplePlan.swift` | Walked through on iPhone simulator |
+| Help menu: tour, welcome, guides, shortcuts window, what's new, report an issue | 🔍 | `CheckpointApp.HelpCommands`, `KeyboardShortcutsView` | Mac Help menu |
 
 ### 1.9 Distribution
 
@@ -301,6 +303,9 @@ To reset: quit, delete the `Checkpoint` folder above, remove the Keychain items.
 | ⌃Tab / ⌃⇧Tab | Next / previous ticket tab |
 | Esc | Hide ticket panel (tabs stay open) |
 | ⌘, | Settings |
+| ⌘T | Edit tags on the open plan |
+| ⌘/ | Keyboard shortcuts |
+| ⌘? | Checkpoint guides |
 
 ---
 

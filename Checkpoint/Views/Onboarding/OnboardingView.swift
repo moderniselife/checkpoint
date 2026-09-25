@@ -4,7 +4,8 @@ import SwiftUI
 /// test, your AI provider, trackers and sync. Everything past the intro is skippable
 /// and can be changed later in Settings.
 struct OnboardingView: View {
-    var onFinish: () -> Void
+    /// `true` when the person asked for the guided tour.
+    var onFinish: (_ takeTour: Bool) -> Void
 
     enum Step: Int, CaseIterable {
         case welcome, how, mode, ai, trackers, sync, ready
@@ -813,7 +814,7 @@ private struct DeviceTrio: View {
 // MARK: - Ready
 
 private struct ReadyPage: View {
-    let onFinish: () -> Void
+    let onFinish: (Bool) -> Void
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var sync
     @State private var burst = false
@@ -853,15 +854,21 @@ private struct ReadyPage: View {
             .frame(maxWidth: 440)
             .glassEffect(.regular, in: .rect(cornerRadius: 22))
             Spacer(minLength: 0)
-            Button(action: onFinish) {
-                Label(settings.isConfigured ? "Analyze Your First Ticket" : "Start Using Checkpoint", systemImage: "sparkles")
-                    .font(.headline)
-                    .frame(minWidth: 240)
-                    .padding(.vertical, 4)
+            VStack(spacing: 12) {
+                Button { onFinish(true) } label: {
+                    Label("Show Me Around", systemImage: "hand.point.up.left")
+                        .font(.headline)
+                        .frame(minWidth: 240)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.glassProminent)
+                .controlSize(.extraLarge)
+                .keyboardShortcut(.defaultAction)
+                Button(settings.isConfigured ? "Skip the tour — analyze a ticket" : "Skip the tour") { onFinish(false) }
+                    .buttonStyle(.plain)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.extraLarge)
-            .keyboardShortcut(.defaultAction)
             .padding(.bottom, 8)
         }
         .onAppear {

@@ -16,6 +16,11 @@ and your own signing team, then run it on your device.
 On first launch a short welcome walks you through everything below: how you test, your AI provider,
 your trackers and sync. Skip any step and do it later here. **Help → Welcome to Checkpoint…** shows it again.
 
+At the end, **Show Me Around** starts a guided tour: a spotlight walks the ticket bar, Dev/QA,
+run options, the sidebar, a plan's header, criteria, filters, a task and the Research/Chat tabs.
+It opens a sample plan if you don't have one yet. Take it again any time from **Help → Take the Tour**
+(Mac) or the **?** menu (iPhone and iPad), or explore the sample plan on your own from the empty state.
+
 ## Connect an AI provider
 
 Open **Settings (⌘,)** → **AI Provider**:

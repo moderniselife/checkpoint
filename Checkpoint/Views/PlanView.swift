@@ -7,6 +7,7 @@ struct PlanView: View {
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
     @Environment(TicketInspector.self) private var inspector
+    @Environment(\.tourGuide) private var tourGuide
     @State private var filter: Filter = .todo
     @State private var pane: Pane = .plan
     /// Task-list lenses: the smoke subset and P0-only.
@@ -35,8 +36,11 @@ struct PlanView: View {
             VStack(alignment: .leading, spacing: 20) {
                 #if os(iOS)
                 panePicker
+                    .tourStop(.panes)
                 #endif
                 header
+                    .tourStop(.planHeader)
+                    .id(TourStop.planHeader)
 
                 if pane == .plan {
                     if let diff = store.planDiff, diff.planID == saved.id {
@@ -64,9 +68,13 @@ struct PlanView: View {
                                     .padding(.top, 4)
                             }
                         }
+                        .tourStop(.criteria)
+                        .id(TourStop.criteria)
                     }
 
-                    Section(title: "Test tasks", icon: "checklist", accessory: { taskListAccessory }) {
+                    Section(title: "Test tasks", icon: "checklist", accessory: {
+                        taskListAccessory.tourStop(.taskFilter)
+                    }) {
                         if smokeOnly || p0Only { lensBar }
                         if visibleTasks.isEmpty {
                             Label(filter == .todo ? "All done — nice." : "Nothing here.",
@@ -141,6 +149,12 @@ struct PlanView: View {
         .onChange(of: saved.chat.count) {
             guard pane == .chat else { return }
             withAnimation(.smooth) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+        }
+        .onChange(of: tourGuide?.current) {
+            guard let stop = tourGuide?.current, stop.needsPlan, stop != .panes else { return }
+            if pane != .plan { pane = .plan }
+            if stop == .taskRow || stop == .taskFilter { filter = .all }
+            withAnimation(.smooth) { proxy.scrollTo(stop == .taskFilter ? TourStop.taskRow : stop, anchor: .center) }
         }
         .onChange(of: pane) {
             guard pane == .chat else { return }
@@ -239,6 +253,7 @@ struct PlanView: View {
             .pickerStyle(.segmented)
             .labelStyle(.titleOnly)
             .help("The test plan, the research behind it, and follow-up questions")
+            .tourStop(.panes)
         }
         ToolbarItemGroup {
             Menu {
@@ -537,10 +552,15 @@ struct PlanView: View {
                         TicketTag(key: group.key, title: title(for: group.key), url: url(for: group.key))
                     }
                     ForEach(group.tasks) { task in
-                        TaskRow(task: task, saved: saved,
-                                selected: listFocused && selectedTaskID == task.id,
-                                forceNote: noteTaskID == task.id,
-                                onNoteDone: { if noteTaskID == task.id { noteTaskID = nil } })
+                        let row = TaskRow(task: task, saved: saved,
+                                          selected: listFocused && selectedTaskID == task.id,
+                                          forceNote: noteTaskID == task.id,
+                                          onNoteDone: { if noteTaskID == task.id { noteTaskID = nil } })
+                        if task.id == visibleTasks.first?.id {
+                            row.tourStop(.taskRow).id(TourStop.taskRow)
+                        } else {
+                            row
+                        }
                     }
                 }
             }
@@ -1230,17 +1250,21 @@ private struct TaskRow: View {
 
     /// Covers · sources · estimate, on one caption line.
     private var metaLine: some View {
-        let hasSources = task.sources.contains { $0.ticketKey != "derived" }
-        return HStack(spacing: 6) {
+        // One chip per ticket, however many of its comments/ACs a task cites.
+        var seen = Set<String>()
+        let sourceKeys = task.sources.map(\.ticketKey).filter { $0 != "derived" && seen.insert($0).inserted }
+        let hasSources = !sourceKeys.isEmpty
+        return FlowLayout(spacing: 6) {
             if !task.covers.isEmpty {
                 Text("Covers " + task.covers.joined(separator: ", "))
             }
             if hasSources {
                 if !task.covers.isEmpty { Text("·") }
                 Text("From")
-                ForEach(Array(task.sources.filter { $0.ticketKey != "derived" }.enumerated()), id: \.offset) { _, src in
-                    TicketKeyButton(key: src.ticketKey, font: .caption.monospaced())
-                        .help("\(src.kind): \(src.ref)")
+                ForEach(sourceKeys, id: \.self) { key in
+                    TicketKeyButton(key: key, font: .caption.monospaced())
+                        .fixedSize()
+                        .help(task.sources.filter { $0.ticketKey == key }.map { "\($0.kind): \($0.ref)" }.joined(separator: "\n"))
                 }
             }
             if let mins = task.estimateMin {
