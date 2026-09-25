@@ -61,7 +61,6 @@ nonisolated enum LLMProvider: String, Codable, Sendable, CaseIterable, Identifia
 
     /// Local servers usually don't need a key; hosted ones always do.
     var requiresKey: Bool { self != .openAICompatible && self != .anthropicCompatible }
-
     /// Hosted providers use a fixed endpoint; local ones let you set it.
     var hasEditableBaseURL: Bool { self == .openAICompatible || self == .anthropicCompatible }
 

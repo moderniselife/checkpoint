@@ -30,6 +30,15 @@ final class AppSettings {
     /// Used for bare keys when both trackers are connected (links are auto-detected).
     var defaultTracker: Tracker { didSet { UserDefaults.standard.set(defaultTracker.rawValue, forKey: "defaultTracker") } }
 
+    // MARK: Custom MCP trackers (modular)
+
+    /// User-added MCP endpoints. Built-in trackers (Jira/Linear) stay first-class;
+    /// anything else that speaks MCP tools/list + tools/call can be added here
+    /// without code changes. Tokens live in the Keychain per tracker id.
+    var customTrackers: [CustomMCPTracker] {
+        didSet { persistCustomTrackers() }
+    }
+
     // MARK: AI provider
 
     var provider: LLMProvider { didSet { UserDefaults.standard.set(provider.rawValue, forKey: "llmProvider") } }
@@ -79,6 +88,10 @@ final class AppSettings {
     var codebasePath: String? { didSet { UserDefaults.standard.set(codebasePath, forKey: "codebasePath") } }
     /// Hosted app QA tests against, e.g. "https://app.dev.example.com (DEV)".
     var qaEnvironment: String { didSet { UserDefaults.standard.set(qaEnvironment, forKey: "qaEnvironment") } }
+    /// Team-wide instructions appended to every generation prompt (IDEA-009).
+    var houseRules: String { didSet { UserDefaults.standard.set(houseRules, forKey: "houseRules") } }
+    /// Cheaper model for Quick plans (IDEA-082); empty = same model at low effort.
+    var quickModel: String { didSet { UserDefaults.standard.set(quickModel, forKey: "quickModel") } }
 
     init() {
         let d = UserDefaults.standard
@@ -102,12 +115,15 @@ final class AppSettings {
         codebaseBookmark = d.data(forKey: "codebaseBookmark")
         codebasePath = d.string(forKey: "codebasePath")
         qaEnvironment = d.string(forKey: "qaEnvironment") ?? ""
+        houseRules = d.string(forKey: "houseRules") ?? ""
+        quickModel = d.string(forKey: "quickModel") ?? ""
         atlassianAuth = AtlassianAuth(rawValue: d.string(forKey: "atlassianAuth") ?? "") ?? .oauth
         atlassianUser = MCPOAuth.atlassian.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil
         linearAuth = LinearAuth(rawValue: d.string(forKey: "linearAuth") ?? "") ?? .oauth
         linearAPIKey = Keychain.get("linear-api-key") ?? ""
         linearUser = MCPOAuth.linear.isSignedIn ? d.string(forKey: "linearUser") ?? "Signed in" : nil
         defaultTracker = Tracker(rawValue: d.string(forKey: "defaultTracker") ?? "") ?? .jira
+        customTrackers = Self.loadCustomTrackers()
     }
 
     var isLinearConfigured: Bool {
@@ -187,6 +203,63 @@ final class AppSettings {
         if let url = URL(string: s), let host = url.host { s = host }
         if !s.isEmpty && !s.contains(".") { s += ".atlassian.net" }
         return s
+    }
+
+    // MARK: Custom MCP trackers
+
+    private static func loadCustomTrackers() -> [CustomMCPTracker] {
+        guard let data = UserDefaults.standard.data(forKey: "customTrackers"),
+              let list = try? JSONCoding.decoder.decode([CustomMCPTracker].self, from: data) else { return [] }
+        return list
+    }
+
+    private func persistCustomTrackers() {
+        UserDefaults.standard.set(try? JSONCoding.encoder.encode(customTrackers), forKey: "customTrackers")
+    }
+
+    func customToken(for tracker: CustomMCPTracker) -> String {
+        Keychain.get(tracker.keychainAccount) ?? ""
+    }
+
+    func setCustomToken(_ token: String, for tracker: CustomMCPTracker) {
+        Keychain.set(token, for: tracker.keychainAccount)
+    }
+
+    func addCustomTracker(name: String, endpoint: String, matchHint: String = "", token: String = "") {
+        let t = CustomMCPTracker(name: name, endpoint: endpoint, matchHint: matchHint)
+        // Token goes to Keychain, not UserDefaults.
+        customTrackers.append(t)
+        if !token.isEmpty { Keychain.set(token, for: t.keychainAccount) }
+    }
+
+    func updateCustomTracker(_ tracker: CustomMCPTracker) {
+        guard let i = customTrackers.firstIndex(where: { $0.id == tracker.id }) else { return }
+        customTrackers[i] = tracker
+    }
+
+    func removeCustomTracker(_ tracker: CustomMCPTracker) {
+        customTrackers.removeAll { $0.id == tracker.id }
+        Keychain.set("", for: tracker.keychainAccount)
+    }
+
+    /// Generic MCP client for a custom tracker. Auth is a bearer token when set,
+    /// otherwise no header — some local servers need none.
+    func makeMCPClient(forCustom tracker: CustomMCPTracker) -> MCPClient? {
+        guard let url = URL(string: tracker.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme != nil else { return nil }
+        let account = tracker.keychainAccount
+        return MCPClient(endpoint: url, auth: {
+            let token = Keychain.get(account) ?? ""
+            return token.isEmpty ? "" : "Bearer " + token
+        })
+    }
+
+    /// Route free-form input to a custom tracker via its match hint.
+    func customTracker(for input: String) -> CustomMCPTracker? {
+        let s = input.lowercased()
+        return customTrackers.first { t in
+            !t.matchHint.isEmpty && s.contains(t.matchHint.lowercased())
+        }
     }
 }
 

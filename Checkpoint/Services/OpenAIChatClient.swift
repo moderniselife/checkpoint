@@ -32,6 +32,9 @@ nonisolated struct OpenAIChatClient: Sendable {
         var reasoning: String
         var toolCalls: [ToolCall]
         var finishReason: String
+        var usage = LLMUsage()
+        /// True when a generation budget cut this turn short (local yap guard).
+        var truncatedByBudget = false
     }
 
     struct ToolCall: Sendable {
@@ -80,14 +83,18 @@ nonisolated struct OpenAIChatClient: Sendable {
 
     /// Streams one chat completion. If the provider rejects an optional parameter
     /// (reasoning effort, JSON schema, token limit…), retries once without them.
-    func stream(_ body: JSONValue, onEvent: @Sendable (StreamEvent) async -> Void) async throws -> Turn {
+    /// `generationBudget` caps reasoning + text characters: some local models yap
+    /// forever instead of calling tools or finishing. When hit, partial tool
+    /// calls are dropped and the turn ends so the run moves on instead of hanging.
+    /// Leave nil for final-write calls, whose long output is legitimate.
+    func stream(_ body: JSONValue, generationBudget: Int? = nil, onEvent: @Sendable (StreamEvent) async -> Void) async throws -> Turn {
         var body = body
         if case .object(var o) = body {
             rejected.keys.forEach { o[$0] = nil }
             body = .object(o)
         }
         do {
-            return try await streamOnce(body, onEvent: onEvent)
+            return try await streamOnce(body, generationBudget: generationBudget, onEvent: onEvent)
         } catch ChatError.http(let code, let text) where code == 400 || code == 422 {
             guard case .object(var o) = body else { throw ChatError.http(code, text) }
             let removable = Self.optionalKeys.filter { o[$0] != nil && $0 != "max_tokens" && $0 != "max_completion_tokens" }
@@ -98,11 +105,11 @@ nonisolated struct OpenAIChatClient: Sendable {
             strip.forEach { o[$0] = nil }
             // response_format is only sent on the final call, so remember it too.
             rejected.add(strip)
-            return try await streamOnce(.object(o), onEvent: onEvent)
+            return try await streamOnce(.object(o), generationBudget: generationBudget, onEvent: onEvent)
         }
     }
 
-    private func streamOnce(_ body: JSONValue, onEvent: @Sendable (StreamEvent) async -> Void) async throws -> Turn {
+    private func streamOnce(_ body: JSONValue, generationBudget: Int?, onEvent: @Sendable (StreamEvent) async -> Void) async throws -> Turn {
         var streaming = body
         if case .object(var o) = streaming { o["stream"] = true; streaming = .object(o) }
         var req = request(path: "/chat/completions")
@@ -113,7 +120,7 @@ nonisolated struct OpenAIChatClient: Sendable {
         while true {
             let (bytes, response) = try await Self.session.bytes(for: req)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if status == 200 { return try await assemble(bytes, onEvent: onEvent) }
+            if status == 200 { return try await assemble(bytes, generationBudget: generationBudget, onEvent: onEvent) }
             var text = ""
             for try await line in bytes.lines { text += line; if text.count > 4000 { break } }
             if [429, 500, 502, 503, 504, 529].contains(status), attempt < 3 {
@@ -125,10 +132,11 @@ nonisolated struct OpenAIChatClient: Sendable {
         }
     }
 
-    private func assemble(_ bytes: URLSession.AsyncBytes, onEvent: @Sendable (StreamEvent) async -> Void) async throws -> Turn {
+    private func assemble(_ bytes: URLSession.AsyncBytes, generationBudget: Int?, onEvent: @Sendable (StreamEvent) async -> Void) async throws -> Turn {
         var turn = Turn(text: "", reasoning: "", toolCalls: [], finishReason: "")
         var calls: [Int: ToolCall] = [:]
         var lastReported = 0
+        var generated = 0
 
         for try await line in bytes.lines {
             try Task.checkCancellation()
@@ -139,11 +147,23 @@ nonisolated struct OpenAIChatClient: Sendable {
             if let err = chunk["error"] {
                 throw ChatError.stream(err["message"]?.stringValue ?? err.compactString)
             }
-            guard let choice = chunk["choices"]?.arrayValue?.first else { continue }
+            guard let choice = chunk["choices"]?.arrayValue?.first else {
+                // Usage arrives in its own chunk (needs stream_options.include_usage).
+                if let u = chunk["usage"] {
+                    func num(_ v: JSONValue?) -> Int {
+                        if case .number(let n) = v ?? .null { return Int(n) }
+                        return 0
+                    }
+                    turn.usage.add(input: num(u["prompt_tokens"]) + num(u["input_tokens"]),
+                                   output: num(u["completion_tokens"]) + num(u["output_tokens"]))
+                }
+                continue
+            }
             let delta = choice["delta"]
 
             if let t = delta?["content"]?.stringValue, !t.isEmpty {
                 turn.text += t
+                generated += t.count
                 if turn.text.count - lastReported >= 200 {
                     lastReported = turn.text.count
                     await onEvent(.writing(characters: turn.text.count))
@@ -153,8 +173,17 @@ nonisolated struct OpenAIChatClient: Sendable {
             for key in ["reasoning", "reasoning_content"] {
                 if let r = delta?[key]?.stringValue, !r.isEmpty {
                     turn.reasoning += r
+                    generated += r.count
                     await onEvent(.reasoning(turn.reasoning))
                 }
+            }
+            if let budget = generationBudget, generated > budget {
+                // Runaway yap: drop half-built tool calls and end the turn so the
+                // run moves on instead of hanging. The caller reports it.
+                calls = [:]
+                turn.truncatedByBudget = true
+                if turn.finishReason.isEmpty { turn.finishReason = "stop" }
+                break
             }
             for tc in delta?["tool_calls"]?.arrayValue ?? [] {
                 let index: Int = { if case .number(let n) = tc["index"] ?? .null { return Int(n) }; return calls.count }()

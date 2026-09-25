@@ -4,6 +4,7 @@ import SwiftUI
 struct FolderOverview: View {
     let folder: PlanFolder
     @Environment(PlanStore.self) private var store
+    @State private var showingSuite = false
 
     var body: some View {
         let all = store.allPlans(under: folder.id)
@@ -26,6 +27,13 @@ struct FolderOverview: View {
                         }
                         Text("\(all.count) plan\(all.count == 1 ? "" : "s") · \(finished) fully tested")
                             .foregroundStyle(.secondary)
+                        Button("Build regression suite", systemImage: "square.stack.3d.up") {
+                            showingSuite = true
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                        .disabled(all.isEmpty)
+                        .help("Merge plans into one deduplicated run (IDEA-015)")
                     }
                     Spacer(minLength: 0)
                     HStack(spacing: 16) {
@@ -70,11 +78,15 @@ struct FolderOverview: View {
             }
             .frame(maxWidth: 820, alignment: .leading)
             .padding(.horizontal, 28)
-            .padding(.top, 92)
+            .padding(.top, 140)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
         .glassScrollIndicator()
+        .sheet(isPresented: $showingSuite) {
+            SuiteBuilderSheet(folder: folder)
+                .environment(store)
+        }
     }
 
     private var breadcrumb: some View {
