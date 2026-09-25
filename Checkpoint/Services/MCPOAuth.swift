@@ -34,7 +34,7 @@ actor MCPOAuth {
 
         var errorDescription: String? {
             switch self {
-            case .notSignedIn(let name): return "Not signed in to \(name). Sign in from Settings (⌘,)."
+            case .notSignedIn(let name): return "Not signed in to \(name). Sign in from \(Platform.settingsName)."
             case .cancelled: return "Sign-in was cancelled."
             case .badResponse(let s): return "Sign-in failed: \(s)"
             }

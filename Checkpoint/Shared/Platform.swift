@@ -17,6 +17,15 @@ enum Platform {
         #endif
     }
 
+    /// How to refer to Settings in messages: the Mac has a shortcut, iOS a gear.
+    nonisolated static var settingsName: String {
+        #if os(macOS)
+        "Settings (⌘,)"
+        #else
+        "Settings (the gear in the plan list)"
+        #endif
+    }
+
     static func open(_ url: URL) {
         #if os(macOS)
         NSWorkspace.shared.open(url)

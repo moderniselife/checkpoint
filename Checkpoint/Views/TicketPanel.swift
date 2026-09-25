@@ -10,6 +10,12 @@ struct TicketPanel: View {
             TicketTabStrip()
             pane
         }
+        #if os(iOS)
+        // In a sheet: clear of the grabber and the rounded corners.
+        .padding(.top, 22)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 8)
+        #endif
         .background {
             // ⌃Tab / ⌃⇧Tab cycle through open tickets.
             Group {

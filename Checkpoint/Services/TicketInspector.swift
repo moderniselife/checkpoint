@@ -133,7 +133,7 @@ final class TicketInspector {
 
     private func load(_ ref: Ref) {
         guard let settings, settings.isConfigured(ref.tracker) else {
-            states[ref.cacheKey] = .failed("Connect \(ref.tracker.label) in Settings (⌘,) to view its issues.")
+            states[ref.cacheKey] = .failed("Connect \(ref.tracker.label) in \(Platform.settingsName) to view its issues.")
             return
         }
         states[ref.cacheKey] = .loading

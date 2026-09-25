@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var dragStartWidth: Double?
     /// Width of the detail area; the ticket panel never takes more than 45% of it.
     @State private var detailWidth: Double = 1200
+    @State private var chrome = ScrollChrome()
 
     var body: some View {
         @Bindable var store = store
@@ -15,17 +16,22 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
-            HStack(spacing: 0) {
-                main
-                if inspector.isOpen {
-                    TicketPanel()
-                        .frame(width: max(320, min(panelWidth, detailWidth * 0.45)))
-                        .padding(.vertical, 12)
-                        .padding(.trailing, 12)
-                        .overlay(alignment: .leading) { resizeHandle }
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+            // Wide windows: the ticket panel sits beside the plan. Narrow ones: it floats over
+            // the plan's right side, so neither gets squashed past usefulness.
+            ZStack(alignment: .trailing) {
+                HStack(spacing: 0) {
+                    main
+                        .frame(minWidth: 0, maxWidth: .infinity)
+                    if inspector.isOpen && !panelFloats {
+                        ticketPanel(width: max(320, min(panelWidth, detailWidth * 0.45)))
+                    }
+                }
+                if inspector.isOpen && panelFloats {
+                    ticketPanel(width: max(300, min(panelWidth, detailWidth - 72)))
+                        .shadow(color: .black.opacity(0.18), radius: 24, x: -6, y: 8)
                 }
             }
+            .clipped()
             .background { Backdrop() }
             .onGeometryChange(for: Double.self) { $0.size.width } action: { detailWidth = $0 }
             .animation(.smooth(duration: 0.35), value: inspector.isOpen)
@@ -47,6 +53,18 @@ struct ContentView: View {
                 .frame(width: 820, height: 640)
                 .interactiveDismissDisabled()
         }
+    }
+
+    /// Below this the plan would get too narrow beside the panel.
+    private var panelFloats: Bool { detailWidth < 900 }
+
+    private func ticketPanel(width: Double) -> some View {
+        TicketPanel()
+            .frame(width: width)
+            .padding(.vertical, 12)
+            .padding(.trailing, 12)
+            .overlay(alignment: .leading) { resizeHandle }
+            .transition(.move(edge: .trailing).combined(with: .opacity))
     }
 
     /// Drag the panel's leading edge to resize it.
@@ -87,10 +105,15 @@ struct ContentView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .environment(\.scrollChrome, chrome)
+                .onChange(of: store.selection) { chrome.show() }
 
                 TicketInputBar()
                     .padding(.top, 12)
                     .padding(.horizontal, 24)
+                    .offset(y: chrome.barHidden ? -96 : 0)
+                    .opacity(chrome.barHidden ? 0 : 1)
+                    .allowsHitTesting(!chrome.barHidden)
             }
             .overlay(alignment: .bottom) {
                 if let error = store.error {

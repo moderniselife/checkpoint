@@ -83,6 +83,7 @@ struct FolderOverview: View {
             .frame(maxWidth: .infinity)
         }
         .glassScrollIndicator()
+        .drivesScrollChrome()
         .sheet(isPresented: $showingSuite) {
             SuiteBuilderSheet(folder: folder)
                 .environment(store)
