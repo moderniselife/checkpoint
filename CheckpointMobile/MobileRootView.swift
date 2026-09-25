@@ -33,6 +33,7 @@ struct MobileRootView: View {
                 }
         } detail: {
             detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background { Backdrop().ignoresSafeArea() }
                 .safeAreaInset(edge: .top) {
                     if !phone {
@@ -80,6 +81,7 @@ struct MobileRootView: View {
         .fullScreenCover(isPresented: Binding(get: { !onboarded }, set: { if !$0 { onboarded = true } })) {
             OnboardingView { onboarded = true }
         }
+        .environment(\.showSettings, ShowSettingsAction { showingSettings = true })
     }
 
     @ViewBuilder

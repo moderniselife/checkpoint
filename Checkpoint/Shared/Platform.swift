@@ -67,3 +67,14 @@ enum PageLayout {
     static let side: CGFloat = 16
     #endif
 }
+
+/// "Open Settings" for views shared by both apps: a window on the Mac, a sheet on iOS
+/// (the iOS root view supplies the action).
+struct ShowSettingsAction {
+    var action: () -> Void = {}
+    func callAsFunction() { action() }
+}
+
+extension EnvironmentValues {
+    @Entry var showSettings = ShowSettingsAction()
+}

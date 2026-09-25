@@ -673,6 +673,8 @@ struct SidebarRow: View {
                     }
                     Text(saved.plan.ticket.key)
                         .font(.body.monospaced().weight(.medium))
+                        .lineLimit(1)
+                        .fixedSize()
                     ModeBadge(mode: saved.mode, compact: true)
                     if saved.tracker == .linear {
                         Image(systemName: Tracker.linear.icon).font(.caption2).foregroundStyle(.purple)
@@ -745,6 +747,8 @@ struct ModeBadge: View {
     var body: some View {
         Label(mode.label, systemImage: mode.icon)
             .labelStyle(.titleAndIcon)
+            .lineLimit(1)
+            .fixedSize()
             .font(compact ? .caption2.weight(.semibold) : .caption.weight(.semibold))
             .padding(.horizontal, compact ? 5 : 8)
             .padding(.vertical, compact ? 1 : 3)
