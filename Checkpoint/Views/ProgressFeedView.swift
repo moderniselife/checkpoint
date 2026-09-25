@@ -232,7 +232,7 @@ struct FeedRow: View {
                 .disabled(key == nil)
                 .help(key.map { "Show \($0) details" } ?? "")
         case .thinking:
-            let multiline = item.detail.contains("\n") || item.detail.count > 90
+            let multiline = item.detail.contains("\n") || item.detail.count > 160
             VStack(alignment: .leading, spacing: 6) {
                 Button {
                     withAnimation(.smooth) { expanded.toggle() }
@@ -240,8 +240,10 @@ struct FeedRow: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "brain")
                             .symbolEffect(.pulse, options: .repeating, isActive: isLive)
-                        Text(expanded ? "Thinking" : item.title)
-                            .lineLimit(1)
+                        // Collapsed rows show the thought itself, filling the row's width.
+                        Text(expanded ? "Thinking" : preview)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if multiline {
                             Image(systemName: "chevron.right")
@@ -270,6 +272,12 @@ struct FeedRow: View {
                 }
             }
         }
+    }
+
+    /// First line of the thought, falling back to its title.
+    private var preview: String {
+        let line = item.detail.split(separator: "\n").first.map(String.init) ?? ""
+        return line.trimmingCharacters(in: .whitespaces).isEmpty ? item.title : line
     }
 
     private func toolChip(key: String?) -> some View {
