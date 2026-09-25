@@ -180,6 +180,19 @@ verified, what's known to be rough, and how to fix things when they break.
 | Security-scoped, read-only folder bookmark | 🧪 | `AppSettings.chooseCodebase/openCodebase` | Relaunch keeps access |
 | Tickable scenario cards, Markdown export, re-run keeps ticks | 🧪 | `PlanView`, `TestPlan.markdown` | — |
 
+### 1.8d iPhone, iPad, sync and onboarding
+
+| Feature | Status | Where | How to verify |
+|---|---|---|---|
+| iOS / iPadOS app sharing the Mac's models, services and views | 🧪 | `CheckpointMobile/`, `Checkpoint/Shared/` | Run on the iOS 26 simulator: plan list, plan, criteria and task rows checked on iPhone 17 Pro and iPad Pro 11" |
+| iPhone layout: bottom ticket bar, research feed sheet, one ⋯ menu, compact header/criteria/task rows | 🧪 | `MobileRootView`, `PlanView` | Simulator screenshots; analyzing needs a real key |
+| Evidence from camera, photo library or Files; export via share sheet | 🔍 | `MobilePickers.swift`, `TaskRow` | Needs a device for the camera |
+| OAuth on iOS via in-app web sheet + loopback redirect | 🔍 | `AuthBrowser.swift`, `MCPOAuth` | Sign in to Jira/Linear on a device |
+| Sync folder (per-plan JSON files, tombstones, evidence mirror, newest edit wins) | 🧪 | `Services/Sync/FolderSync.swift` | Two-home harness: upload, import with evidence, edits and deletes both ways |
+| iCloud sync via CKSyncEngine, gated on `CHECKPOINT_CLOUDKIT_CONTAINER` | 🔍 | `Services/Sync/CloudKitSync.swift` | Needs a paid team + container; see docs/sync.md |
+| Sync settings page and onboarding step (iCloud disabled with a reason when unavailable) | 🧪 | `SyncPane`, `OnboardingView` | Folder picked on the iOS simulator; status shows up to date |
+| Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | 🧪 | `Views/Onboarding/OnboardingView.swift` | Clicked through on iPhone simulator; Mac sheet on first launch |
+
 ### 1.9 Distribution
 
 | Feature | Status | Where | How to verify |
@@ -230,6 +243,9 @@ verified, what's known to be rough, and how to fix things when they break.
 | L10 | Non-Claude providers | Plans are written in two phases (research, then JSON); models without tool calling can't research | Pick a tool-calling model |
 | L11 | Local models | Big epics can exceed a small local model's context window | Use a larger-context model, or analyze children individually |
 | L12 | Scenarios | Tickets-only scenarios depend on how well related tickets describe the flows; codebase mode gives more grounded journeys | Point it at the product repo |
+| L13 | Sync folder | Same plan edited on two devices before either syncs: the newer edit wins for the whole plan | Sync often; iCloud (App Store build) merges faster |
+| L14 | iCloud sync | Off in self-built copies: CloudKit needs a paid Apple Developer team and an iCloud container | Use a sync folder in iCloud Drive |
+| L15 | iOS | Codebase scenarios and the floating mini checklist are Mac-only | Run those on the Mac |
 | L9 | App icon | Legacy asset-catalog icon (full-bleed) rather than an Icon Composer `.icon` with live glass layers | Split the logo into layers in Xcode's Icon Composer |
 
 ---
@@ -267,6 +283,8 @@ verified, what's known to be rough, and how to fix things when they break.
 - Task evidence: same directory, `evidence/<planID>/<taskID>/`
 - Keys/tokens: macOS Keychain, service `com.josephshenton.checkpoint`
 - Preferences (mode, model, open tabs, panel width…): the app's `UserDefaults`
+- Sync folder (if chosen): one JSON file per plan/folder/smart folder plus `deleted.json` and `evidence/`
+- iOS: the same files inside the app's container (`Library/Application Support/Checkpoint/`)
 
 To reset: quit, delete the `Checkpoint` folder above, remove the Keychain items.
 

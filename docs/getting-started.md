@@ -9,7 +9,12 @@ Download the latest DMG from [Releases](https://github.com/moderniselife/checkpo
 (or [checkpoint.guide](https://checkpoint.guide)), drag Checkpoint to Applications, and open it.
 Requires macOS 26+. Ad-hoc signed builds need a first-run right-click → Open.
 
-Building from source: `./build.sh --install --open` (needs Xcode 26+ and XcodeGen).
+Building from source: `./build.sh --install --open` (needs Xcode 26+ and XcodeGen). For iPhone
+or iPad, run `xcodegen generate`, open `Checkpoint.xcodeproj`, pick the **CheckpointMobile** scheme
+and your own signing team, then run it on your device.
+
+On first launch a short welcome walks you through everything below: how you test, your AI provider,
+your trackers and sync. Skip any step and do it later here. **Help → Welcome to Checkpoint…** shows it again.
 
 ## Connect an AI provider
 

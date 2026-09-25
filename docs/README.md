@@ -18,6 +18,7 @@ disagrees with the app, the app wins; please file an issue.
 | [Sharing](sharing.md) | Markdown/HTML export, automation skeletons, bug reports from failed tasks |
 | [Tracking](tracking.md) | Ticket panel, tabs, epic children, research feed and log |
 | [Connections](connections.md) | AI providers, Jira/Linear/custom MCP, research sources, where secrets live, troubleshooting |
+| [iPhone, iPad and sync](sync.md) | The iOS app, sync folders and iCloud, what syncs, conflict rules, enabling iCloud |
 
 Related: [`FEATURES.md`](../FEATURES.md) is the engineering tracker (what shipped, verification
 status, known limitations). [`ideas/`](../ideas/README.md) is where future work is triaged.

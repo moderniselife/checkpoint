@@ -6,7 +6,7 @@
 
 <p align="center"><strong>Paste a ticket. Get a test plan.</strong></p>
 
-Checkpoint is a native macOS 26 app (SwiftUI + Liquid Glass) that reads a Jira or Linear issue —
+Checkpoint is a native app for macOS 26, iPhone and iPad (SwiftUI + Liquid Glass) that reads a Jira or Linear issue —
 plus its comments, children, parent, linked issues and specs — and turns it into a focused,
 tickable test plan: what changed, what "done" means, and exactly what to click to prove it.
 No more opening ten tabs and flipping back and forth.
@@ -49,6 +49,20 @@ No more opening ten tabs and flipping back and forth.
 - **Automation skeletons** — copy a Playwright or XCTest starting point from the Export menu.
 
 See [docs/working-a-plan.md](docs/working-a-plan.md) for the details.
+
+### iPhone, iPad and sync
+Checkpoint runs on iPhone and iPad with the same plans and features: analyze a ticket on your phone,
+tick through it on a test device, attach photos straight from the camera, share plans from the share sheet.
+- **Sync folder**: keep your plans in a folder in iCloud Drive (or Dropbox, or a network share), and every
+  device that opens it stays in step. It's free and works in any build.
+- **iCloud**: automatic sync through your iCloud account, coming with the App Store version.
+- API keys and sign-ins never sync; they stay in each device's Keychain.
+
+See [docs/sync.md](docs/sync.md).
+
+### A proper welcome
+First launch walks you through how you test, your AI provider (with a live key test), Jira and Linear
+sign-in, and sync, all skippable. **Help → Welcome to Checkpoint…** replays it.
 
 ### Folders and finding things
 Organise plans into folders nested to any depth, each with a colour.
@@ -127,7 +141,10 @@ Requirements: macOS 26+, Xcode 26+, [XcodeGen](https://github.com/yonaskolb/Xcod
 ./build.sh
 ```
 
-That builds a universal Release app to **`dist/Checkpoint.app`** (ad-hoc signed). Options:
+For iPhone and iPad: `xcodegen generate`, open `Checkpoint.xcodeproj`, choose the **CheckpointMobile**
+scheme and your signing team, and run on your device (iOS 26+).
+
+The Mac script builds a universal Release app to **`dist/Checkpoint.app`** (ad-hoc signed). Options:
 
 | Flag | Does |
 |---|---|
