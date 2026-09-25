@@ -988,6 +988,17 @@ final class PlanStore {
             .appending(path: taskID, directoryHint: .isDirectory)
     }
 
+    /// Saves in-memory evidence (a photo from the camera or library) as a file.
+    @discardableResult
+    func attachEvidence(data: Data, name: String, planID: String, taskID: String) -> [String] {
+        let tmp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let file = tmp.appending(path: name)
+        guard (try? data.write(to: file)) != nil else { return [] }
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        return attachEvidence([file], planID: planID, taskID: taskID)
+    }
+
     /// Copies user-picked files into the plan's evidence folder. Returns saved names.
     @discardableResult
     func attachEvidence(_ urls: [URL], planID: String, taskID: String) -> [String] {
@@ -996,8 +1007,9 @@ final class PlanStore {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var names: [String] = []
         for url in urls.prefix(10) {
-            guard url.startAccessingSecurityScopedResource() else { continue }
-            defer { url.stopAccessingSecurityScopedResource() }
+            // Picked/dropped files may be security-scoped; temp files (photos) aren't.
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             var name = url.lastPathComponent
             if FileManager.default.fileExists(atPath: dir.appending(path: name).path) {
                 name = UUID().uuidString.prefix(8) + "-" + name

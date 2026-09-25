@@ -1,6 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import AppKit
+import PhotosUI
 
 struct PlanView: View {
     let saved: SavedPlan
@@ -19,6 +19,9 @@ struct PlanView: View {
     @State private var copied = false
     @State private var editingTags = false
     @State private var headerWidth: CGFloat = 800
+    #if os(iOS)
+    @State private var sharing: SharedFile?
+    #endif
 
     enum Pane: String, CaseIterable { case plan = "Plan", research = "Research", chat = "Chat" }
     enum Filter: String, CaseIterable { case todo = "To do", all = "All", failed = "Failed", blocked = "Blocked" }
@@ -128,6 +131,9 @@ struct PlanView: View {
         .safeAreaInset(edge: .bottom) {
             if pane == .chat { ChatComposer(saved: saved) }
         }
+        #if os(iOS)
+        .sheet(item: $sharing) { file in ShareSheet(items: [file.url]).presentationDetents([.medium, .large]) }
+        #endif
         .onChange(of: saved.chat.count) {
             guard pane == .chat else { return }
             withAnimation(.smooth) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
@@ -192,16 +198,18 @@ struct PlanView: View {
 
             if let url = URL(string: plan.ticket.url), url.scheme != nil {
                 Button("Open in \(saved.tracker.label)", systemImage: "arrow.up.right.square") {
-                    NSWorkspace.shared.open(url)
+                    Platform.open(url)
                 }
             }
 
             Menu {
+                #if os(macOS)
                 Button("Mini Checklist", systemImage: "rectangle.on.rectangle") {
                     MiniPanelController.shared.toggle(with: store)
                 }
                 .help("A small always-on-top checklist for testing in a browser")
                 Divider()
+                #endif
                 Button(saved.pinned ? "Unpin" : "Pin", systemImage: saved.pinned ? "pin.slash" : "pin") {
                     store.togglePin(saved.id)
                 }
@@ -250,8 +258,7 @@ struct PlanView: View {
     }
 
     private func copy(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        Platform.copy(text)
         copied = true
         Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
     }
@@ -489,8 +496,11 @@ struct PlanView: View {
 
     private enum ExportFormat { case markdown, html }
 
-    /// Save panel → writes the file; HTML opens in the browser afterwards.
+    /// Mac: save panel, then HTML opens in the browser. iOS: share sheet.
     private func export(_ format: ExportFormat) {
+        let ctx = PlanExporter.Context(saved: saved, smokeOnly: smokeOnly)
+        let text = format == .html ? PlanExporter.html(ctx) : PlanExporter.markdown(ctx)
+        #if os(macOS)
         let panel = NSSavePanel()
         let ext = format == .html ? "html" : "md"
         panel.nameFieldStringValue = "\(plan.ticket.key) test plan.\(ext)"
@@ -498,14 +508,22 @@ struct PlanView: View {
         panel.canCreateDirectories = true
         panel.message = format == .html ? "A styled, self-contained page you can open, share or print." : "Markdown you can paste into Jira, GitHub or docs."
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let ctx = PlanExporter.Context(saved: saved, smokeOnly: smokeOnly)
-        let text = format == .html ? PlanExporter.html(ctx) : PlanExporter.markdown(ctx)
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
-            if format == .html { NSWorkspace.shared.open(url) } else { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            if format == .html { Platform.open(url) } else { Platform.reveal(url) }
         } catch {
             store.error = "Couldn't save: \(error.localizedDescription)"
         }
+        #else
+        let url = FileManager.default.temporaryDirectory
+            .appending(path: "\(plan.ticket.key) test plan.\(format == .html ? "html" : "md")")
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            sharing = SharedFile(url: url)
+        } catch {
+            store.error = "Couldn't export: \(error.localizedDescription)"
+        }
+        #endif
     }
 
     private func coverage(of ac: TestPlan.Criterion) -> CriterionRow.Coverage {
@@ -773,6 +791,13 @@ private struct TaskRow: View {
     @State private var reportingBug = false
     @State private var showingWhy = false
     @State private var dropTargeted = false
+    #if os(iOS)
+    @State private var choosingEvidence = false
+    @State private var showingPhotos = false
+    @State private var showingCamera = false
+    @State private var showingFiles = false
+    @State private var photoItems: [PhotosPickerItem] = []
+    #endif
 
     private var verdict: TaskVerdict { saved.verdict(of: task.id) }
     private var isDone: Bool { verdict == .pass }
@@ -927,6 +952,44 @@ private struct TaskRow: View {
         .sheet(isPresented: $reportingBug) {
             BugReportSheet(task: task, saved: saved)
         }
+        #if os(iOS)
+        .confirmationDialog("Attach evidence", isPresented: $choosingEvidence, titleVisibility: .visible) {
+            if CameraPicker.isAvailable {
+                Button("Take Photo") { showingCamera = true }
+            }
+            Button("Photo Library") { showingPhotos = true }
+            Button("Files") { showingFiles = true }
+        }
+        .photosPicker(isPresented: $showingPhotos, selection: $photoItems, maxSelectionCount: 10, matching: .images)
+        .onChange(of: photoItems) {
+            let items = photoItems
+            photoItems = []
+            Task {
+                for (i, item) in items.enumerated() {
+                    guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+                    let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
+                    withAnimation(.smooth) {
+                        _ = store.attachEvidence(data: data, name: "photo-\(Int(Date.now.timeIntervalSince1970))-\(i).\(ext)",
+                                                 planID: saved.id, taskID: task.id)
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showingCamera) {
+            CameraPicker { data in
+                withAnimation(.smooth) {
+                    _ = store.attachEvidence(data: data, name: "photo-\(Int(Date.now.timeIntervalSince1970)).jpg",
+                                             planID: saved.id, taskID: task.id)
+                }
+            }
+            .ignoresSafeArea()
+        }
+        .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result {
+                withAnimation(.smooth) { _ = store.attachEvidence(urls, planID: saved.id, taskID: task.id) }
+            }
+        }
+        #endif
     }
 
     /// Everything you can do to a task, in one place.
@@ -1003,8 +1066,7 @@ private struct TaskRow: View {
                 .textSelection(.enabled)
         } trailing: {
             Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(task.testData.joined(separator: "\n"), forType: .string)
+                Platform.copy(task.testData.joined(separator: "\n"))
             } label: {
                 Image(systemName: "doc.on.doc").font(.caption)
             }
@@ -1058,6 +1120,9 @@ private struct TaskRow: View {
     }
 
     private func attachFiles() {
+        #if os(iOS)
+        choosingEvidence = true
+        #else
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
@@ -1065,6 +1130,7 @@ private struct TaskRow: View {
         panel.message = "Attach screenshots or files to “\(task.title)”."
         guard panel.runModal() == .OK else { return }
         withAnimation(.smooth) { store.attachEvidence(panel.urls, planID: saved.id, taskID: task.id) }
+        #endif
     }
 }
 
@@ -1166,8 +1232,7 @@ private struct CriterionRow: View {
                             Text("• " + q).font(.callout).textSelection(.enabled)
                         }
                         Button("Copy questions") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(drafts.joined(separator: "\n"), forType: .string)
+                            Platform.copy(drafts.joined(separator: "\n"))
                         }
                         .buttonStyle(.glass)
                         .controlSize(.small)
@@ -1254,14 +1319,14 @@ private struct EvidenceThumb: View {
     var body: some View {
         HStack(spacing: 6) {
             if let data = store.evidenceData(name, planID: saved.id, taskID: taskID),
-               let image = NSImage(data: data) {
-                Image(nsImage: image)
+               let image = PlatformImage(data: data) {
+                Image(platformImage: image)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 40, height: 40)
                     .clipShape(.rect(cornerRadius: 8))
                     .onTapGesture {
-                        NSWorkspace.shared.open(store.evidenceDir(planID: saved.id, taskID: taskID).appending(path: name))
+                        Platform.open(store.evidenceDir(planID: saved.id, taskID: taskID).appending(path: name))
                     }
                     .help("Open \(name)")
             } else {
@@ -1271,7 +1336,7 @@ private struct EvidenceThumb: View {
                     .frame(width: 40, height: 40)
                     .background(.quaternary, in: .rect(cornerRadius: 8))
                     .onTapGesture {
-                        NSWorkspace.shared.open(store.evidenceDir(planID: saved.id, taskID: taskID).appending(path: name))
+                        Platform.open(store.evidenceDir(planID: saved.id, taskID: taskID).appending(path: name))
                     }
                     .help("Open \(name)")
             }
@@ -1331,8 +1396,7 @@ private struct BugReportSheet: View {
                 Spacer()
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(copied ? "Copied" : "Copy report", systemImage: "doc.on.doc") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(report, forType: .string)
+                    Platform.copy(report)
                     copied = true
                 }
                 .buttonStyle(.glassProminent)

@@ -1,4 +1,3 @@
-import AppKit
 import CryptoKit
 import Foundation
 
@@ -96,10 +95,17 @@ actor MCPOAuth {
         ]
         if let scope { comps.queryItems?.append(.init(name: "scope", value: scope)) }
 
-        // Default browser: already signed in to Atlassian, and loopback needs no admin allowlisting.
-        await MainActor.run { _ = NSWorkspace.shared.open(comps.url!) }
-        let callback = try await server.waitForCallback()
-        await MainActor.run { NSApp.activate() }
+        // Mac: default browser (already signed in to Atlassian). iOS: in-app web sheet.
+        // Either way the loopback redirect needs no admin allowlisting.
+        let authURL = comps.url!
+        await MainActor.run { AuthBrowser.shared.present(authURL) { server.stop() } }
+        let callback: URL
+        do {
+            callback = try await server.waitForCallback()
+        } catch is CancellationError {
+            throw OAuthError.cancelled
+        }
+        await MainActor.run { AuthBrowser.shared.finish() }
         let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if let err = items.first(where: { $0.name == "error" })?.value {
             let desc = items.first(where: { $0.name == "error_description" })?.value ?? err

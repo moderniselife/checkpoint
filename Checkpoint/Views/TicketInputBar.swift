@@ -225,7 +225,7 @@ private struct ScenarioMenu: View {
     var body: some View {
         let on = settings.scenarioMode != .off
         Menu {
-            ForEach(ScenarioMode.allCases) { m in
+            ForEach(ScenarioMode.available) { m in
                 Button {
                     if m == .ticketsAndCode && settings.codebaseBookmark == nil { settings.chooseCodebase() }
                     if m != .ticketsAndCode || settings.codebaseBookmark != nil { settings.scenarioMode = m }
@@ -233,12 +233,14 @@ private struct ScenarioMenu: View {
                     Label(m.label, systemImage: settings.scenarioMode == m ? "checkmark" : icon(m))
                 }
             }
-            Divider()
-            if let path = settings.codebasePath {
-                Text("Codebase: \((path as NSString).lastPathComponent)")
-            }
-            Button(settings.codebasePath == nil ? "Choose Codebase…" : "Change Codebase…", systemImage: "folder") {
-                settings.chooseCodebase()
+            if AppSettings.supportsCodebase {
+                Divider()
+                if let path = settings.codebasePath {
+                    Text("Codebase: \((path as NSString).lastPathComponent)")
+                }
+                Button(settings.codebasePath == nil ? "Choose Codebase…" : "Change Codebase…", systemImage: "folder") {
+                    settings.chooseCodebase()
+                }
             }
         } label: {
             Label(on ? settings.scenarioMode.shortLabel : "Scenarios", systemImage: "theatermasks")

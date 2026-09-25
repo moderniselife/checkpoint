@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.josephshenton
   deploymentTarget:
     macOS: "26.0"
+    iOS: "26.0"
   createIntermediateGroups: true
 settings:
   base:
@@ -28,6 +29,8 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSHumanReadableCopyright: ""
+        # Set to an iCloud container in signed builds; empty keeps iCloud sync off.
+        CheckpointCloudKitContainer: $(CHECKPOINT_CLOUDKIT_CONTAINER)
     entitlements:
       path: Checkpoint/Checkpoint.entitlements
       properties:
@@ -43,3 +46,43 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: YES
+        CHECKPOINT_CLOUDKIT_CONTAINER: ""
+
+  CheckpointMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: Checkpoint
+        excludes:
+          - "App/**"
+          - "Info.plist"
+          - "Checkpoint.entitlements"
+          - "Assets.xcassets/**"
+          - "Views/MiniPanel.swift"
+      - CheckpointMobile
+    info:
+      path: CheckpointMobile/Info.plist
+      properties:
+        CFBundleDisplayName: Checkpoint
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Checkpoint can talk to an AI model server running on your local network, like Ollama or LM Studio.
+        NSCameraUsageDescription: Take photos of what you see while testing and attach them to a task as evidence.
+        ITSAppUsesNonExemptEncryption: false
+        # Set to an iCloud container (e.g. iCloud.com.josephshenton.checkpoint) in signed App Store builds; empty keeps iCloud sync off.
+        CheckpointCloudKitContainer: $(CHECKPOINT_CLOUDKIT_CONTAINER)
+    settings:
+      base:
+        PRODUCT_NAME: Checkpoint
+        PRODUCT_BUNDLE_IDENTIFIER: com.josephshenton.checkpoint
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        CHECKPOINT_CLOUDKIT_CONTAINER: ""

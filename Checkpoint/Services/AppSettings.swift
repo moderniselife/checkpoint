@@ -265,9 +265,13 @@ final class AppSettings {
 
 // MARK: - Codebase folder (scenario research)
 
+#if os(macOS)
 import AppKit
 
 extension AppSettings {
+    /// Reading a local repo is a Mac feature; iOS keeps scenarios to tracker data.
+    static let supportsCodebase = true
+
     /// Lets the user pick a repo folder; stores a read-only security-scoped bookmark.
     func chooseCodebase() {
         let panel = NSOpenPanel()
@@ -303,3 +307,15 @@ extension AppSettings {
         return url
     }
 }
+#else
+extension AppSettings {
+    static let supportsCodebase = false
+    func chooseCodebase() {}
+    func clearCodebase() {
+        codebaseBookmark = nil
+        codebasePath = nil
+        if scenarioMode == .ticketsAndCode { scenarioMode = .tickets }
+    }
+    func openCodebase() -> URL? { nil }
+}
+#endif

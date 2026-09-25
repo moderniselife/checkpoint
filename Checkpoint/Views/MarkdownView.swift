@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 /// Block-level markdown renderer for Jira content (headings, lists, task lists,
 /// tables, code, quotes). Inline styling and links use AttributedString.
@@ -170,7 +169,7 @@ private struct InlineImage: View {
     let url: String
     @Environment(\.ticketAttachments) private var attachments
     @Environment(AppSettings.self) private var settings
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
     @State private var failed = false
     @State private var zoomed = false
 
@@ -181,7 +180,7 @@ private struct InlineImage: View {
     var body: some View {
         Group {
             if let image {
-                Image(nsImage: image)
+                Image(platformImage: image)
                     .resizable()
                     .scaledToFit()
                     .frame(maxWidth: min(image.size.width, 560), alignment: .leading)
@@ -228,7 +227,7 @@ private struct InlineImage: View {
             var req = URLRequest(url: target)
             req.setValue(auth, forHTTPHeaderField: "Authorization")
             if let (data, resp) = try? await URLSession.shared.data(for: req),
-               (resp as? HTTPURLResponse)?.statusCode == 200, let img = NSImage(data: data) {
+               (resp as? HTTPURLResponse)?.statusCode == 200, let img = PlatformImage(data: data) {
                 image = img
             } else {
                 failed = true
@@ -238,7 +237,7 @@ private struct InlineImage: View {
         guard let attachment else { return }
         // Prefer the full image; inline images are usually screenshots worth reading.
         if let data = await AttachmentLoader.shared.data(for: attachment, full: true, creds: settings.attachmentCredentials),
-           let img = NSImage(data: data) {
+           let img = PlatformImage(data: data) {
             image = img
         } else {
             failed = true
@@ -247,7 +246,7 @@ private struct InlineImage: View {
 }
 
 struct ZoomedImage: View {
-    let image: NSImage
+    let image: PlatformImage
     let title: String
     @Environment(\.dismiss) private var dismiss
 
@@ -261,7 +260,7 @@ struct ZoomedImage: View {
             .padding(14)
             Divider()
             ScrollView([.horizontal, .vertical]) {
-                Image(nsImage: image).resizable().scaledToFit()
+                Image(platformImage: image).resizable().scaledToFit()
                     .frame(maxWidth: max(image.size.width, 400))
             }
         }

@@ -46,7 +46,9 @@ struct ContentView: View {
             .fill(.clear)
             .frame(width: 10)
             .contentShape(.rect)
+            #if os(macOS)
             .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+            #endif
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { value in
                     let start = dragStartWidth ?? panelWidth
