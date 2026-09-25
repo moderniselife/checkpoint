@@ -34,6 +34,12 @@ struct TicketPanel: View {
                 if let key = inspector.currentKey {
                     switch inspector.currentState {
                     case .loaded(let detail): TicketDetailView(detail: detail)
+                    case .sample:
+                        ContentUnavailableView {
+                            Label("\(key) is a sample", systemImage: "doc.text.magnifyingglass")
+                        } description: {
+                            Text("The sample plan isn't a real ticket, so there's nothing to fetch. For your own Jira and Linear tickets this panel shows everything: description, comments, attachments, children and history.")
+                        }
                     case .failed(let msg):
                         ContentUnavailableView {
                             Label("Couldn't load \(key)", systemImage: "exclamationmark.triangle")

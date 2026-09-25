@@ -44,15 +44,21 @@ struct OnboardingView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
 
-                ZStack {
-                    page(step)
-                        .id(step)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: forward ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity)))
+                // Centred when it fits; scrolls instead of clipping on short windows.
+                GeometryReader { geo in
+                    ScrollView {
+                        page(step)
+                            .frame(maxWidth: 620)
+                            .padding(.horizontal, compact ? 20 : 40)
+                            .frame(maxWidth: .infinity, minHeight: geo.size.height)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollIndicators(.hidden)
+                    .id(step)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity)))
                 }
-                .frame(maxWidth: 620, maxHeight: .infinity)
-                .padding(.horizontal, compact ? 20 : 40)
                 .clipped()
 
                 if step != .welcome {
@@ -185,6 +191,7 @@ private struct PageHeader: View {
             Text(title)
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Text(subtitle)
                 .font(.title3)
                 .foregroundStyle(.secondary)
@@ -204,7 +211,7 @@ private struct WelcomePage: View {
         VStack(spacing: 28) {
             Spacer(minLength: 0)
             OrbitHero()
-                .frame(width: 300, height: 300)
+                .frame(width: 300, height: Platform.isMac ? 250 : 300)
                 .scaleEffect(appeared ? 1 : 0.85)
                 .opacity(appeared ? 1 : 0)
             VStack(spacing: 12) {
@@ -217,6 +224,7 @@ private struct WelcomePage: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 440)
             }
             .offset(y: appeared ? 0 : 16)
@@ -838,7 +846,7 @@ private struct ReadyPage: View {
                     .symbolEffect(.bounce, value: burst)
                     .shadow(color: .teal.opacity(0.4), radius: 24, y: 8)
             }
-            .frame(height: 190)
+            .frame(height: Platform.isMac ? 150 : 190)
             PageHeader(title: "You're all set",
                        subtitle: "Paste a ticket key or link and Checkpoint will get reading.")
             VStack(spacing: 0) {

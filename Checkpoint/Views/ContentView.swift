@@ -29,6 +29,8 @@ struct ContentView: View {
                 }
                 if inspector.isOpen && panelFloats {
                     ticketPanel(width: max(300, min(panelWidth, detailWidth - 72)))
+                        // Below the ticket bar, so both stay usable.
+                        .padding(.top, 64)
                         .shadow(color: .black.opacity(0.18), radius: 24, x: -6, y: 8)
                 }
             }
