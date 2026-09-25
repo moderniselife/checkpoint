@@ -30,6 +30,7 @@ struct CheckpointApp: App {
 
         .commands {
             CommandGroup(replacing: .appSettings) { SettingsCommand() }
+            CommandGroup(before: .help) { WelcomeCommand() }
         }
 
         // A regular window rather than a Settings scene, so it gets the same unified
@@ -54,5 +55,15 @@ private struct SettingsCommand: View {
     var body: some View {
         Button("Settings…") { openWindow(id: SettingsView.windowID) }
             .keyboardShortcut(",", modifiers: .command)
+    }
+}
+
+/// Help → Welcome to Checkpoint…, to see onboarding again.
+private struct WelcomeCommand: View {
+    @AppStorage("onboardingComplete") private var onboarded = false
+
+    var body: some View {
+        Button("Welcome to Checkpoint…") { onboarded = false }
+        Divider()
     }
 }
