@@ -324,6 +324,17 @@ final class PlanStore {
 
     var selected: SavedPlan? { plans.first { $0.id == selection } }
 
+    /// Opens the sample plan, adding it first if it isn't there (used by the tour and the empty state).
+    func openSamplePlan() {
+        let sample = SamplePlan.make()
+        if !plans.contains(where: { $0.id == sample.id }) {
+            plans.insert(sample, at: 0)
+            save()
+        }
+        selection = sample.id
+    }
+
+
     // MARK: - Folders
 
     static func folderTag(_ id: UUID) -> String { "folder:\(id.uuidString)" }

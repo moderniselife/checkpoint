@@ -116,6 +116,7 @@ struct SidebarView: View {
             }
         }
         .glassScrollIndicator()
+        .tourStop(.sidebar)
         #if os(iOS)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search plans")
         #else

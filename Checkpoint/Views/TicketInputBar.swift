@@ -23,6 +23,7 @@ struct TicketInputBar: View {
                     field
                     ModeToggle(compact: true)
                         .glassEffectID("mode", in: glass)
+                        .tourStop(.modeToggle)
                     action
                 }
             } else {
@@ -30,6 +31,7 @@ struct TicketInputBar: View {
                     field
                     ModeToggle(compact: compact)
                         .glassEffectID("mode", in: glass)
+                        .tourStop(.modeToggle)
                     ScenarioMenu(compact: compact)
                         .glassEffectID("scenarios", in: glass)
                     action
@@ -84,12 +86,14 @@ struct TicketInputBar: View {
                 .submitLabel(.go)
                 #endif
             PlanOptionsMenu(template: $template, quick: $quick, showScenarios: stacked)
+                .tourStop(.runOptions)
         }
         .padding(.leading, 18)
         .padding(.trailing, 8)
         .padding(.vertical, 12)
         .glassEffect(.regular.interactive(), in: .capsule)
         .glassEffectID("field", in: glass)
+        .tourStop(.ticketBar)
     }
 
     @ViewBuilder

@@ -8,6 +8,8 @@ struct MobileRootView: View {
     @Environment(TicketInspector.self) private var inspector
     @Environment(AppSettings.self) private var settings
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.tourGuide) private var tour
+    @Environment(\.openURL) private var openURL
     @AppStorage("onboardingComplete") private var onboarded = false
     @State private var showingSettings = false
     @State private var columns: NavigationSplitViewVisibility = .all
@@ -20,8 +22,19 @@ struct MobileRootView: View {
             SidebarView()
                 .navigationTitle("Checkpoint")
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItemGroup(placement: .topBarLeading) {
                         Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                        Menu {
+                            Button("Take the Tour", systemImage: "hand.point.up.left") { startTour() }
+                            Button("Explore a Sample Plan", systemImage: "doc.text.magnifyingglass") { store.openSamplePlan() }
+                            Button("Welcome to Checkpoint", systemImage: "sparkles") { onboarded = false }
+                            Divider()
+                            Button("Guides", systemImage: "book") { openURL(HelpLinks.guides) }
+                            Button("What's New", systemImage: "gift") { openURL(HelpLinks.releases) }
+                            Button("Report an Issue", systemImage: "exclamationmark.bubble") { openURL(HelpLinks.issues) }
+                        } label: {
+                            Label("Help", systemImage: "questionmark.circle")
+                        }
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
@@ -85,9 +98,22 @@ struct MobileRootView: View {
             SettingsView()
         }
         .fullScreenCover(isPresented: Binding(get: { !onboarded }, set: { if !$0 { onboarded = true } })) {
-            OnboardingView { onboarded = true }
+            OnboardingView { takeTour in
+                onboarded = true
+                if takeTour { startTour() }
+            }
         }
+        .tourOverlay(tour)
         .environment(\.showSettings, ShowSettingsAction { showingSettings = true })
+    }
+
+    /// iPhone starts on the plan list, where the first stops live.
+    private func startTour() {
+        if phone { store.selection = nil }
+        Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            tour?.start()
+        }
     }
 
     @ViewBuilder
