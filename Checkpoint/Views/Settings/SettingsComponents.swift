@@ -217,4 +217,114 @@ struct ComboBox: View {
         }
     }
 }
+
+/// iOS: a whole-row model setting that opens a searchable list. Big targets instead of a
+/// text field with a tiny menu chevron; typing a name that isn't listed offers "Use …".
+struct ModelPickerRow: View {
+    let title: String
+    @Binding var text: String
+    var items: [String]
+    var placeholder: String
+    /// When set, an option that clears the value (e.g. "Same as main model").
+    var emptyLabel: String? = nil
+    var loading = false
+    var onRefresh: (() -> Void)? = nil
+
+    var body: some View {
+        NavigationLink {
+            ModelPickerList(title: title, text: $text, items: items, placeholder: placeholder,
+                            emptyLabel: emptyLabel, loading: loading, onRefresh: onRefresh)
+        } label: {
+            LabeledContent(title) {
+                Text(text.isEmpty ? (emptyLabel ?? placeholder) : text)
+                    .font(text.isEmpty ? .callout : .callout.monospaced())
+                    .foregroundStyle(text.isEmpty ? .tertiary : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+    }
+}
+
+private struct ModelPickerList: View {
+    let title: String
+    @Binding var text: String
+    let items: [String]
+    let placeholder: String
+    let emptyLabel: String?
+    let loading: Bool
+    let onRefresh: (() -> Void)?
+    @State private var query = ""
+    @Environment(\.dismiss) private var dismiss
+
+    private var typed: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var filtered: [String] {
+        typed.isEmpty ? items : items.filter { $0.localizedCaseInsensitiveContains(typed) }
+    }
+
+    var body: some View {
+        List {
+            if let emptyLabel, typed.isEmpty {
+                Section { row(emptyLabel, value: "", monospaced: false) }
+            }
+            if !typed.isEmpty && !items.contains(typed) {
+                Section("Not in the list") {
+                    Button { pick(typed) } label: {
+                        Label("Use “\(typed)”", systemImage: "keyboard")
+                    }
+                }
+            }
+            if !text.isEmpty && !items.contains(text) && typed.isEmpty {
+                Section("Current") { row(text, value: text) }
+            }
+            if !filtered.isEmpty {
+                Section(items.count > 1 ? "\(items.count) models" : "Models") {
+                    ForEach(filtered, id: \.self) { row($0, value: $0) }
+                }
+            } else if items.isEmpty {
+                Section {
+                    Text(loading ? "Loading models…" : "No list from this provider yet. Type a model name in the search field\(onRefresh == nil ? "" : ", or refresh the list").")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search or type a model name")
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .onSubmit(of: .search) { if !typed.isEmpty { pick(filtered.count == 1 ? filtered[0] : typed) } }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let onRefresh {
+                ToolbarItem(placement: .primaryAction) {
+                    if loading {
+                        ProgressView()
+                    } else {
+                        Button("Refresh", systemImage: "arrow.clockwise", action: onRefresh)
+                    }
+                }
+            }
+        }
+    }
+
+    private func row(_ label: String, value: String, monospaced: Bool = true) -> some View {
+        Button { pick(value) } label: {
+            HStack {
+                Text(label)
+                    .font(monospaced ? .body.monospaced() : .body)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if text == value { Image(systemName: "checkmark").foregroundStyle(Color.accentColor).fontWeight(.semibold) }
+            }
+            .contentShape(.rect)
+        }
+        .tint(.primary)
+    }
+
+    private func pick(_ value: String) {
+        text = value
+        dismiss()
+    }
+}
 #endif
+

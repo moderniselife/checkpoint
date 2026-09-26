@@ -99,8 +99,17 @@ struct TicketInputBar: View {
     @ViewBuilder
     private var action: some View {
         if store.isRunning {
-            Button("Stop", systemImage: "stop.fill") { store.cancel() }
-                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+            Menu {
+                Button("Pause — Resume Later", systemImage: "pause.circle") { store.pause() }
+                Button("Discard Run", systemImage: "trash", role: .destructive) { store.discardRun() }
+            } label: {
+                Label("Pause", systemImage: "pause.fill")
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+            } primaryAction: {
+                store.pause()
+            }
+                .menuIndicator(.hidden)
+                .help("Pause and keep it in Unfinished. Hold for more.")
                 .buttonStyle(.glass)
                 .controlSize(.extraLarge)
                 .glassEffectID("action", in: glass)

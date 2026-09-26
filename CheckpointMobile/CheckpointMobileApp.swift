@@ -20,6 +20,7 @@ struct CheckpointMobileApp: App {
     var body: some Scene {
         WindowGroup {
             MobileRootView()
+                .background { KeyboardDismisser() }
                 .environment(settings)
                 .environment(store)
                 .environment(sync)

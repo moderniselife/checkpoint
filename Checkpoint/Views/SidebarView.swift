@@ -58,14 +58,19 @@ struct SidebarView: View {
                     }
                 }
             }
-            if !store.smartFolders.isEmpty {
-                Section {
-                    ForEach(store.smartFolders) { smart in
-                        SmartFolderRow(smart: smart, editingSmartFolder: $editingSmartFolder)
-                    }
-                } header: {
-                    Text("Smart folders")
+            Section {
+                // Built in: runs that paused or failed part-way, ready to pick up again.
+                BuiltInFolderRow(title: "Unfinished", icon: "clock.arrow.circlepath", tint: .orange,
+                                 count: store.unfinishedDrafts.count, tag: PlanStore.unfinishedTag)
+                ForEach(store.smartFolders) { smart in
+                    SmartFolderRow(smart: smart, editingSmartFolder: $editingSmartFolder)
                 }
+                if !store.binnedDrafts.isEmpty {
+                    BuiltInFolderRow(title: "Bin", icon: "trash", tint: .gray,
+                                     count: store.binnedDrafts.count, tag: PlanStore.binTag)
+                }
+            } header: {
+                Text("Smart folders")
             }
             Section {
                 ForEach(visibleFolders(nil)) { folder in
@@ -405,6 +410,31 @@ private struct MoveMenuItems: View {
 }
 
 // MARK: - Smart folders (IDEA-101)
+
+/// Unfinished and Bin: always-there folders for runs rather than plans.
+private struct BuiltInFolderRow: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    let count: Int
+    let tag: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).foregroundStyle(tint.gradient)
+            Text(title).lineLimit(1)
+            Spacer(minLength: 4)
+            if count > 0 {
+                Text("\(count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 1)
+        .contentShape(.rect)
+        .tag(tag)
+    }
+}
 
 private struct SmartFolderRow: View {
     let smart: SmartFolder

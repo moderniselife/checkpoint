@@ -10,6 +10,7 @@ struct MobileRootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.tourGuide) private var tour
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("onboardingComplete") private var onboarded = false
     @State private var showingSettings = false
     @State private var columns: NavigationSplitViewVisibility = .all
@@ -73,6 +74,10 @@ struct MobileRootView: View {
             }
         }
         .animation(.smooth, value: store.error)
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            store.appInBackground = phase == .background
+            if phase == .active { store.resumeAfterBackground(settings: settings) }
+        }
         .onChange(of: store.runningKey) { old, new in
             if let new { BackgroundResearch.shared.begin(key: new, store: store) }
             else if old != nil { BackgroundResearch.shared.end(success: store.error == nil) }
@@ -86,7 +91,16 @@ struct MobileRootView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Stop", role: .destructive) { store.cancel() }
+                            Button("Pause", systemImage: "pause.fill") { store.pause() }
+                                .labelStyle(.titleAndIcon)
+                        }
+                        ToolbarItem(placement: .primaryAction) {
+                            Menu {
+                                Button("Pause — Resume Later", systemImage: "pause.circle") { store.pause() }
+                                Button("Discard Run", systemImage: "trash", role: .destructive) { store.discardRun() }
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                            }
                         }
                     }
             }
@@ -146,6 +160,10 @@ struct MobileRootView: View {
         } else if store.showingDashboard {
             DashboardView()
                 .navigationTitle("Dashboard")
+                .navigationBarTitleDisplayMode(.inline)
+        } else if store.showingUnfinished || store.showingBin {
+            DraftsView(bin: store.showingBin)
+                .navigationTitle(store.showingBin ? "Bin" : "Unfinished")
                 .navigationBarTitleDisplayMode(.inline)
         } else {
             EmptyStateView()
