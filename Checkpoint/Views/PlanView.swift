@@ -8,6 +8,7 @@ struct PlanView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(TicketInspector.self) private var inspector
     @Environment(\.tourGuide) private var tourGuide
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var filter: Filter = .todo
     @State private var pane: Pane = .plan
     /// Task-list lenses: the smoke subset and P0-only.
@@ -140,6 +141,8 @@ struct PlanView: View {
         }
         .glassScrollIndicator()
         .drivesScrollChrome()
+        // The column the plan gets (≤ 820 minus margins) decides the header layout.
+        .onGeometryChange(for: CGFloat.self) { min($0.size.width, 820) - PageLayout.side * 2 } action: { headerWidth = $0 }
         .safeAreaInset(edge: .bottom) {
             if pane == .chat { ChatComposer(saved: saved) }
         }
@@ -359,8 +362,15 @@ struct PlanView: View {
 
     // MARK: Header
 
-    /// Narrow (iPhone, or a squeezed window): rings move under the title.
-    private var narrowHeader: Bool { headerWidth < 520 }
+    /// Narrow (iPhone, or a squeezed window): rings move under the title. Based on the
+    /// space the page offers, never the header's own width, which a long chip row can
+    /// stretch (and then keep itself wide).
+    private var narrowHeader: Bool {
+        #if os(iOS)
+        if sizeClass == .compact { return true }
+        #endif
+        return headerWidth < 520
+    }
 
     private var header: some View {
         let chips = Group {
@@ -435,7 +445,6 @@ struct PlanView: View {
             }
         }
         .padding(narrowHeader ? 18 : 24)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { headerWidth = $0 }
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
         .popover(isPresented: $editingTags, arrowEdge: .bottom) {
             TagEditor(saved: saved)
@@ -1847,7 +1856,6 @@ struct Chip: View {
             // Short chips never squash; long ones (an AI-named area) truncate rather than
             // stretching their row past the screen.
             .fixedSize(horizontal: text.count <= 22, vertical: false)
-            .frame(maxWidth: 220)
             .help(text)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
@@ -1922,9 +1930,20 @@ struct FlowLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let result = arrange(proposal: proposal, subviews: subviews)
+        let maxWidth = proposal.width ?? .infinity
         for (i, origin) in result.origins.enumerated() {
-            subviews[i].place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
+            let size = fitted(subviews[i], maxWidth: maxWidth)
+            subviews[i].place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                              proposal: ProposedViewSize(width: size.width, height: size.height))
         }
+    }
+
+    /// Ideal size, unless that's wider than a whole row: then the view gets the row width
+    /// (so a long chip truncates instead of pushing the layout off screen).
+    private func fitted(_ view: LayoutSubview, maxWidth: CGFloat) -> CGSize {
+        let ideal = view.sizeThatFits(.unspecified)
+        guard ideal.width > maxWidth, maxWidth.isFinite else { return ideal }
+        return view.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
     }
 
     private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, origins: [CGPoint]) {
@@ -1932,7 +1951,7 @@ struct FlowLayout: Layout {
         var origins: [CGPoint] = []
         var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, width: CGFloat = 0
         for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
+            let size = fitted(view, maxWidth: maxWidth)
             if x > 0 && x + size.width > maxWidth {
                 x = 0
                 y += rowHeight + spacing
