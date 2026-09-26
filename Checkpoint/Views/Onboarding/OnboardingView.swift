@@ -481,6 +481,8 @@ private struct AIPage: View {
     @Environment(AppSettings.self) private var settings
     @State private var testing = false
     @State private var result: Result<String, Error>?
+    @State private var models: [String] = []
+    @State private var fetching = false
 
     private let featured: [LLMProvider] = [.anthropic, .openai, .gemini, .xai, .openrouter, .openAICompatible]
 
@@ -494,7 +496,8 @@ private struct AIPage: View {
                 ForEach(featured) { p in
                     let on = settings.provider == p
                     Button {
-                        withAnimation(.spring(duration: 0.3)) { settings.provider = p; result = nil }
+                        withAnimation(.spring(duration: 0.3)) { settings.provider = p; result = nil; models = [] }
+                        fetchModels()
                     } label: {
                         HStack(spacing: 6) {
                             Text(p == .openAICompatible ? "Local model" : p.shortLabel)
@@ -520,12 +523,41 @@ private struct AIPage: View {
                         TextField("Server URL", text: $settings.llmBaseURL, prompt: Text(settings.provider.defaultBaseURL))
                             .font(.body.monospaced())
                             .noAutocorrect()
+                            .onSubmit(fetchModels)
                     }
                 }
                 field(icon: "key.fill") {
                     SecureField(settings.provider.requiresKey ? "API key" : "API key (optional)",
                                 text: $settings.llmKey, prompt: Text(settings.provider.keyPrompt))
                         .noAutocorrect()
+                        .onSubmit(fetchModels)
+                }
+                field(icon: "cpu") {
+                    HStack(spacing: 8) {
+                        TextField("Model", text: $settings.model, prompt: Text(settings.provider.defaultModel))
+                            .font(.body.monospaced())
+                            .noAutocorrect()
+                        if fetching {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Menu {
+                                ForEach(modelOptions, id: \.self) { m in
+                                    Button(m) { settings.model = m; result = nil }
+                                }
+                                if !modelOptions.isEmpty { Divider() }
+                                Button("Refresh Model List", systemImage: "arrow.clockwise", action: fetchModels)
+                            } label: {
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .foregroundStyle(.secondary)
+                                    .contentShape(.rect)
+                            }
+                            .menuStyle(.button)
+                            .buttonStyle(.plain)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
+                            .help("Pick from the models \(settings.provider.shortLabel) offers")
+                        }
+                    }
                 }
                 HStack {
                     if let url = settings.provider.keyURL {
@@ -561,6 +593,7 @@ private struct AIPage: View {
                 .font(.caption).foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
+        .onAppear(perform: fetchModels)
     }
 
     private func field<C: View>(icon: String, @ViewBuilder content: () -> C) -> some View {
@@ -572,12 +605,28 @@ private struct AIPage: View {
         .background(.background.opacity(0.6), in: .rect(cornerRadius: 12))
     }
 
+    private var modelOptions: [String] {
+        models.isEmpty && settings.provider == .anthropic ? AppSettings.claudeModels : models
+    }
+
+    /// Quietly lists the provider's models and fixes the choice if it isn't one of them.
+    private func fetchModels() {
+        guard !fetching, !settings.provider.requiresKey || !settings.llmKey.isEmpty else { return }
+        fetching = true
+        Task {
+            defer { fetching = false }
+            if let list = try? await settings.refreshModels() { models = list }
+        }
+    }
+
     private func test() {
         testing = true
         result = nil
         Task {
             defer { testing = false }
             do {
+                // Make sure we're asking for a model the server actually has.
+                if models.isEmpty, let list = try? await settings.refreshModels() { models = list }
                 let reply = try await settings.testModel()
                 withAnimation(.spring(duration: 0.4)) { result = .success(reply.isEmpty ? "OK" : reply) }
             } catch {

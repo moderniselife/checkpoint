@@ -17,7 +17,7 @@ struct FolderOverview: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Header
-                HStack(alignment: .top, spacing: 20) {
+                AdaptiveHeader {
                     VStack(alignment: .leading, spacing: 8) {
                         breadcrumb
                         Label {
@@ -35,7 +35,7 @@ struct FolderOverview: View {
                         .disabled(all.isEmpty)
                         .help("Merge plans into one deduplicated run (IDEA-015)")
                     }
-                    Spacer(minLength: 0)
+                } trailing: {
                     HStack(spacing: 16) {
                         MetricRing(value: tasksTotal == 0 ? 0 : Double(tasksDone) / Double(tasksTotal),
                                    label: "tested", text: "\(tasksDone)/\(tasksTotal)")

@@ -89,7 +89,7 @@ struct BatchSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .scrollDisabled(true)
+            .scrollDisabled(Platform.isMac)
 
             HStack {
                 Spacer()
@@ -101,8 +101,7 @@ struct BatchSheet: View {
             }
             .padding([.horizontal, .bottom], 20)
         }
-        .frame(width: 500)
-        .fixedSize(horizontal: false, vertical: true)
+        .macSheetFrame(width: 500)
         .onAppear(perform: setup)
     }
 

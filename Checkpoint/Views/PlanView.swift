@@ -1016,7 +1016,7 @@ private struct TaskRow: View {
                 .contentShape(.rect)
                 .onTapGesture { withAnimation(.smooth) { expanded.toggle() } }
                 if compactRow {
-                    HStack(spacing: 6) {
+                    FlowLayout(spacing: 6) {
                         if !task.area.isEmpty { Chip(text: task.area) }
                         RiskChip(risk: task.risk)
                     }
@@ -1590,7 +1590,8 @@ private struct BugReportSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 480)
+        .macSheetFrame(width: 480)
+        .presentationDetents([.large])
         .onAppear(perform: {
             actual = saved.failed[task.id] ?? ""
         })
@@ -1621,7 +1622,8 @@ private struct VerdictSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 380)
+        .macSheetFrame(width: 380)
+        .presentationDetents([.medium])
     }
 }
 
@@ -1827,7 +1829,12 @@ struct Chip: View {
         Text(text)
             .font(.caption.weight(.medium))
             .lineLimit(1)
-            .fixedSize()
+            .truncationMode(.tail)
+            // Short chips never squash; long ones (an AI-named area) truncate rather than
+            // stretching their row past the screen.
+            .fixedSize(horizontal: text.count <= 22, vertical: false)
+            .frame(maxWidth: 220)
+            .help(text)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .glassEffect(.regular.tint(tint.opacity(0.2)), in: .capsule)

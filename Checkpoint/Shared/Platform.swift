@@ -87,3 +87,41 @@ struct ShowSettingsAction {
 extension EnvironmentValues {
     @Entry var showSettings = ShowSettingsAction()
 }
+
+/// Title block beside its rings when there's room, rings underneath when there isn't
+/// (iPhone, narrow windows). Used by the dashboard and folder pages.
+struct AdaptiveHeader<Leading: View, Trailing: View>: View {
+    @ViewBuilder var leading: Leading
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 20) {
+                leading
+                Spacer(minLength: 0)
+                trailing
+            }
+            VStack(alignment: .leading, spacing: 16) {
+                leading
+                trailing
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+extension View {
+    /// Mac sheets get a fixed width and hug their content; iOS sheets fill the sheet.
+    @ViewBuilder
+    func macSheetFrame(width: CGFloat, height: CGFloat? = nil) -> some View {
+        #if os(macOS)
+        if let height {
+            frame(width: width, height: height)
+        } else {
+            frame(width: width).fixedSize(horizontal: false, vertical: true)
+        }
+        #else
+        self
+        #endif
+    }
+}

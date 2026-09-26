@@ -359,7 +359,7 @@ private struct CustomTrackerEditor: View {
                 }
             }
             .formStyle(.grouped)
-            .scrollDisabled(true)
+            .scrollDisabled(Platform.isMac)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -370,7 +370,6 @@ private struct CustomTrackerEditor: View {
             }
             .padding([.horizontal, .bottom], 20)
         }
-        .frame(width: 440)
-        .fixedSize(horizontal: false, vertical: true)
+        .macSheetFrame(width: 440)
     }
 }

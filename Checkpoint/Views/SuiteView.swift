@@ -100,7 +100,7 @@ struct SuiteBuilderSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 580, height: 660)
+        .macSheetFrame(width: 580, height: 660)
         .onAppear { included = Set(candidates.map(\.id)) }
     }
 }

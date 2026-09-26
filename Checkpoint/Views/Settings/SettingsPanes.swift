@@ -22,9 +22,11 @@ struct AIProviderPane: View {
                 if settings.provider.hasEditableBaseURL {
                     TextField("Base URL", text: $settings.llmBaseURL, prompt: Text(settings.provider.defaultBaseURL))
                         .font(.body.monospaced())
+                        .onSubmit(autoFetch)
                 }
                 SecureField(settings.provider.requiresKey ? "API key" : "API key (optional)",
                             text: $settings.llmKey, prompt: Text(settings.provider.keyPrompt))
+                    .onSubmit(autoFetch)
 
                 LabeledContent("Model") {
                     ComboBox(text: $settings.model, items: modelOptions, placeholder: settings.provider.defaultModel)
@@ -77,7 +79,7 @@ struct AIProviderPane: View {
 
     /// Quietly fills the dropdowns for providers without a built-in list.
     private func autoFetch() {
-        guard settings.provider != .anthropic, fetchedModels.isEmpty, !fetchingModels,
+        guard settings.provider != .anthropic, !fetchingModels,
               !settings.provider.requiresKey || !settings.llmKey.isEmpty else { return }
         fetchModels(quiet: true)
     }
@@ -101,19 +103,10 @@ struct AIProviderPane: View {
 
     private func fetchModels(quiet: Bool) {
         fetchingModels = true
-        let config = settings.llmConfig
         Task {
             defer { fetchingModels = false }
             do {
-                let models: [String]
-                switch config.provider.style {
-                case .anthropic:
-                    models = try await ClaudeClient(apiKey: config.apiKey, baseURL: config.baseURL,
-                                                    sendBearer: config.provider != .anthropic).listModels()
-                case .openAIChat:
-                    models = try await OpenAIChatClient(provider: config.provider, apiKey: config.apiKey,
-                                                        baseURL: config.baseURL).listModels()
-                }
+                let models = try await settings.refreshModels()
                 fetchedModels = models
                 if !quiet { llmState = .ok("\(models.count) models available", 0) }
             } catch {
