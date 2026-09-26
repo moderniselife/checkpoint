@@ -128,7 +128,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | Archive (hidden by default, restorable) | 🧪 | `SavedPlan.archived`, `PlanStore.toggleArchive` | Right-click → Archive |
 | Tags on plans (editor, chips, filter) | 🧪 | `SavedPlan.tags`, `TagEditor` | ⌘T, More → Tags…, or right-click a plan |
 | Due dates with local notifications + overdue badges | 🧪 | `SavedPlan.dueDate`, `Reminders.swift` | Plan toolbar → More → Remind Me |
-| Batch planning: JQL sprint import, epic children, paste-a-list → one plan each in a folder | 🧪 | `BatchSheet.swift`, `PlanStore.startBatch` | Test plans header ＋ → Plan Several Tickets; panel “Plan each child” |
+| Batch planning: Jira JQL, Linear filters, custom tracker search, epic children, paste-a-list → one plan each in a folder | 🧪 | `BatchSheet.swift`, `PlanStore.startBatch` | Test plans header ＋ → Plan Several Tickets; panel “Plan each child” |
 | Smart folders (label/component/fix-version/epic rules, live, convertible) | 🧪 | `SmartFolder.swift`, `PlanStore.smartFolders` | Test plans header ＋ → New Smart Folder; old plans need a re-run for metadata |
 | Testing dashboard (7-day stats, 8-week trend, in progress) | 🧪 | `DashboardView.swift` | Sidebar Dashboard |
 
@@ -168,6 +168,8 @@ verified, what's known to be rough, and how to fix things when they break.
 | Regenerate one section (tasks/AC/edge cases) | 🧪 | `PlanStore.regenerate` | ⋯ on AC / Edge cases; Test tasks pill |
 | Why-this-task rationale popovers | 🧪 | `TaskRow` ⋯ menu | Task ⋯ → Why This Task? |
 | Custom MCP servers as research sources | 🧪 | `CustomMCPTracker.useForResearch` | Custom server → Use for research |
+| Custom MCP trackers: plan and batch-import from any ticket server | 🧪 | `Tracker.custom`, `AppSettings.route` | Match hint / Bare keys go to → plan from it |
+| Research tools (Obsidian, Corellium…) with notes and per-tool action allowlist | 🧪 | `CustomMCPTracker.Role.research`, `ToolAccess` | Settings → Research Tools |
 | Strip-and-retry unsupported params (reasoning effort, JSON schema…) | 🧪 | `OpenAIChatClient.stream` | Fixture 400 on `reasoning_effort` recovered |
 | Gemini-safe tool schemas | 🧪 | `PlanGenerator.cleanSchema` | Unit-checked |
 
@@ -195,6 +197,10 @@ verified, what's known to be rough, and how to fix things when they break.
 | Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | ✅ | `Views/Onboarding/OnboardingView.swift` | Tested by the maintainer on iPhone, iPad and Mac |
 | Per-task and per-scenario timers feeding the plan timer | ✅ | `PlanStore.toggleItemTimer`, `ItemTimerPill` | Tested by the maintainer on iPhone, iPad and Mac |
 | iOS research continues in the background (continued-processing task) | ✅ | `CheckpointMobile/BackgroundResearch.swift` | Tested by the maintainer on iPhone, iPad and Mac |
+| Pause / resume runs from the last finished research step; failures and interruptions resumable | 🧪 | `ResearchDrafts.swift`, `ResearchSnapshot`, `DraftsView` | Pause → Unfinished → Resume |
+| Built-in Unfinished smart folder and a 30-day Bin for discarded runs | 🧪 | `PlanStore.unfinishedDrafts`, `binnedDrafts` | Sidebar → Smart folders |
+| iOS: run paused (not failed) when iOS stops it in the background, auto-resumes on return | 🧪 | `BackgroundResearch`, `PlanStore.resumeAfterBackground` | Background a run on a device |
+| iOS: tap outside a field closes the keyboard; searchable model picker; separate Test / Refresh rows | 🧪 | `KeyboardDismisser`, `ModelPickerRow` | Settings → AI Provider on iPhone |
 | iOS Atlassian sign-in in an in-app web view (Jira app can't hijack it), Safari fallback | ✅ | `AuthBrowser` | Tested by the maintainer on iPhone, iPad and Mac |
 | Model list fetched in onboarding/Settings; unknown model replaced with one the server has | ✅ | `AppSettings.refreshModels` | Tested by the maintainer on iPhone, iPad and Mac |
 | Guided spotlight tour (10 stops, opens a sample plan if needed) | ✅ | `Shared/TourGuide.swift`, `Models/SamplePlan.swift` | Tested by the maintainer on iPhone, iPad and Mac |

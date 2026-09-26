@@ -11,6 +11,7 @@ enum SettingsSection: Hashable, Identifiable {
     case jira
     case linear
     case customMCP(id: UUID?)   // nil = list, UUID = detail for one tracker
+    case researchTools(id: UUID?)
     case testing
     case scenarios
     case sync
@@ -22,6 +23,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .jira: "jira"
         case .linear: "linear"
         case .customMCP(let id): "custom-\(id?.uuidString ?? "list")"
+        case .researchTools(let id): "research-\(id?.uuidString ?? "list")"
         case .testing: "testing"
         case .scenarios: "scenarios"
         case .sync: "sync"
@@ -35,6 +37,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .jira: "Jira"
         case .linear: "Linear"
         case .customMCP: "Custom Servers"
+        case .researchTools: "Research Tools"
         case .testing: "Testing"
         case .scenarios: "Scenarios"
         case .sync: "Sync"
@@ -47,7 +50,8 @@ enum SettingsSection: Hashable, Identifiable {
         case .aiProvider: "Model, key and effort used to write plans"
         case .jira: "Atlassian Rovo MCP — issues, comments, specs"
         case .linear: "Linear read-only MCP — issues and comments"
-        case .customMCP: "Any MCP server — Asana, a wiki, your own tools"
+        case .customMCP: "Any MCP server that holds tickets — Asana, your own tracker"
+        case .researchTools: "MCP tools for research and test setup — Obsidian, Corellium"
         case .testing: "Default mode and hosted environment"
         case .scenarios: "End-to-end journeys from tickets and code"
         case .sync: "Your plans on every device"
@@ -61,6 +65,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .jira: "square.stack.3d.up"
         case .linear: "line.3.horizontal.decrease.circle"
         case .customMCP: "server.rack"
+        case .researchTools: "wand.and.stars"
         case .testing: "checkmark.shield"
         case .scenarios: "map"
         case .sync: "arrow.triangle.2.circlepath.icloud"
@@ -83,6 +88,7 @@ enum SettingsSection: Hashable, Identifiable {
         case .jira: .blue
         case .linear: .indigo
         case .customMCP: .teal
+        case .researchTools: .pink
         case .testing: .green
         case .scenarios: .orange
         case .sync: .cyan
@@ -96,7 +102,8 @@ enum SettingsSection: Hashable, Identifiable {
         case .aiProvider: ["ai", "provider", "model", "key", "claude", "openai", "ollama", "effort", "llm"]
         case .jira: ["jira", "atlassian", "rovo", "mcp", "oauth", "token", "site"]
         case .linear: ["linear", "oauth", "api key", "mcp"]
-        case .customMCP: ["custom", "mcp", "endpoint", "server", "self-hosted"]
+        case .customMCP: ["custom", "mcp", "endpoint", "server", "self-hosted", "tracker"]
+        case .researchTools: ["research", "tools", "mcp", "obsidian", "corellium", "notes", "device", "simulator", "wiki"]
         case .testing: ["testing", "mode", "dev", "qa", "environment", "hosted"]
         case .scenarios: ["scenarios", "journeys", "codebase", "repo", "e2e"]
         case .sync: ["sync", "icloud", "drive", "folder", "devices", "iphone", "ipad", "backup"]
@@ -112,7 +119,7 @@ enum SettingsSection: Hashable, Identifiable {
 
         var sections: [SettingsSection] {
             switch self {
-            case .intelligence: [.aiProvider]
+            case .intelligence: [.aiProvider, .researchTools(id: nil)]
             case .trackers: [.jira, .linear, .customMCP(id: nil)]
             case .workspace: [.testing, .scenarios]
             case .app: [.sync, .advanced]
@@ -122,7 +129,7 @@ enum SettingsSection: Hashable, Identifiable {
 
     var group: Group {
         switch self {
-        case .aiProvider: .intelligence
+        case .aiProvider, .researchTools: .intelligence
         case .jira, .linear, .customMCP: .trackers
         case .testing, .scenarios: .workspace
         case .sync, .advanced: .app

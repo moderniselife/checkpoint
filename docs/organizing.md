@@ -30,9 +30,14 @@ one; saying no keeps dates and badges, just no banners. Finishing a plan retires
 
 ## Batch work
 
-- **Plan several tickets** (**+** in the *Test plans* header): Jira JQL search, epic children, or a pasted list of keys/links.
+- **Plan several tickets** (**+** in the *Test plans* header), from whichever trackers are connected:
+  - **Jira**: any JQL, e.g. `sprint in openSprints()`.
+  - **Linear**: team, current cycle, project, state, assigned to me, and search words.
+  - **Custom tracker**: one of the server's own search or list tools, with your search text.
+  - **Epic children** (Jira or Linear), or a **pasted list** with the tracker to look them up in.
+
   Each issue gets its own plan in a new folder, run sequentially with progress, cancel, and an
-  error summary at the end. Linear views work via paste.
+  error summary at the end.
 - **Plan each child** (ticket panel): same engine, pre-filled from the epic's children.
 - **Regression suites** (folder page → **Build regression suite**): merge a folder's plans into one deduplicated
   run with local ticks and Markdown export. Suites are transient by design — source plans stay canonical.

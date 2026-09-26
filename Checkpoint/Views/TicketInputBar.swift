@@ -56,7 +56,7 @@ struct TicketInputBar: View {
 
     private var field: some View {
         HStack(spacing: 10) {
-            if settings.isAtlassianConfigured && settings.isLinearConfigured {
+            if settings.connectedTrackers.count + settings.trackerServers.count > 1 {
                 TrackerMenu()
             } else {
                 Image(systemName: "ticket")
@@ -99,8 +99,17 @@ struct TicketInputBar: View {
     @ViewBuilder
     private var action: some View {
         if store.isRunning {
-            Button("Stop", systemImage: "stop.fill") { store.cancel() }
-                .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+            Menu {
+                Button("Pause — Resume Later", systemImage: "pause.circle") { store.pause() }
+                Button("Discard Run", systemImage: "trash", role: .destructive) { store.discardRun() }
+            } label: {
+                Label("Pause", systemImage: "pause.fill")
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+            } primaryAction: {
+                store.pause()
+            }
+                .menuIndicator(.hidden)
+                .help("Pause and keep it in Unfinished. Hold for more.")
                 .buttonStyle(.glass)
                 .controlSize(.extraLarge)
                 .glassEffectID("action", in: glass)
@@ -111,13 +120,14 @@ struct TicketInputBar: View {
                 .buttonStyle(.glassProminent)
                 .controlSize(.extraLarge)
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(PlanStore.extractKey(input) == nil)
+                .disabled(PlanStore.ticketKey(input, tracker: settings.route(input).tracker) == nil)
                 .glassEffectID("action", in: glass)
         }
     }
 
     private var placeholder: String {
-        switch settings.connectedTrackers {
+        if let server = settings.route("").custom { return "Ticket in \(server.displayName), or paste a link" }
+        return switch settings.connectedTrackers {
         case [.linear]: "Linear issue ID or link — e.g. ENG-123"
         case [.jira, .linear]: "Jira or Linear key, or paste a link"
         default: "Jira key or link — e.g. PROJ-123"
@@ -180,26 +190,46 @@ private struct ModeToggle: View {
     }
 }
 
-/// Picks where bare keys are looked up when both Jira and Linear are connected.
+/// Picks where bare keys are looked up when more than one tracker is connected:
+/// Jira, Linear, or one of the custom tracker servers.
 private struct TrackerMenu: View {
     @Environment(AppSettings.self) private var settings
 
+    private var currentCustom: CustomMCPTracker? {
+        settings.trackerServers.first { $0.id == settings.defaultCustomTrackerID }
+    }
+
+    private var currentName: String { currentCustom?.displayName ?? settings.defaultTracker.label }
+
     var body: some View {
         Menu {
-            ForEach(Tracker.allCases) { t in
-                Button { settings.defaultTracker = t } label: {
-                    Label(t.label, systemImage: settings.defaultTracker == t ? "checkmark" : t.icon)
+            ForEach(settings.connectedTrackers) { t in
+                Button {
+                    settings.defaultCustomTrackerID = nil
+                    settings.defaultTracker = t
+                } label: {
+                    Label(t.label, systemImage: currentCustom == nil && settings.defaultTracker == t ? "checkmark" : t.icon)
+                }
+            }
+            if !settings.trackerServers.isEmpty {
+                Section("Custom trackers") {
+                    ForEach(settings.trackerServers) { server in
+                        Button { settings.defaultCustomTrackerID = server.id } label: {
+                            Label(server.displayName, systemImage: currentCustom?.id == server.id ? "checkmark" : Tracker.custom.icon)
+                        }
+                    }
                 }
             }
         } label: {
-            Text(settings.defaultTracker.label)
+            Text(currentName)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .fixedSize()
-        .help("Bare keys are looked up in \(settings.defaultTracker.label). Pasted links are detected automatically.")
+        .help("Bare keys are looked up in \(currentName). Pasted links are detected automatically.")
     }
 }
 

@@ -191,36 +191,60 @@ struct LinearPane: View {
 
 }
 
-// MARK: - Custom MCP servers
+// MARK: - Custom MCP servers and research tools
+
+/// Wording and routing for the two kinds of user-added MCP server.
+private extension CustomMCPTracker.Role {
+    func section(_ id: UUID?) -> SettingsSection {
+        self == .tracker ? .customMCP(id: id) : .researchTools(id: id)
+    }
+    var noun: String { self == .tracker ? "Server" : "Research Tool" }
+    var icon: String { self == .tracker ? "server.rack" : "wand.and.stars" }
+    var tint: Color { self == .tracker ? .teal : .pink }
+    /// iOS forms show no field labels, so the prompt names the field there.
+    var namePrompt: String {
+        let example = self == .tracker ? "e.g. Asana" : "e.g. Corellium"
+        return Platform.isMac ? example : "Name, \(example)"
+    }
+    var notesPrompt: String {
+        self == .tracker ? "optional" : "e.g. Spin up an iPhone 17 on iOS 26 to test on. Use it to check crash logs."
+    }
+}
 
 /// Any MCP server over Streamable HTTP: endpoint + optional bearer token,
-/// then tools/list decides what Checkpoint may read.
+/// then tools/list decides what Checkpoint may use.
+///
+/// Trackers hold tickets (plans can be written from them and batches imported);
+/// research tools (Obsidian, Corellium, a wiki, a device farm) are extra sources and
+/// helpers the planner can use while it researches.
 struct CustomMCPListPane: View {
+    var role: CustomMCPTracker.Role = .tracker
     @Environment(AppSettings.self) private var settings
     @Binding var selection: SettingsSection?
     @State private var showingAdd = false
 
+    private var servers: [CustomMCPTracker] { role == .tracker ? settings.trackerServers : settings.researchTools }
+
     var body: some View {
-        SettingsPane(section: .customMCP(id: nil)) {
+        @Bindable var settings = settings
+        SettingsPane(section: role.section(nil)) {
             Section {
-                if settings.customTrackers.isEmpty {
-                    Text("No servers yet.").foregroundStyle(.secondary)
+                if servers.isEmpty {
+                    Text(role == .tracker ? "No servers yet." : "No research tools yet.").foregroundStyle(.secondary)
                 }
-                ForEach(settings.customTrackers) { tracker in
-                    Button { selection = .customMCP(id: tracker.id) } label: {
+                ForEach(servers) { server in
+                    Button { selection = role.section(server.id) } label: {
                         HStack(spacing: 10) {
-                            SettingsIconTile(icon: "server.rack", tint: .teal)
+                            SettingsIconTile(icon: role.icon, tint: role.tint)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(tracker.displayName)
-                                Text(tracker.endpoint)
+                                Text(server.displayName)
+                                Text(server.endpoint)
                                     .font(.caption.monospaced())
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1).truncationMode(.middle)
                             }
                             Spacer()
-                            if tracker.useForResearch {
-                                Text("Research").font(.caption).foregroundStyle(.secondary)
-                            }
+                            Text(badge(server)).font(.caption).foregroundStyle(.secondary)
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                         }
                         .contentShape(.rect)
@@ -229,21 +253,51 @@ struct CustomMCPListPane: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Add Server…", systemImage: "plus") { showingAdd = true }
+                    Button("Add \(role.noun)…", systemImage: "plus") { showingAdd = true }
                 }
             } header: {
-                Text("Servers")
+                Text(role == .tracker ? "Servers" : "Research tools")
             } footer: {
-                Text("Any MCP server over Streamable HTTP with tools/list and tools/call. Checkpoint only calls its read-only tools. Tokens are kept in the Keychain.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(footer).font(.caption).foregroundStyle(.secondary)
+            }
+
+            if role == .tracker, !servers.isEmpty {
+                Section {
+                    Picker("Bare keys go to", selection: $settings.defaultCustomTrackerID) {
+                        Text(settings.connectedTrackers.isEmpty ? "First server" : "Jira / Linear").tag(UUID?.none)
+                        ForEach(servers) { Text($0.displayName).tag(Optional($0.id)) }
+                    }
+                } header: {
+                    Text("Routing")
+                } footer: {
+                    Text("A key typed on its own goes here. Links and match hints are always routed to the right tracker.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
         .sheet(isPresented: $showingAdd) {
-            CustomTrackerEditor { name, endpoint, hint, token in
-                settings.addCustomTracker(name: name, endpoint: endpoint, matchHint: hint, token: token)
+            CustomMCPEditor(role: role) { name, endpoint, hint, token, notes in
+                let added = settings.addCustomTracker(name: name, endpoint: endpoint, matchHint: hint,
+                                                      token: token, role: role, notes: notes)
                 showingAdd = false
-                if let added = settings.customTrackers.last { selection = .customMCP(id: added.id) }
+                selection = role.section(added.id)
             }
+        }
+    }
+
+    private var footer: String {
+        switch role {
+        case .tracker:
+            "Any MCP server over Streamable HTTP that holds tickets. Plan from it like Jira or Linear, and import batches from its search tools. Checkpoint only calls read-only tools. Tokens stay in the Keychain."
+        case .research:
+            "Tools the planner can use while it researches: notes in Obsidian, docs in a wiki, or a device cloud like Corellium to set up the test environment. Read-only by default; choose action tools per server. Servers that run locally over stdio need an HTTP bridge (for example supergateway or mcp-proxy)."
+        }
+    }
+
+    private func badge(_ server: CustomMCPTracker) -> String {
+        switch role {
+        case .tracker: server.id == settings.defaultCustomTrackerID ? "Default" : (server.useForResearch ? "Research" : "")
+        case .research: !server.useForResearch ? "Off" : (server.toolAccess == .chosen ? "\(server.allowedTools.count) tools" : "Read-only")
         }
     }
 }
@@ -266,52 +320,121 @@ struct CustomMCPDetailPane: View {
         )
     }
 
+    private func toolBinding(_ name: String) -> Binding<Bool> {
+        Binding(
+            get: { tracker?.allowedTools.contains(name) ?? false },
+            set: { on in
+                guard var t = tracker else { return }
+                if on { t.allowedTools.insert(name) } else { t.allowedTools.remove(name) }
+                settings.updateCustomTracker(t)
+            }
+        )
+    }
+
     var body: some View {
         if let tracker {
-            SettingsPane(section: .customMCP(id: tracker.id), title: tracker.displayName) {
+            let role = tracker.role
+            SettingsPane(section: role.section(tracker.id), title: tracker.displayName) {
                 Section {
-                    TextField("Name", text: binding(\.name), prompt: Text("e.g. Asana"))
+                    TextField("Name", text: binding(\.name), prompt: Text(role.namePrompt))
                     TextField("Endpoint", text: binding(\.endpoint), prompt: Text("https://mcp.example.com/mcp"))
                         .font(.body.monospaced())
-                    SecureField("Bearer token", text: $token, prompt: Text("optional"))
+                        .plainURLInput()
+                    SecureField("Bearer token", text: $token, prompt: Text(Platform.isMac ? "optional" : "Bearer token (optional)"))
                         .onAppear { token = settings.customToken(for: tracker) }
                         .onChange(of: token) { settings.setCustomToken(token, for: tracker) }
-                    TextField("Match hint", text: binding(\.matchHint), prompt: Text("e.g. asana"))
+                    if role == .tracker {
+                        TextField("Match hint", text: binding(\.matchHint), prompt: Text("e.g. asana"))
+                            .plainURLInput()
+                    }
                 } header: {
-                    Text("Server")
+                    Text(role.noun)
                 } footer: {
-                    Text("The match hint routes pasted links containing it (like “asana”) to this server.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    if role == .tracker {
+                        Text("The match hint routes pasted links containing it (like “asana”) to this server.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+
+                if role == .research {
+                    Section {
+                        TextField("What it's for", text: binding(\.notes), prompt: Text(role.notesPrompt), axis: .vertical)
+                            .lineLimit(2...6)
+                    } header: {
+                        Text("Instructions")
+                    } footer: {
+                        Text("Told to the planner with the tool list, so it knows when this is worth using.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
 
                 Section {
-                    Toggle("Use while researching plans", isOn: binding(\.useForResearch))
+                    Toggle(role == .tracker ? "Use while researching plans" : "Use while writing plans",
+                           isOn: binding(\.useForResearch))
+                    if role == .research {
+                        Picker("Tools it may call", selection: binding(\.toolAccess)) {
+                            Text("Read-only").tag(CustomMCPTracker.ToolAccess.readOnly)
+                            Text("Chosen tools").tag(CustomMCPTracker.ToolAccess.chosen)
+                        }
+                    }
                     TestRow(title: "List tools", state: state, disabled: tracker.endpoint.isEmpty,
-                            action: listTools) { _, n in "\(n) read-only tools" }
-                    MCPToolsView(tools: tools)
+                            action: listTools) { _, n in
+                        role == .research && tracker.toolAccess == .chosen ? "\(n) tools" : "\(n) read-only tools"
+                    }
+                    if role == .research && tracker.toolAccess == .chosen {
+                        if tools.isEmpty {
+                            Text("List tools to choose which ones the planner may call.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        ForEach(tools, id: \.name) { tool in
+                            Toggle(isOn: toolBinding(tool.name)) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(tool.name).font(.callout.monospaced())
+                                    if !tool.description.isEmpty {
+                                        Text(tool.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        MCPToolsView(tools: tools)
+                    }
+                } header: {
+                    Text("Access")
                 } footer: {
-                    Text("When on, the planner can also read from this server's read-only tools, and tasks cite it as a source.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text(accessFooter(tracker)).font(.caption).foregroundStyle(.secondary)
                 }
 
                 Section {
                     HStack {
                         Spacer()
-                        Button("Remove Server…", role: .destructive) { confirmingRemove = true }
+                        Button("Remove \(role.noun)…", role: .destructive) { confirmingRemove = true }
                     }
                 }
             }
+            .onAppear { if role == .research && tracker.toolAccess == .chosen && !tracker.endpoint.isEmpty { listTools() } }
             .confirmationDialog("Remove \(tracker.displayName)?", isPresented: $confirmingRemove) {
                 Button("Remove", role: .destructive) {
                     settings.removeCustomTracker(tracker)
-                    selection = .customMCP(id: nil)
+                    selection = role.section(nil)
                 }
             } message: {
                 Text("Its token is deleted from the Keychain.")
             }
         } else {
-            ContentUnavailableView("Server removed", systemImage: "server.rack",
-                                   description: Text("Pick another server from the sidebar."))
+            ContentUnavailableView("Removed", systemImage: "server.rack",
+                                   description: Text("Pick another from the sidebar."))
+        }
+    }
+
+    private func accessFooter(_ t: CustomMCPTracker) -> String {
+        switch (t.role, t.toolAccess) {
+        case (.tracker, _):
+            "When on, the planner can also read from this server's read-only tools, and tasks cite it as a source."
+        case (.research, .readOnly):
+            "The planner can call this server's read-only tools (get, list, search…) and cite what it finds."
+        case (.research, .chosen):
+            "The planner may call exactly the tools ticked here, including ones that act, like creating a device. It only acts to set up testing, and lists what it set up in the plan's preconditions."
         }
     }
 
@@ -325,7 +448,7 @@ struct CustomMCPDetailPane: View {
             do {
                 let listed = try await client.listTools()
                 tools = listed.sorted { $0.name < $1.name }
-                state = .ok("", listed.filter { PlanGenerator.isReadOnly($0.name) }.count)
+                state = .ok("", listed.filter { tracker.allows($0.name) || tracker.toolAccess == .chosen && tracker.role == .research }.count)
             } catch {
                 tools = []
                 state = .failed(error.localizedDescription)
@@ -334,42 +457,70 @@ struct CustomMCPDetailPane: View {
     }
 }
 
-private struct CustomTrackerEditor: View {
-    var onSave: (String, String, String, String) -> Void
-    @Environment(\.dismiss) private var dismiss
+/// Add sheet for either kind of server.
+private struct CustomMCPEditor: View {
+    let role: CustomMCPTracker.Role
+    var onSave: (_ name: String, _ endpoint: String, _ hint: String, _ token: String, _ notes: String) -> Void
     @State private var name = ""
     @State private var endpoint = ""
     @State private var hint = ""
     @State private var token = ""
+    @State private var notes = ""
+
+    private var valid: Bool {
+        guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespaces)) else { return false }
+        return url.scheme == "https" || url.scheme == "http"
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
+        FormSheet(title: "Add \(role.noun)", confirmTitle: "Add", canConfirm: valid, width: 460) {
+            onSave(name, endpoint.trimmingCharacters(in: .whitespaces), hint, token, notes)
+        } content: {
+            Section {
+                TextField("Name", text: $name, prompt: Text(role.namePrompt))
+                TextField("Endpoint", text: $endpoint, prompt: Text("https://…/mcp endpoint"))
+                    .font(.body.monospaced())
+                    .plainURLInput()
+                    #if os(iOS)
+                    .keyboardType(.URL)
+                    #endif
+                SecureField("Bearer token", text: $token, prompt: Text(Platform.isMac ? "optional" : "Bearer token (optional)"))
+            } header: {
+                Text("Server")
+            } footer: {
+                Text("Streamable HTTP. Servers that only run locally over stdio need an HTTP bridge first.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            if role == .tracker {
                 Section {
-                    TextField("Name", text: $name, prompt: Text("e.g. Asana"))
-                    TextField("Endpoint", text: $endpoint, prompt: Text("https://…/mcp"))
-                        .font(.body.monospaced())
-                    SecureField("Bearer token", text: $token, prompt: Text("optional"))
                     TextField("Match hint", text: $hint, prompt: Text("optional, e.g. asana"))
-                } header: {
-                    Text("Add MCP server")
+                        .plainURLInput()
                 } footer: {
-                    Text("Checkpoint reads tools/list to see what the server offers, and only ever calls read-only tools.")
+                    Text("Links containing this go to this server. Checkpoint only ever calls its read-only tools.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Section {
+                    TextField("What it's for", text: $notes, prompt: Text(role.notesPrompt), axis: .vertical)
+                        .lineLimit(3...6)
+                } header: {
+                    Text("Instructions")
+                } footer: {
+                    Text("Read-only to start. Allow specific action tools, like creating a test device, from its settings page.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            .formStyle(.grouped)
-            .scrollDisabled(Platform.isMac)
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Add Server") { onSave(name, endpoint, hint, token) }
-                    .buttonStyle(.glassProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(URL(string: endpoint)?.scheme == nil)
-            }
-            .padding([.horizontal, .bottom], 20)
         }
-        .macSheetFrame(width: 440)
+    }
+}
+
+private extension View {
+    func plainURLInput() -> some View {
+        #if os(iOS)
+        self.textInputAutocapitalization(.never).autocorrectionDisabled()
+        #else
+        self
+        #endif
     }
 }
