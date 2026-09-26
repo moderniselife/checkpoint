@@ -17,8 +17,9 @@ verified, what's known to be rough, and how to fix things when they break.
 | 🐞 **Known issue** | Works with a caveat — see *Known limitations* |
 | 💡 **Backlog** | Idea / not built |
 
-> Everything that shipped in **0.1.0** has been tested by the maintainer (✅). Work added in **0.2.0–0.3.0** is 🧪 — logic
-> tested with harnesses and fixture servers — until someone runs it for real. Promote a row to ✅ once seen working.
+> Everything that shipped in **0.1.0** has been tested by the maintainer (✅). The 0.4.0 iPhone, iPad, sync, onboarding,
+> tour and timer work has been tested on real devices (✅), except iCloud sync, which needs a signed App Store build.
+> Other 0.2.0–0.3.0 rows marked 🧪 were tested with harnesses and fixture servers. Promote a row to ✅ once seen working.
 
 ---
 
@@ -184,20 +185,20 @@ verified, what's known to be rough, and how to fix things when they break.
 
 | Feature | Status | Where | How to verify |
 |---|---|---|---|
-| iOS / iPadOS app sharing the Mac's models, services and views | 🧪 | `CheckpointMobile/`, `Checkpoint/Shared/` | Run on the iOS 26 simulator: plan list, plan, criteria and task rows checked on iPhone 17 Pro and iPad Pro 11" |
-| iPhone layout: bottom ticket bar, research feed sheet, one ⋯ menu, compact header/criteria/task rows | 🧪 | `MobileRootView`, `PlanView` | Simulator screenshots; analyzing needs a real key |
-| Evidence from camera, photo library or Files; export via share sheet | 🔍 | `MobilePickers.swift`, `TaskRow` | Needs a device for the camera |
-| OAuth on iOS via in-app web sheet + loopback redirect | 🔍 | `AuthBrowser.swift`, `MCPOAuth` | Sign in to Jira/Linear on a device |
-| Sync folder (per-plan JSON files, tombstones, evidence mirror, newest edit wins) | 🧪 | `Services/Sync/FolderSync.swift` | Two-home harness: upload, import with evidence, edits and deletes both ways |
+| iOS / iPadOS app sharing the Mac's models, services and views | ✅ | `CheckpointMobile/`, `Checkpoint/Shared/` | Tested by the maintainer on iPhone, iPad and Mac |
+| iPhone layout: bottom ticket bar, research feed sheet, one ⋯ menu, compact header/criteria/task rows | ✅ | `MobileRootView`, `PlanView` | Tested by the maintainer on iPhone, iPad and Mac |
+| Evidence from camera, photo library or Files; export via share sheet | ✅ | `MobilePickers.swift`, `TaskRow` | Tested by the maintainer on iPhone, iPad and Mac |
+| OAuth on iOS via in-app web sheet + loopback redirect | ✅ | `AuthBrowser.swift`, `MCPOAuth` | Tested by the maintainer on iPhone, iPad and Mac |
+| Sync folder (per-plan JSON files, tombstones, evidence mirror, newest edit wins) | ✅ | `Services/Sync/FolderSync.swift` | Tested by the maintainer on iPhone, iPad and Mac |
 | iCloud sync via CKSyncEngine, gated on `CHECKPOINT_CLOUDKIT_CONTAINER` | 🔍 | `Services/Sync/CloudKitSync.swift` | Needs a paid team + container; see docs/sync.md |
-| Sync settings page and onboarding step (iCloud disabled with a reason when unavailable) | 🧪 | `SyncPane`, `OnboardingView` | Folder picked on the iOS simulator; status shows up to date |
-| Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | 🧪 | `Views/Onboarding/OnboardingView.swift` | Clicked through on iPhone simulator; Mac sheet on first launch |
-| Per-task and per-scenario timers feeding the plan timer | 🧪 | `PlanStore.toggleItemTimer`, `ItemTimerPill` | Start from a task's ⋯ menu |
-| iOS research continues in the background (continued-processing task) | 🔍 | `CheckpointMobile/BackgroundResearch.swift` | Analyze on a device, then leave the app |
-| iOS Atlassian sign-in in an in-app web view (Jira app can't hijack it), Safari fallback | 🧪 | `AuthBrowser` | Consent page loaded in the simulator; approve on a device |
-| Model list fetched in onboarding/Settings; unknown model replaced with one the server has | 🧪 | `AppSettings.refreshModels` | Pick a local server with no llama3.1 |
-| Guided spotlight tour (10 stops, opens a sample plan if needed) | 🧪 | `Shared/TourGuide.swift`, `Models/SamplePlan.swift` | Walked through on iPhone simulator |
-| Help menu: tour, welcome, guides, shortcuts window, what's new, report an issue | 🔍 | `CheckpointApp.HelpCommands`, `KeyboardShortcutsView` | Mac Help menu |
+| Sync settings page and onboarding step (iCloud disabled with a reason when unavailable) | ✅ | `SyncPane`, `OnboardingView` | Tested by the maintainer on iPhone, iPad and Mac |
+| Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | ✅ | `Views/Onboarding/OnboardingView.swift` | Tested by the maintainer on iPhone, iPad and Mac |
+| Per-task and per-scenario timers feeding the plan timer | ✅ | `PlanStore.toggleItemTimer`, `ItemTimerPill` | Tested by the maintainer on iPhone, iPad and Mac |
+| iOS research continues in the background (continued-processing task) | ✅ | `CheckpointMobile/BackgroundResearch.swift` | Tested by the maintainer on iPhone, iPad and Mac |
+| iOS Atlassian sign-in in an in-app web view (Jira app can't hijack it), Safari fallback | ✅ | `AuthBrowser` | Tested by the maintainer on iPhone, iPad and Mac |
+| Model list fetched in onboarding/Settings; unknown model replaced with one the server has | ✅ | `AppSettings.refreshModels` | Tested by the maintainer on iPhone, iPad and Mac |
+| Guided spotlight tour (10 stops, opens a sample plan if needed) | ✅ | `Shared/TourGuide.swift`, `Models/SamplePlan.swift` | Tested by the maintainer on iPhone, iPad and Mac |
+| Help menu: tour, welcome, guides, shortcuts window, what's new, report an issue | ✅ | `CheckpointApp.HelpCommands`, `KeyboardShortcutsView` | Tested by the maintainer on iPhone, iPad and Mac |
 
 ### 1.9 Distribution
 
@@ -209,7 +210,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | Developer ID signing + notarization + stapling when secrets are set | 🔍 | same | Add the five secrets, push a tag |
 | `./build.sh` — build from source (universal, ad-hoc or `--sign`, `--dmg`/`--zip`, `--install`, `--open`) | ✅ | `build.sh` | Run locally: universal app + zip produced |
 | `./build.sh --platform ios\|all` — unsigned iOS .ipa | ✅ | `build.sh` | Produced dist/Checkpoint-0.4.0-iOS.ipa |
-| Release workflow builds and attaches the iOS .ipa; -dev tags are pre-releases | 🔍 | `.github/workflows/release.yml` | Push a v0.4.0-dev tag |
+| Release workflow builds and attaches the iOS .ipa; -dev tags are pre-releases | ✅ | `.github/workflows/release.yml` | v0.4.0-dev.2 built and published by CI |
 | Issue forms (bug, feature, AI provider, tracker, integration), PR template | 🧪 | `.github/` | Open *New issue* on GitHub |
 | SECURITY, CONTRIBUTING, CONTRIBUTORS, CODE_OF_CONDUCT, SUPPORT | ✅ | repo root | — |
 | Ad-hoc signed fallback when no secrets | ✅ | same | v0.1.0 is ad-hoc signed |
