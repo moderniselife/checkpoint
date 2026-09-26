@@ -74,6 +74,8 @@ targets:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: Checkpoint can talk to an AI model server running on your local network, like Ollama or LM Studio.
         NSCameraUsageDescription: Take photos of what you see while testing and attach them to a task as evidence.
+        # Continued-processing tasks keep an analysis going after you leave the app.
+        BGTaskSchedulerPermittedIdentifiers: ["com.josephshenton.checkpoint.analyze.*"]
         ITSAppUsesNonExemptEncryption: false
         # Set to an iCloud container (e.g. iCloud.com.josephshenton.checkpoint) in signed App Store builds; empty keeps iCloud sync off.
         CheckpointCloudKitContainer: $(CHECKPOINT_CLOUDKIT_CONTAINER)
