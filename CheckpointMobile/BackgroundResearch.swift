@@ -61,13 +61,18 @@ final class BackgroundResearch {
         log.info("Background task started")
         pendingID = nil
         self.task = task
-        // Fine-grained units so every tick moves the bar: iOS treats a task whose progress
-        // stops moving as stuck, and long model turns can sit in one phase for minutes.
-        task.progress.totalUnitCount = 1000
+        // iOS marks a task stalled, and ends it, when its progress hasn't changed for ~30 s
+        // (seen on device: "has not reported progress within expected cadence"). Long model
+        // turns sit in one phase for minutes, so the bar creeps one unit every tick, with
+        // enough units that it never runs out.
+        task.progress.totalUnitCount = Self.total
         task.expirationHandler = { [weak self, weak store] in
             Task { @MainActor in
                 self?.log.notice("Background task expired by the system")
                 store?.pause(reason: .system("iOS stopped it in the background. It carries on when you open Checkpoint."))
+                self?.watcher?.cancel()
+                self?.watcher = nil
+                self?.task?.setTaskCompleted(success: false)
                 self?.task = nil
             }
         }
@@ -75,7 +80,7 @@ final class BackgroundResearch {
             while !Task.isCancelled, let store, store.isRunning {
                 let (target, detail) = Self.progress(for: store.phase)
                 let current = task.progress.completedUnitCount
-                task.progress.completedUnitCount = min(max(current + 1, target), 990)
+                task.progress.completedUnitCount = min(max(current + 1, target * Self.scale), Self.total - 1)
                 task.updateTitle(Self.title(store.runningKey ?? ""), subtitle: detail)
                 try? await Task.sleep(for: .milliseconds(700))
             }
@@ -92,6 +97,9 @@ final class BackgroundResearch {
         task.setTaskCompleted(success: success)
         self.task = nil
     }
+
+    private static let scale: Int64 = 1000
+    private static let total: Int64 = 1000 * scale
 
     private static func title(_ key: String) -> String { "Writing a test plan for \(key)" }
 
