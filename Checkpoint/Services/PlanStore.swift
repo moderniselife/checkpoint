@@ -205,6 +205,14 @@ final class PlanStore {
     private var currentTurn = 0
     var error: String?
     private var task: Task<Void, Never>?
+    /// Runs that haven't finished: paused, failed, interrupted, or in the bin (see ResearchDrafts.swift).
+    var drafts: [ResearchDraft] = []
+    /// The draft the live run is writing into.
+    var runningDraftID: UUID?
+    @ObservationIgnored var stopReason: RunStopReason = .none
+    /// iOS: the app is in the background. A run that dies there resumes when it's back.
+    @ObservationIgnored var appInBackground = false
+    @ObservationIgnored var autoResumeDraftID: UUID?
 
     private let fileURL: URL = {
         let dir = URL.applicationSupportDirectory.appending(path: "Checkpoint", directoryHint: .isDirectory)
@@ -327,6 +335,7 @@ final class PlanStore {
             smartFolders = saved
         }
         expandedFolders = Set((UserDefaults.standard.stringArray(forKey: "expandedFolders") ?? []).compactMap(UUID.init))
+        loadDrafts()
         // Auto-pause testing timers left running at quit (IDEA-025).
         for i in plans.indices where plans[i].timerRunningSince != nil || plans[i].itemTimer != nil {
             if let since = plans[i].timerRunningSince {
@@ -869,42 +878,77 @@ final class PlanStore {
             error = "Connect \(tracker.label) in \(Platform.settingsName) to analyze \(tracker.label) issues."
             return
         }
-        task?.cancel()
-        error = nil
-        feed = []
-        phase = .connecting
-        let startedAt = Date()
-        self.startedAt = startedAt
-        runningKey = key
-        runningMode = mode
-        runningTracker = tracker
         // New plans land in the folder you're looking at.
         let targetFolder = selectedFolder?.id ?? selected?.folderID
-        selection = nil
+        let draft = ResearchDraft(key: key, mode: mode, tracker: tracker,
+                                  customTrackerID: server?.id, customTrackerName: server?.displayName,
+                                  template: template?.rawValue, modelOverride: modelOverride,
+                                  effortOverride: effortOverride, folderID: targetFolder)
+        startDraft(draft, settings: settings)
+    }
 
+    /// Runs a draft (new or resumed) as the single live analysis.
+    func startDraft(_ draft: ResearchDraft, settings: AppSettings) {
+        guard !isRunning else {
+            error = "Wait for the current run to finish, or pause it first."
+            return
+        }
+        task?.cancel()
+        error = nil
+        var draft = draft
+        draft.status = .running
+        draft.errorMessage = nil
+        draft.binnedAt = nil
+        // Starting a ticket afresh replaces an older unfinished run of it.
+        if draft.snapshot == nil {
+            for i in drafts.indices where drafts[i].id != draft.id && drafts[i].sameRun(as: draft) && drafts[i].binnedAt == nil {
+                drafts[i].binnedAt = .now
+            }
+        }
+        upsertDraft(draft)
+        beginLive(draft)
+        selection = nil
+        let id = draft.id
         task = Task {
             do {
-                let saved = try await self.runSingle(key: key, mode: mode, tracker: tracker, customServer: server,
-                                                     settings: settings, targetFolder: targetFolder, startedAt: startedAt,
-                                                     template: template,
-                                                     modelOverride: modelOverride, effortOverride: effortOverride)
+                let saved = try await self.runSingle(draftID: id, settings: settings)
                 selection = saved.id
-            } catch is CancellationError {
             } catch {
-                self.error = error.localizedDescription
+                self.draftStopped(id, error: error)
             }
             runningKey = nil
+            runningDraftID = nil
         }
+    }
+
+    /// Resets the live feed for a draft; resumed runs keep what they'd already shown.
+    private func beginLive(_ draft: ResearchDraft) {
+        feed = draft.feed
+        if draft.snapshot != nil || !draft.feed.isEmpty {
+            feed.append(FeedItem(kind: .status, title: "Resumed", detail: ""))
+        }
+        phase = .connecting
+        startedAt = Date()
+        runningKey = draft.key
+        runningMode = draft.mode
+        runningTracker = draft.tracker
+        runningDraftID = draft.id
     }
 
     /// Shared single-plan runner: research via the generator, then merge with
     /// any previous run (ticks, verdicts, tags, folder survive). Used by both
     /// `analyze()` and the batch queue. Reports progress into the shared feed.
-    private func runSingle(key: String, mode: TestMode, tracker: Tracker, customServer: CustomMCPTracker? = nil,
-                           settings: AppSettings,
-                           targetFolder: UUID?, startedAt: Date,
-                           template: PlanGenerator.PlanTemplate? = nil,
-                           modelOverride: String? = nil, effortOverride: String? = nil) async throws -> SavedPlan {
+    private func runSingle(draftID: UUID, settings: AppSettings) async throws -> SavedPlan {
+        guard let draft = drafts.first(where: { $0.id == draftID }) else { throw CancellationError() }
+        let key = draft.key, mode = draft.mode, tracker = draft.tracker
+        let targetFolder = draft.folderID
+        let startedAt = self.startedAt ?? Date()
+        let template = draft.template.flatMap(PlanGenerator.PlanTemplate.init(rawValue:))
+        let modelOverride = draft.modelOverride, effortOverride = draft.effortOverride
+        let customServer = tracker == .custom
+            ? (settings.customTrackers.first { $0.id == draft.customTrackerID } ?? settings.trackerServers.first)
+            : nil
+        if tracker == .custom, customServer == nil { throw DraftError.serverGone(draft.customTrackerName ?? "The custom tracker") }
         var cfg = settings.llmConfig
         if let modelOverride, !modelOverride.isEmpty { cfg.model = modelOverride }
         if let effortOverride { cfg.effort = effortOverride }
@@ -922,6 +966,7 @@ final class PlanStore {
         generatorWithScenarios.houseRules = settings.houseRules
         generatorWithScenarios.templateOverride = template
         generatorWithScenarios.trackerName = customServer?.displayName ?? ""
+        generatorWithScenarios.resume = draft.snapshot
         generatorWithScenarios.researchSources = settings.activeResearchSources
             .filter { $0.id != customServer?.id }
             .compactMap { source in
@@ -936,6 +981,8 @@ final class PlanStore {
         defer { codebaseURL?.stopAccessingSecurityScopedResource() }
         let (plan, usage) = try await runGenerator.run(ticketKey: key) { event in
             await MainActor.run { self.record(event) }
+        } onSnapshot: { snap in
+            await MainActor.run { self.saveSnapshot(snap, for: draftID) }
         }
         let id = SavedPlan.id(plan.ticket.key, mode, tracker)
         let previous = plans.first { $0.id == id }
@@ -969,11 +1016,12 @@ final class PlanStore {
         saved.preset = modelOverride != nil || effortOverride != nil ? "quick" : (previous?.preset ?? "deep")
         saved.updatedAt = .now
         saved.research = feed
-        saved.researchDuration = Date().timeIntervalSince(startedAt)
+        saved.researchDuration = draft.researchSeconds + Date().timeIntervalSince(startedAt)
         planDiff = previous.map { PlanDiff.compare(old: $0.plan, new: plan, planID: id) } ?? nil
         plans.removeAll { $0.id == id }
         plans.insert(saved, at: 0)
         save()
+        finishDraft(draftID)
         return saved
     }
 
@@ -1015,30 +1063,27 @@ final class PlanStore {
         batchTask = Task {
             for key in keys {
                 if Task.isCancelled { break }
-                feed = []
-                phase = .connecting
-                let startedAt = Date()
-                self.startedAt = startedAt
-                runningKey = key
-                runningMode = mode
-                runningTracker = tracker
+                let draft = ResearchDraft(key: key, mode: mode, tracker: tracker,
+                                          customTrackerID: server?.id, customTrackerName: server?.displayName,
+                                          template: template?.rawValue, folderID: folder.id)
+                upsertDraft(draft)
+                beginLive(draft)
                 do {
-                    _ = try await self.runSingle(key: key, mode: mode, tracker: tracker, customServer: server,
-                                                 settings: settings, targetFolder: folder.id, startedAt: startedAt,
-                                                 template: template)
-                } catch is CancellationError {
-                    break
+                    _ = try await self.runSingle(draftID: draft.id, settings: settings)
                 } catch {
+                    draftStopped(draft.id, error: error, reportError: false)
+                    if error is CancellationError || Task.isCancelled { break }
                     batchErrors[key] = error.localizedDescription
                 }
                 batchDone += 1
             }
             runningKey = nil
+            runningDraftID = nil
             batchRunning = false
             if Task.isCancelled {
-                error = "Batch cancelled after \(batchDone)/\(batchTotal) plans."
+                error = "Batch stopped after \(batchDone)/\(batchTotal) plans. The one in progress is in Unfinished."
             } else if !batchErrors.isEmpty {
-                error = "Batch finished with \(batchErrors.count) failure(s): " +
+                error = "Batch finished with \(batchErrors.count) failure(s), saved to Unfinished: " +
                     batchErrors.sorted(by: { $0.key < $1.key }).prefix(3)
                         .map { "\($0.key): \($0.value.prefix(90))" }.joined(separator: " · ")
             }
@@ -1051,17 +1096,25 @@ final class PlanStore {
         batchTask?.cancel()
         batchTask = nil
         batchRunning = false
-        runningKey = nil
-        if !silent { error = "Batch cancelled." }
+        if !silent { error = "Batch stopped. The plan in progress is saved in Unfinished." }
     }
 
-    func cancel() {
+    /// Stops the live run and keeps it in Unfinished, ready to resume from its last finished step.
+    func cancel() { pause() }
+
+    func pause(reason: RunStopReason = .pause) {
+        guard isRunning else { return }
+        stopReason = reason
         task?.cancel()
-        if batchRunning {
-            cancelBatch()
-        } else {
-            runningKey = nil
-        }
+        if batchRunning { cancelBatch() }
+    }
+
+    /// Stops the live run and moves it to the bin.
+    func discardRun() {
+        guard isRunning else { return }
+        stopReason = .discard
+        task?.cancel()
+        if batchRunning { cancelBatch(silent: true) }
     }
 
     func toggle(_ taskID: String, in planID: String) {

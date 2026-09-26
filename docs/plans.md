@@ -49,6 +49,26 @@ Prices are a snapshot and unknown models show tokens only.
 The Scenarios menu adds 3–6 end-to-end journeys: **from related tickets** (tracker only) or
 **tickets + codebase** (reads a repo folder you choose — sandboxed, read-only, confined to it).
 
+## Pause, resume and the bin
+
+A run can stop part-way: you pause it, the model or network fails, or the app closes. Nothing is lost.
+After every finished research step, Checkpoint saves the conversation so far. The run then waits in
+**Unfinished** (a built-in smart folder at the top of the sidebar) until you pick it up.
+
+- **Pause** replaces Stop in the ticket bar (and in the iPhone research sheet). Hold it, or use ⋯, for
+  **Discard Run**, which sends it to the bin instead.
+- **Resume** carries on from the last finished step, with the same model: the research already done
+  isn't repeated or paid for again. If you've changed provider or model since, research starts over.
+  A run that failed while writing the plan resumes straight at the writing.
+- **On iPhone and iPad**, if iOS stops a run in the background or the connection drops there, it's paused
+  rather than failed and picks up again by itself when you open Checkpoint.
+- **Bin** (appears under Smart folders when it has anything): discarded runs, each deleted for good
+  30 days after it went in. **Restore** puts it back in Unfinished; **Empty Bin** deletes the lot now.
+- Starting a ticket afresh (same key, mode and tracker) moves its older unfinished run to the bin.
+
+Unfinished runs stay on the device they ran on: they hold full tool results, which can be large, so
+they aren't synced.
+
 ## Re-running and diffs
 
 **Re-run** regenerates the plan and keeps ticks, verdicts, notes and tags on surviving tasks.

@@ -28,29 +28,53 @@ struct AIProviderPane: View {
                             text: $settings.llmKey, prompt: Text(settings.provider.keyPrompt))
                     .onSubmit(autoFetch)
 
+                #if os(iOS)
+                ModelPickerRow(title: "Model", text: $settings.model, items: modelOptions,
+                               placeholder: settings.provider.defaultModel, loading: fetchingModels,
+                               onRefresh: canFetch ? { fetchModels(quiet: false) } : nil)
+                #else
                 LabeledContent("Model") {
                     ComboBox(text: $settings.model, items: modelOptions, placeholder: settings.provider.defaultModel)
                         .frame(maxWidth: 280)
                 }
+                #endif
 
                 Picker("Effort", selection: $settings.effort) {
                     ForEach(AppSettings.efforts, id: \.self) { Text($0.capitalized) }
                 }
 
+                #if os(iOS)
+                // Full-width rows: each is its own big target, well apart from the other.
+                Button(action: testLLM) {
+                    HStack {
+                        Label("Test Connection", systemImage: "bolt.horizontal.circle")
+                        Spacer()
+                        if llmState == .testing { ProgressView() }
+                    }
+                    .contentShape(.rect)
+                }
+                .disabled(!settings.isLLMConfigured || llmState == .testing)
+                Button { fetchModels(quiet: false) } label: {
+                    HStack {
+                        Label("Refresh Model List", systemImage: "arrow.clockwise")
+                        Spacer()
+                        if fetchingModels { ProgressView() }
+                    }
+                    .contentShape(.rect)
+                }
+                .disabled(fetchingModels || !canFetch)
+                llmStatus
+                #else
                 HStack {
                     Button("Test", action: testLLM)
                         .disabled(!settings.isLLMConfigured || llmState == .testing)
                     Button("Fetch Models", action: fetchModels)
-                        .disabled(fetchingModels || (settings.provider.requiresKey && settings.llmKey.isEmpty))
+                        .disabled(fetchingModels || !canFetch)
                         .help("List the models \(settings.provider.shortLabel) offers in the Model dropdowns")
                     if fetchingModels { ProgressView().controlSize(.small) }
-                    switch llmState {
-                    case .idle: EmptyView()
-                    case .testing: ProgressView().controlSize(.small)
-                    case .ok(let msg, _): Label(msg, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                    case .failed(let msg): Text(msg).foregroundStyle(.red).font(.caption).lineLimit(3)
-                    }
+                    llmStatus
                 }
+                #endif
             } header: {
                 Text("Provider")
             } footer: {
@@ -64,16 +88,34 @@ struct AIProviderPane: View {
             }
 
             Section {
+                #if os(iOS)
+                ModelPickerRow(title: "Quick model", text: $settings.quickModel, items: modelOptions,
+                               placeholder: "Same as main model", emptyLabel: "Same as main model",
+                               loading: fetchingModels, onRefresh: canFetch ? { fetchModels(quiet: false) } : nil)
+                #else
                 LabeledContent("Quick model") {
                     ComboBox(text: $settings.quickModel, items: modelOptions, placeholder: "same as above")
                         .frame(maxWidth: 280)
                 }
+                #endif
             } header: {
                 Text("Quick plans")
             } footer: {
                 Text("Quick plans run at low effort, on this model if you set one. Pick a cheaper, faster model for a first pass; re-run as Deep when it matters.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var canFetch: Bool { !settings.provider.requiresKey || !settings.llmKey.isEmpty }
+
+    @ViewBuilder
+    private var llmStatus: some View {
+        switch llmState {
+        case .idle: EmptyView()
+        case .testing: if Platform.isMac { ProgressView().controlSize(.small) }
+        case .ok(let msg, _): Label(msg, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+        case .failed(let msg): Text(msg).foregroundStyle(.red).font(.caption).lineLimit(3)
         }
     }
 

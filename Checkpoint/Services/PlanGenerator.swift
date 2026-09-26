@@ -46,6 +46,8 @@ nonisolated struct PlanGenerator: Sendable {
     var researchSources: [ResearchSource] = []
     /// Display name of the custom tracker when `tracker == .custom`.
     var trackerName: String = ""
+    /// Carry on from a paused or failed run instead of starting the research again.
+    var resume: ResearchSnapshot? = nil
 
     struct ResearchSource: Sendable {
         var name: String
@@ -104,7 +106,10 @@ nonisolated struct PlanGenerator: Sendable {
         let isError: Bool
     }
 
-    func run(ticketKey: String, onEvent: @Sendable (Event) async -> Void) async throws -> (plan: TestPlan, usage: LLMUsage) {
+    /// `onSnapshot` gets the conversation after every finished research turn, so a run that is
+    /// paused, fails or is killed can pick up from there (see `resume`).
+    func run(ticketKey: String, onEvent: @Sendable (Event) async -> Void,
+             onSnapshot: @Sendable (ResearchSnapshot) async -> Void = { _ in }) async throws -> (plan: TestPlan, usage: LLMUsage) {
         await onEvent(.status("Connecting to \(trackerDisplayName)…"))
         let listed = tracker == .jira ? try await mcp.authenticatedTools() : try await mcp.listTools()
         // Jira and custom trackers: only read tools. Linear: the /mcp/readonly endpoint only
@@ -157,30 +162,48 @@ nonisolated struct PlanGenerator: Sendable {
             request += "\nUse them where they help (specs, notes, docs, test devices or environments) and cite what you found in task sources. If any of them can act (create devices, install builds, set up data), only do what this plan's testing needs, and list what you set up under preconditions."
         }
 
-        await onEvent(.status("Reading \(ticketKey) with \(llm.provider.shortLabel)…"))
+        // A snapshot only fits the provider and model that wrote it (thinking blocks, message shapes).
+        if let snap = resume {
+            if snap.provider == llm.provider.rawValue && snap.model == llm.model {
+                await onEvent(.status(snap.researchDone
+                    ? "Picking up where it left off — research is done, writing the plan."
+                    : "Picking up where it left off, after \(snap.turn) research step\(snap.turn == 1 ? "" : "s")."))
+            } else {
+                runner.resume = nil
+                await onEvent(.status("The model changed since this run paused, so research starts over."))
+            }
+        } else {
+            await onEvent(.status("Reading \(ticketKey) with \(llm.provider.shortLabel)…"))
+        }
         switch llm.provider.style {
-        case .anthropic: return try await runner.runAnthropic(tools: tools, request: request, onEvent: onEvent)
-        case .openAIChat: return try await runner.runOpenAI(tools: tools, request: request, onEvent: onEvent)
+        case .anthropic: return try await runner.runAnthropic(tools: tools, request: request, onEvent: onEvent, onSnapshot: onSnapshot)
+        case .openAIChat: return try await runner.runOpenAI(tools: tools, request: request, onEvent: onEvent, onSnapshot: onSnapshot)
         }
     }
 
     // MARK: - Anthropic Messages engine
 
     private func runAnthropic(tools: [MCPClient.Tool], request: String,
-                              onEvent: @Sendable (Event) async -> Void) async throws -> (TestPlan, LLMUsage) {
+                              onEvent: @Sendable (Event) async -> Void,
+                              onSnapshot: @Sendable (ResearchSnapshot) async -> Void) async throws -> (TestPlan, LLMUsage) {
         let native = llm.provider == .anthropic
         let claude = ClaudeClient(apiKey: llm.apiKey, baseURL: llm.baseURL, sendBearer: !native)
-        var usage = LLMUsage()
+        var usage = resume?.usage ?? LLMUsage()
         let toolDefs: [JSONValue] = tools.map {
             ["name": .string($0.name), "description": .string($0.description), "input_schema": Self.cleanSchema($0.inputSchema, strict: false)]
         }
         // Compatible servers may not support Claude-only features, so ask for JSON in the prompt instead.
         let system = prompt + (native ? "" : Self.jsonInstruction)
-        var messages: [JSONValue] = [["role": "user", "content": .string(request)]]
+        var messages: [JSONValue] = resume?.messages ?? [["role": "user", "content": .string(request)]]
+        let firstTurn = (resume?.turn ?? 0) + 1
+        func snapshot(_ turn: Int) async {
+            await onSnapshot(ResearchSnapshot(provider: llm.provider.rawValue, model: llm.model,
+                                              messages: messages, turn: turn, usage: usage))
+        }
         let usesFallbacks = native && (llm.model.hasPrefix("claude-opus") || llm.model.hasPrefix("claude-fable"))
         var retriedFinal = false
 
-        for turn in 1...Self.maxTurns {
+        for turn in firstTurn...(firstTurn + Self.maxTurns - 1) {
             try Task.checkCancellation()
             await onEvent(.waiting(turn: turn))
             var body: [String: JSONValue] = [
@@ -222,6 +245,7 @@ nonisolated struct PlanGenerator: Sendable {
                     messages.append(["role": "assistant", "content": .array(content)])
                 }
                 messages.append(["role": "user", "content": .string("Thinking budget spent. Write the plan now with what you have researched.")])
+                await snapshot(turn)
                 continue
             }
 
@@ -239,6 +263,7 @@ nonisolated struct PlanGenerator: Sendable {
                 messages.append(["role": "user", "content": .array(results.map {
                     ["type": "tool_result", "tool_use_id": .string($0.id), "content": .string($0.text), "is_error": .bool($0.isError)]
                 })])
+                await snapshot(turn)
             default:
                 await onEvent(.status("Writing your test plan…"))
                 let text = content
@@ -268,9 +293,10 @@ nonisolated struct PlanGenerator: Sendable {
     /// call (no tools) that writes the plan as JSON. Splitting the phases keeps
     /// this portable: not every provider/model handles tools + a JSON schema at once.
     private func runOpenAI(tools: [MCPClient.Tool], request: String,
-                           onEvent: @Sendable (Event) async -> Void) async throws -> (TestPlan, LLMUsage) {
+                           onEvent: @Sendable (Event) async -> Void,
+                           onSnapshot: @Sendable (ResearchSnapshot) async -> Void) async throws -> (TestPlan, LLMUsage) {
         let client = OpenAIChatClient(provider: llm.provider, apiKey: llm.apiKey, baseURL: llm.baseURL)
-        var usage = LLMUsage()
+        var usage = resume?.usage ?? LLMUsage()
         let strictSchemas = llm.provider == .gemini
         let toolDefs: [JSONValue] = tools.map {
             ["type": "function", "function": [
@@ -286,10 +312,15 @@ nonisolated struct PlanGenerator: Sendable {
         When you have everything, reply with a short summary of what you found — don't write the plan yet; \
         you'll be asked for it next.
         """
-        var messages: [JSONValue] = [
+        var messages: [JSONValue] = resume?.messages ?? [
             ["role": "system", "content": .string(researchSystem)],
             ["role": "user", "content": .string(request)],
         ]
+        let firstTurn = (resume?.turn ?? 0) + 1
+        func snapshot(_ turn: Int, researchDone: Bool = false) async {
+            await onSnapshot(ResearchSnapshot(provider: llm.provider.rawValue, model: llm.model,
+                                              messages: messages, turn: turn, usage: usage, researchDone: researchDone))
+        }
 
         func body(tools: Bool, final: Bool) -> JSONValue {
             var b: [String: JSONValue] = ["model": .string(llm.model), "messages": .array(messages)]
@@ -315,7 +346,42 @@ nonisolated struct PlanGenerator: Sendable {
             return .object(b)
         }
 
-        for turn in 1...Self.maxTurns {
+        /// The final, tool-free call that writes the plan (plus one JSON-only retry).
+        func writePlan(turn: Int) async throws -> (TestPlan, LLMUsage) {
+            await onEvent(.status("Writing your test plan…"))
+            await onEvent(.waiting(turn: turn + 1))
+            let final = try await client.stream(body(tools: false, final: true)) { event in
+                switch event {
+                case .reasoning(let text): await onEvent(.thinking(turn: turn + 1, index: 0, text: text))
+                case .writing(let n): await onEvent(.writing(characters: n))
+                }
+            }
+            usage.add(final.usage)
+            if final.finishReason == "length" { throw GeneratorError.truncated }
+            do {
+                return try (Self.decodePlan(final.text), usage)
+            } catch {
+                // Small/weak models often narrate instead of answering. One stern
+                // retry before failing — bounded, only on the failure path.
+                await onEvent(.status("Answer wasn't usable — asking once more, JSON only…"))
+                messages.append(["role": "assistant", "content": .string(String(final.text.suffix(4000)))])
+                messages.append(["role": "user", "content": .string("That reply was not a JSON object. " + Self.jsonInstruction)])
+                await onEvent(.waiting(turn: turn + 2))
+                let retry = try await client.stream(body(tools: false, final: true)) { event in
+                    switch event {
+                    case .reasoning(let text): await onEvent(.thinking(turn: turn + 2, index: 0, text: text))
+                    case .writing(let n): await onEvent(.writing(characters: n))
+                    }
+                }
+                usage.add(retry.usage)
+                if retry.finishReason == "length" { throw GeneratorError.truncated }
+                return try (Self.decodePlan(retry.text), usage)
+            }
+        }
+
+        if let resume, resume.researchDone { return try await writePlan(turn: resume.turn) }
+
+        for turn in firstTurn...(firstTurn + Self.maxTurns - 1) {
             try Task.checkCancellation()
             await onEvent(.waiting(turn: turn))
             let reply = try await client.stream(body(tools: true, final: false),
@@ -332,35 +398,8 @@ nonisolated struct PlanGenerator: Sendable {
                 // Research done — ask for the plan.
                 messages.append(["role": "assistant", "content": .string(reply.text.isEmpty ? "Research complete." : reply.text)])
                 messages.append(["role": "user", "content": .string("Now write the test plan." + Self.jsonInstruction)])
-                await onEvent(.status("Writing your test plan…"))
-                await onEvent(.waiting(turn: turn + 1))
-                let final = try await client.stream(body(tools: false, final: true)) { event in
-                    switch event {
-                    case .reasoning(let text): await onEvent(.thinking(turn: turn + 1, index: 0, text: text))
-                    case .writing(let n): await onEvent(.writing(characters: n))
-                    }
-                }
-                usage.add(final.usage)
-                if final.finishReason == "length" { throw GeneratorError.truncated }
-                do {
-                    return try (Self.decodePlan(final.text), usage)
-                } catch {
-                    // Small/weak models often narrate instead of answering. One stern
-                    // retry before failing — bounded, only on the failure path.
-                    await onEvent(.status("Answer wasn't usable — asking once more, JSON only…"))
-                    messages.append(["role": "assistant", "content": .string(String(final.text.suffix(4000)))])
-                    messages.append(["role": "user", "content": .string("That reply was not a JSON object. " + Self.jsonInstruction)])
-                    await onEvent(.waiting(turn: turn + 2))
-                    let retry = try await client.stream(body(tools: false, final: true)) { event in
-                        switch event {
-                        case .reasoning(let text): await onEvent(.thinking(turn: turn + 2, index: 0, text: text))
-                        case .writing(let n): await onEvent(.writing(characters: n))
-                        }
-                    }
-                    usage.add(retry.usage)
-                    if retry.finishReason == "length" { throw GeneratorError.truncated }
-                    return try (Self.decodePlan(retry.text), usage)
-                }
+                await snapshot(turn, researchDone: true)
+                return try await writePlan(turn: turn)
             }
 
             messages.append(["role": "assistant",
@@ -377,6 +416,7 @@ nonisolated struct PlanGenerator: Sendable {
                 messages.append(["role": "tool", "tool_call_id": .string(r.id),
                                  "content": .string(r.isError ? "ERROR: " + r.text : r.text)])
             }
+            await snapshot(turn)
         }
         throw GeneratorError.tooManyTurns
     }
@@ -694,4 +734,16 @@ nonisolated struct PlanGenerator: Sendable {
     - Never invent product behaviour you didn't read. When something needed for testing is unclear or \
     contradictory, put it in openQuestions instead.
     """
+}
+
+/// Where a research run got to: the conversation after its last finished turn.
+/// Enough to carry on with the same provider and model after a pause, a failure or the app closing.
+nonisolated struct ResearchSnapshot: Codable, Sendable, Hashable {
+    var provider: String
+    var model: String
+    var messages: [JSONValue]
+    var turn: Int
+    var usage: LLMUsage
+    /// Research finished; only the plan itself still needs writing.
+    var researchDone = false
 }
