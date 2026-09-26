@@ -143,8 +143,10 @@ Requirements: macOS 26+, Xcode 26+, [XcodeGen](https://github.com/yonaskolb/Xcod
 ./build.sh
 ```
 
-For iPhone and iPad: `xcodegen generate`, open `Checkpoint.xcodeproj`, choose the **CheckpointMobile**
-scheme and your signing team, and run on your device (iOS 26+).
+For iPhone and iPad, `./build.sh --platform ios` makes an unsigned `dist/Checkpoint-<version>-iOS.ipa`
+(install it with AltStore or Sideloadly), and `--platform all` builds both. To run it straight on your
+device instead: `xcodegen generate`, open `Checkpoint.xcodeproj`, choose the **CheckpointMobile** scheme and
+your signing team (iOS 26+). Releases include the `.ipa` next to the Mac DMG.
 
 The Mac script builds a universal Release app to **`dist/Checkpoint.app`** (ad-hoc signed). Options:
 
@@ -156,6 +158,7 @@ The Mac script builds a universal Release app to **`dist/Checkpoint.app`** (ad-h
 | `--sign "Developer ID Application: …"` | Sign with your own identity |
 | `--version 0.2.0` | Set the marketing version |
 | `--debug` | Faster Debug build (native arch only) |
+| `--platform macos\|ios\|all` | Which app to build (default `macos`) |
 
 ```bash
 ./build.sh --install --open

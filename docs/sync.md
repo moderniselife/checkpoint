@@ -10,6 +10,10 @@ Same plans, same features. On iPhone:
 - The ticket bar sits at the bottom of the plan list: paste a key or link, pick Dev or QA, tap ✨.
   Run options (Quick/Deep, template, scenarios) live in the slider icon at the end of the field.
 - The research feed rises as a sheet while a plan is written; it closes and the plan opens when done.
+  Leave the app and it keeps going: progress shows on the Lock Screen and in the Dynamic Island.
+- Signing in to Jira happens inside Checkpoint, so an installed Jira app can't take over the flow.
+  If your Atlassian account uses Google (or another provider that won't load there), use
+  ⋯ → Open in Safari Instead.
 - Inside a plan, **Plan / Research / Chat** sits on top, **ⓘ** opens the ticket details, and everything
   else (export, re-run, pin, tags, reminders, archive) is under **⋯**.
 - **Attach Evidence** in a task's ⋯ menu takes a photo, picks from your library, or picks a file.
