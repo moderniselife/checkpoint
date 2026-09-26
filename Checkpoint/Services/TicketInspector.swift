@@ -138,6 +138,10 @@ final class TicketInspector {
             states[ref.cacheKey] = .sample
             return
         }
+        if ref.tracker == .custom {
+            states[ref.cacheKey] = .failed("Ticket details aren't available for custom trackers. Open the ticket in its own app.")
+            return
+        }
         guard let settings, settings.isConfigured(ref.tracker) else {
             states[ref.cacheKey] = .failed("Connect \(ref.tracker.label) in \(Platform.settingsName) to view its issues.")
             return

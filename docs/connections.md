@@ -19,13 +19,29 @@ model and URL; **Fetch models** lists what's actually available; **Test** proves
 - **Jira**: Sign in with Atlassian (OAuth, recommended) or email + API token (needs your org admin
   to allow API-token auth for the Rovo MCP server). **Test connection** lists the server's tools.
 - **Linear**: Sign in (read-scope OAuth) or API key, against Linear's read-only endpoint.
-- **Custom MCP** (Settings → Custom Servers): any Streamable-HTTP MCP server — endpoint plus optional
-  bearer token. **List tools** shows what it offers with read-only badges. Two jobs:
-  - as a *tracker* via match hint (inputs containing it route there), or
-  - as a *research source* ("Use for research") whose read-only tools join plan research with citations.
+- **Custom trackers** (Settings → Custom Servers): any Streamable-HTTP MCP server that holds tickets —
+  endpoint plus optional bearer token. Plan from it like Jira or Linear: links containing its **match
+  hint** route there, and **Bare keys go to** (or the tracker menu in the ticket field) makes it the
+  default. **List tools** shows what it offers with read-only badges; only read-only tools are ever called.
+  *Use while researching plans* also lets other plans read from it.
 
-**Why read-only:** Jira exposes only get/search/fetch/lookup/list tools to the model; Linear enforces
-it server-side. Checkpoint cannot edit your tickets.
+## Research tools
+
+Settings → **Research Tools** (under Intelligence) is for MCP servers that aren't trackers but help write
+a better plan: notes in Obsidian, a wiki, or a device cloud like Corellium that can set up the test
+environment.
+
+- **What it's for**: a sentence told to the planner, e.g. "Spin up an iPhone 17 on iOS 26 to test on."
+- **Tools it may call**: *Read-only* (get/list/search…) by default, or *Chosen tools*, where you tick
+  exactly which tools it may call, including ones that act, like creating a device. The planner only acts to
+  set up testing, and lists what it set up in the plan's preconditions.
+- Turn one off without removing it with *Use while writing plans*.
+- **Local stdio servers** can't be launched from the sandboxed app. Expose them over HTTP first with a
+  bridge such as `supergateway` or `mcp-proxy`, then add the bridge's URL.
+
+**Why read-only:** Jira and custom trackers expose only get/search/fetch/lookup/list tools to the model;
+Linear enforces it server-side. Checkpoint cannot edit your tickets. Only research tools can be given
+action tools, and only the ones you tick.
 
 ## Secrets and troubleshooting
 

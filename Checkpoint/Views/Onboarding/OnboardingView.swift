@@ -692,6 +692,8 @@ private struct TrackersPage: View {
                 case .linear:
                     settings.linearAuth = .oauth
                     try await settings.signInLinear()
+                case .custom:
+                    break
                 }
             } catch MCPOAuth.OAuthError.cancelled {
             } catch {

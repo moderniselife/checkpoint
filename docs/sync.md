@@ -10,7 +10,10 @@ Same plans, same features. On iPhone:
 - The ticket bar sits at the bottom of the plan list: paste a key or link, pick Dev or QA, tap ✨.
   Run options (Quick/Deep, template, scenarios) live in the slider icon at the end of the field.
 - The research feed rises as a sheet while a plan is written; it closes and the plan opens when done.
-  Leave the app and it keeps going: progress shows on the Lock Screen and in the Dynamic Island.
+  Leave the app and it keeps going: progress shows on the Lock Screen and in the Dynamic Island. If iOS
+  stops it there anyway, it's paused, and it carries on when you come back (see *Pause, resume and the bin*
+  in [plans](plans.md)).
+- Tap anywhere outside a text field to close the keyboard.
 - Signing in to Jira happens inside Checkpoint, so an installed Jira app can't take over the flow.
   If your Atlassian account uses Google (or another provider that won't load there), use
   ⋯ → Open in Safari Instead.

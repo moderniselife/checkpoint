@@ -105,6 +105,8 @@ struct ContentView: View {
                         FolderOverview(folder: folder)
                     } else if let smart = store.selectedSmartFolder {
                         SmartFolderOverview(smart: smart).id(smart.id)
+                    } else if store.showingUnfinished || store.showingBin {
+                        DraftsView(bin: store.showingBin)
                     } else if store.showingDashboard {
                         DashboardView()
                     } else {
