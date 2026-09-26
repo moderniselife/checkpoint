@@ -80,7 +80,7 @@ build_ios() {
   if ! xcodebuild \
         -project "$APP_NAME.xcodeproj" -scheme CheckpointMobile -configuration "$CONFIG" \
         -destination 'generic/platform=iOS' -derivedDataPath build \
-        MARKETING_VERSION="$VERSION" \
+        MARKETING_VERSION="${VERSION%%-*}" \
         CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM= \
         build > "$log" 2>&1; then
     grep -E "error:" "$log" | sort -u | head -20 >&2 || true
@@ -126,7 +126,7 @@ if ! xcodebuild \
       -project "$APP_NAME.xcodeproj" -scheme "$APP_NAME" -configuration "$CONFIG" \
       -destination 'generic/platform=macOS' -derivedDataPath build \
       "${ARCH_FLAGS[@]}" CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
-      MARKETING_VERSION="$VERSION" "${SIGN_FLAGS[@]}" \
+      MARKETING_VERSION="${VERSION%%-*}" "${SIGN_FLAGS[@]}" \
       build > "$LOG" 2>&1; then
   grep -E "error:" "$LOG" | sort -u | head -20 >&2 || true
   fail "Build failed — full log: $LOG"
