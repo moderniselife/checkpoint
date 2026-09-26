@@ -55,6 +55,7 @@ nonisolated enum PlanExporter {
             md += " · \(priorityEmoji(t.priority)) \(t.priority.rawValue)"
             if !t.area.isEmpty { md += " · \(t.area)" }
             if let mins = t.estimateMin { md += " · ⏱ ~\(mins) min" }
+            if let spent = s.itemSeconds[t.id], spent >= 60 { md += " · spent \(Int(spent / 60)) min" }
             if let actual = s.failed[t.id] {
                 md += " · ❌ **FAIL**" + (actual.isEmpty ? "" : ": \(actual)")
             } else if let reason = s.blocked[t.id] {
@@ -212,7 +213,7 @@ nonisolated enum PlanExporter {
             }
             tasksHTML += """
             <details class="task" open>
-              <summary><input type="checkbox" data-kind="task"\(done ? " checked" : "")><span class="ttl">\(e(t.title))</span>\(verdictBadge)\(t.area.isEmpty ? "" : "<span class=\"chip\">\(e(t.area))</span>")\(t.estimateMin.map { "<span class=\"chip\">⏱ ~\($0) min</span>" } ?? "")<span class="dot \(t.priority.rawValue)" title="\(t.priority.rawValue) priority"></span></summary>
+              <summary><input type="checkbox" data-kind="task"\(done ? " checked" : "")><span class="ttl">\(e(t.title))</span>\(verdictBadge)\(t.area.isEmpty ? "" : "<span class=\"chip\">\(e(t.area))</span>")\(t.estimateMin.map { "<span class=\"chip\">⏱ ~\($0) min</span>" } ?? "")\((s.itemSeconds[t.id] ?? 0) >= 60 ? "<span class=\"chip\">spent \(Int((s.itemSeconds[t.id] ?? 0) / 60)) min</span>" : "")<span class="dot \(t.priority.rawValue)" title="\(t.priority.rawValue) priority"></span></summary>
               \(verdictNote)
               <ol>\(t.steps.map { "<li>\(e($0))</li>" }.joined())</ol>
               <div class="expected">✓ \(e(t.expected))</div>

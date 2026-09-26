@@ -89,7 +89,7 @@ struct PlanView: View {
                         Section(title: "Scenarios", icon: "theatermasks") {
                             VStack(alignment: .leading, spacing: 12) {
                                 ForEach(plan.scenarios) { sc in
-                                    ScenarioCard(scenario: sc, isDone: saved.done.contains("scenario:" + sc.id)) {
+                                    ScenarioCard(scenario: sc, saved: saved, isDone: saved.done.contains("scenario:" + sc.id)) {
                                         withAnimation(.smooth) { store.toggle("scenario:" + sc.id, in: saved.id) }
                                     }
                                 }
@@ -946,6 +946,7 @@ private struct TaskRow: View {
     private var verdict: TaskVerdict { saved.verdict(of: task.id) }
     private var isDone: Bool { verdict == .pass }
     private var note: String? { saved.notes[task.id].flatMap { $0.isEmpty ? nil : $0 } }
+    private var timing: Bool { saved.itemTimer == task.id }
     private var attachments: [String] { saved.evidence[task.id] ?? [] }
 
     /// Why the plan includes this task, from its risk, coverage and sources.
@@ -1010,6 +1011,9 @@ private struct TaskRow: View {
                     if !compactRow {
                         if !task.area.isEmpty { Chip(text: task.area) }
                         RiskChip(risk: task.risk)
+                    }
+                    if timing {
+                        ItemTimerPill(item: task.id, saved: saved)
                     }
                     actionsMenu
                 }
@@ -1159,6 +1163,9 @@ private struct TaskRow: View {
                 editingNote = true
             }
             Button("Attach Evidence…", systemImage: "paperclip", action: attachFiles)
+            Button(timing ? "Stop Timer" : "Start Timer", systemImage: timing ? "stop.circle" : "stopwatch") {
+                withAnimation(.smooth) { store.toggleItemTimer(task.id, in: saved.id) }
+            }
             if verdict == .fail {
                 Button("Report Bug…", systemImage: "ant") { reportingBug = true }
             }
@@ -1270,6 +1277,13 @@ private struct TaskRow: View {
             if let mins = task.estimateMin {
                 if !task.covers.isEmpty || hasSources { Text("·") }
                 Text("about \(mins) min").help("Rough manual-testing estimate")
+            }
+            let spent = saved.itemSeconds[task.id] ?? 0
+            if spent >= 1 && !timing {
+                Text("·")
+                Label("spent \(PlanStore.formatDuration(spent))", systemImage: "stopwatch")
+                    .labelStyle(.titleAndIcon)
+                    .help("Time tracked on this task")
             }
         }
         .font(.caption)
@@ -2040,8 +2054,12 @@ private struct CriteriaLegend: View {
 /// One end-to-end journey: role, goal, steps and the end result. Tickable.
 private struct ScenarioCard: View {
     let scenario: TestPlan.Scenario
+    let saved: SavedPlan
     let isDone: Bool
     let toggle: () -> Void
+    @Environment(PlanStore.self) private var store
+
+    private var item: String { "scenario:" + scenario.id }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -2061,6 +2079,21 @@ private struct ScenarioCard: View {
                     Spacer(minLength: 8)
                     Chip(text: scenario.basis == "tickets" ? "from tickets" : scenario.basis == "codebase" ? "from code" : "tickets + code",
                          tint: scenario.basis == "tickets" ? .blue : .purple)
+                    if saved.itemTimer == item {
+                        ItemTimerPill(item: item, saved: saved)
+                    } else if !isDone {
+                        Button {
+                            withAnimation(.smooth) { store.toggleItemTimer(item, in: saved.id) }
+                        } label: {
+                            Image(systemName: "stopwatch").foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Time this scenario")
+                    }
+                }
+                if let spent = saved.itemSeconds[item], spent >= 1, saved.itemTimer != item {
+                    Label("spent \(PlanStore.formatDuration(spent))", systemImage: "stopwatch")
+                        .font(.caption).foregroundStyle(.tertiary)
                 }
                 Label(scenario.role, systemImage: "person.fill").font(.caption).foregroundStyle(.secondary)
                 if !isDone {
@@ -2094,5 +2127,31 @@ private struct ScenarioCard: View {
         }
         .padding(12)
         .background(.background.opacity(isDone ? 0.2 : 0.6), in: .rect(cornerRadius: 14))
+    }
+}
+
+
+/// Live time on the task or scenario being timed; tap to stop.
+private struct ItemTimerPill: View {
+    let item: String
+    let saved: SavedPlan
+    @Environment(PlanStore.self) private var store
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            let s = Int(store.elapsed(item: item, in: saved))
+            Button {
+                withAnimation(.smooth) { store.toggleItemTimer(item, in: saved.id) }
+            } label: {
+                Label(String(format: "%d:%02d", s / 60, s % 60), systemImage: "stop.circle.fill")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(.tint.opacity(0.12), in: .capsule)
+                    .fixedSize()
+            }
+            .buttonStyle(.plain)
+            .help("Stop the timer on this")
+        }
     }
 }

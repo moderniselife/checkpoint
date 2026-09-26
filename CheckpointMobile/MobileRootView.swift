@@ -73,6 +73,10 @@ struct MobileRootView: View {
             }
         }
         .animation(.smooth, value: store.error)
+        .onChange(of: store.runningKey) { old, new in
+            if let new { BackgroundResearch.shared.begin(key: new, store: store) }
+            else if old != nil { BackgroundResearch.shared.end(success: store.error == nil) }
+        }
         // iPhone: watch the research live in a sheet; it closes and the new plan opens when done.
         .sheet(isPresented: Binding(get: { phone && store.isRunning }, set: { if !$0 && store.isRunning { store.cancel() } })) {
             NavigationStack {

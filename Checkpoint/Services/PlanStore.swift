@@ -43,6 +43,12 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {    ///
     /// Manual testing timer (IDEA-025): accumulated seconds + start mark when running.
     var testingSeconds: TimeInterval = 0
     var timerRunningSince: Date? = nil
+    /// Time spent per task or scenario ("scenario:<id>"), and the one being timed now.
+    var itemSeconds: [String: TimeInterval] = [:]
+    var itemTimer: String? = nil
+    var itemTimerSince: Date? = nil
+    /// The plan timer was started by an item timer, so stopping the item stops it too.
+    var planTimerFromItem = false
 
     /// Jira ids stay "KEY:mode" so plans saved before Linear support keep their identity.
     static func id(_ key: String, _ mode: TestMode, _ tracker: Tracker) -> String {
@@ -87,6 +93,10 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {    ///
         evidence = try c.decodeIfPresent([String: [String]].self, forKey: .evidence) ?? [:]
         testingSeconds = try c.decodeIfPresent(TimeInterval.self, forKey: .testingSeconds) ?? 0
         timerRunningSince = try c.decodeIfPresent(Date.self, forKey: .timerRunningSince)
+        itemSeconds = try c.decodeIfPresent([String: TimeInterval].self, forKey: .itemSeconds) ?? [:]
+        itemTimer = try c.decodeIfPresent(String.self, forKey: .itemTimer)
+        itemTimerSince = try c.decodeIfPresent(Date.self, forKey: .itemTimerSince)
+        planTimerFromItem = try c.decodeIfPresent(Bool.self, forKey: .planTimerFromItem) ?? false
     }
 
     var isOverdue: Bool { dueDate.map { $0 < .now && progress < 1 } ?? false }
@@ -309,11 +319,17 @@ final class PlanStore {
         }
         expandedFolders = Set((UserDefaults.standard.stringArray(forKey: "expandedFolders") ?? []).compactMap(UUID.init))
         // Auto-pause testing timers left running at quit (IDEA-025).
-        for i in plans.indices where plans[i].timerRunningSince != nil {
+        for i in plans.indices where plans[i].timerRunningSince != nil || plans[i].itemTimer != nil {
             if let since = plans[i].timerRunningSince {
                 plans[i].testingSeconds += Date().timeIntervalSince(since)
                 plans[i].timerRunningSince = nil
             }
+            if let item = plans[i].itemTimer, let since = plans[i].itemTimerSince {
+                plans[i].itemSeconds[item, default: 0] += Date().timeIntervalSince(since)
+            }
+            plans[i].itemTimer = nil
+            plans[i].itemTimerSince = nil
+            plans[i].planTimerFromItem = false
         }
         if plans.contains(where: { $0.testingSeconds > 0 }) { save() }
         // Re-arm due-date banners after relaunch (system keeps them, but this
@@ -1024,6 +1040,7 @@ final class PlanStore {
             plans[i].done.insert(taskID)
             plans[i].failed.removeValue(forKey: taskID)
             plans[i].blocked.removeValue(forKey: taskID)
+            stopItemTimer(ifTiming: taskID, at: i)
         }
         plans[i].updatedAt = .now
         save()
@@ -1044,6 +1061,7 @@ final class PlanStore {
         case .fail: plans[i].failed[taskID] = detail
         case .blocked: plans[i].blocked[taskID] = detail
         }
+        if verdict != .todo { stopItemTimer(ifTiming: taskID, at: i) }
         plans[i].updatedAt = .now
         save()
         Reminders.sync(plans[i])
@@ -1070,9 +1088,62 @@ final class PlanStore {
         saved.testingSeconds + (saved.timerRunningSince.map { Date().timeIntervalSince($0) } ?? 0)
     }
 
+    /// Time on one task or scenario, including a running timer.
+    func elapsed(item: String, in saved: SavedPlan) -> TimeInterval {
+        let running = saved.itemTimer == item ? saved.itemTimerSince.map { Date().timeIntervalSince($0) } ?? 0 : 0
+        return (saved.itemSeconds[item] ?? 0) + running
+    }
+
+    /// Starts or stops a task/scenario timer. Only one runs at a time, and it keeps the
+    /// plan timer running so task time always adds to the plan's total.
+    func toggleItemTimer(_ item: String, in planID: String) {
+        guard let i = plans.firstIndex(where: { $0.id == planID }) else { return }
+        if plans[i].itemTimer == item {
+            stopItemTimer(at: i)
+        } else {
+            if plans[i].itemTimer != nil {
+                // Switching task: keep the plan timer going.
+                let fromItem = plans[i].planTimerFromItem
+                plans[i].planTimerFromItem = false
+                stopItemTimer(at: i)
+                plans[i].planTimerFromItem = fromItem
+            }
+            plans[i].itemTimer = item
+            plans[i].itemTimerSince = .now
+            if plans[i].timerRunningSince == nil {
+                plans[i].timerRunningSince = .now
+                plans[i].planTimerFromItem = true
+            }
+        }
+        plans[i].updatedAt = .now
+        save()
+    }
+
+    private func stopItemTimer(at i: Int) {
+        guard let item = plans[i].itemTimer else { return }
+        if let since = plans[i].itemTimerSince {
+            plans[i].itemSeconds[item, default: 0] += Date().timeIntervalSince(since)
+        }
+        plans[i].itemTimer = nil
+        plans[i].itemTimerSince = nil
+        if plans[i].planTimerFromItem, let since = plans[i].timerRunningSince {
+            plans[i].testingSeconds += Date().timeIntervalSince(since)
+            plans[i].timerRunningSince = nil
+        }
+        plans[i].planTimerFromItem = false
+    }
+
+    /// A verdict ends the time on that task.
+    private func stopItemTimer(ifTiming item: String, at i: Int) {
+        if plans[i].itemTimer == item { stopItemTimer(at: i) }
+    }
+
     func toggleTimer(for planID: String) {
         guard let i = plans.firstIndex(where: { $0.id == planID }) else { return }
         if let since = plans[i].timerRunningSince {
+            // Stopping the plan stops whatever task is being timed.
+            plans[i].planTimerFromItem = false
+            stopItemTimer(at: i)
             plans[i].testingSeconds += Date().timeIntervalSince(since)
             plans[i].timerRunningSince = nil
         } else {
