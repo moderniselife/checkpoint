@@ -8,7 +8,8 @@ struct SettingsView: View {
     static let windowID = "settings"
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var sync
-    @State private var selection: SettingsSection? = .aiProvider
+    /// Mac opens on AI Provider; iPhone starts on the list.
+    @State private var selection: SettingsSection? = Platform.isMac ? .aiProvider : nil
     @State private var query = ""
     @Environment(\.dismiss) private var dismiss
 
