@@ -27,6 +27,9 @@ The header counts passes on its rings and calls out failures and blocks.
 - **Notes** (⋯ → Add Note, or `n`): freeform observations per task, included in exports.
 - **Evidence** (⋯ → Attach Evidence, or drag screenshots or files onto a task). Thumbnails preview inline;
   Markdown lists them, HTML embeds small images.
+- **Task and scenario timers** (⋯ → Start Timer on a task, the stopwatch on a scenario): one runs
+  at a time, it keeps the plan timer running so task time adds to the plan's total, a verdict stops
+  it, and the task shows "spent" next to its estimate. Exports include it.
 - **Timer** (stopwatch under the plan summary): start/stop time-on-task. It persists across launches, auto-pauses on quit,
   and totals into exports.
 

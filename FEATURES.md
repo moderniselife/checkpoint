@@ -192,6 +192,10 @@ verified, what's known to be rough, and how to fix things when they break.
 | iCloud sync via CKSyncEngine, gated on `CHECKPOINT_CLOUDKIT_CONTAINER` | 🔍 | `Services/Sync/CloudKitSync.swift` | Needs a paid team + container; see docs/sync.md |
 | Sync settings page and onboarding step (iCloud disabled with a reason when unavailable) | 🧪 | `SyncPane`, `OnboardingView` | Folder picked on the iOS simulator; status shows up to date |
 | Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | 🧪 | `Views/Onboarding/OnboardingView.swift` | Clicked through on iPhone simulator; Mac sheet on first launch |
+| Per-task and per-scenario timers feeding the plan timer | 🧪 | `PlanStore.toggleItemTimer`, `ItemTimerPill` | Start from a task's ⋯ menu |
+| iOS research continues in the background (continued-processing task) | 🔍 | `CheckpointMobile/BackgroundResearch.swift` | Analyze on a device, then leave the app |
+| iOS Atlassian sign-in in an in-app web view (Jira app can't hijack it), Safari fallback | 🧪 | `AuthBrowser` | Consent page loaded in the simulator; approve on a device |
+| Model list fetched in onboarding/Settings; unknown model replaced with one the server has | 🧪 | `AppSettings.refreshModels` | Pick a local server with no llama3.1 |
 | Guided spotlight tour (10 stops, opens a sample plan if needed) | 🧪 | `Shared/TourGuide.swift`, `Models/SamplePlan.swift` | Walked through on iPhone simulator |
 | Help menu: tour, welcome, guides, shortcuts window, what's new, report an issue | 🔍 | `CheckpointApp.HelpCommands`, `KeyboardShortcutsView` | Mac Help menu |
 
@@ -204,6 +208,8 @@ verified, what's known to be rough, and how to fix things when they break.
 | GitHub Action: tag → universal Release build → DMG + zip + SHA256 → GitHub Release | ✅ | `.github/workflows/release.yml` | v0.1.0 released by CI |
 | Developer ID signing + notarization + stapling when secrets are set | 🔍 | same | Add the five secrets, push a tag |
 | `./build.sh` — build from source (universal, ad-hoc or `--sign`, `--dmg`/`--zip`, `--install`, `--open`) | ✅ | `build.sh` | Run locally: universal app + zip produced |
+| `./build.sh --platform ios\|all` — unsigned iOS .ipa | ✅ | `build.sh` | Produced dist/Checkpoint-0.4.0-iOS.ipa |
+| Release workflow builds and attaches the iOS .ipa; -dev tags are pre-releases | 🔍 | `.github/workflows/release.yml` | Push a v0.4.0-dev tag |
 | Issue forms (bug, feature, AI provider, tracker, integration), PR template | 🧪 | `.github/` | Open *New issue* on GitHub |
 | SECURITY, CONTRIBUTING, CONTRIBUTORS, CODE_OF_CONDUCT, SUPPORT | ✅ | repo root | — |
 | Ad-hoc signed fallback when no secrets | ✅ | same | v0.1.0 is ad-hoc signed |
