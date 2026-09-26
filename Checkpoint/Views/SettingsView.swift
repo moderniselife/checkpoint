@@ -29,7 +29,8 @@ struct SettingsView: View {
         List(selection: $selection) {
             ForEach(SettingsSection.Group.allCases, id: \.rawValue) { group in
                 let rows = group.sections.filter { $0.matches(query) }
-                let custom = group == .trackers ? customRows : []
+                let custom = group == .trackers ? serverRows(settings.trackerServers)
+                    : group == .intelligence ? serverRows(settings.researchTools) : []
                 if !rows.isEmpty || !custom.isEmpty {
                     Section(group.rawValue) {
                         ForEach(rows, id: \.id) { section in
@@ -38,9 +39,12 @@ struct SettingsView: View {
                                 .tag(section)
                         }
                         ForEach(custom) { tracker in
-                            SettingsSidebarRow(title: tracker.displayName, icon: "server.rack", tint: .teal)
+                            let research = tracker.role == .research
+                            SettingsSidebarRow(title: tracker.displayName,
+                                               icon: research ? "wand.and.stars" : "server.rack",
+                                               tint: research ? .pink : .teal)
                                 .padding(.leading, 12)
-                                .tag(SettingsSection.customMCP(id: tracker.id))
+                                .tag(research ? SettingsSection.researchTools(id: tracker.id) : .customMCP(id: tracker.id))
                         }
                     }
                 }
@@ -56,9 +60,9 @@ struct SettingsView: View {
         #endif
     }
 
-    /// Each custom server gets its own row under Trackers.
-    private var customRows: [CustomMCPTracker] {
-        settings.customTrackers.filter {
+    /// Each custom server gets its own row: trackers under Trackers, research tools under Intelligence.
+    private func serverRows(_ servers: [CustomMCPTracker]) -> [CustomMCPTracker] {
+        servers.filter {
             query.isEmpty || $0.displayName.localizedCaseInsensitiveContains(query)
                 || $0.endpoint.localizedCaseInsensitiveContains(query)
         }
@@ -70,7 +74,7 @@ struct SettingsView: View {
         case .jira: settings.isAtlassianConfigured ? .ok : .none
         case .linear: settings.isLinearConfigured ? .ok : .none
         case .sync: sync.status.isError ? .warn : (sync.mode == .off ? .none : .ok)
-        case .customMCP, .testing, .scenarios, .advanced: .none
+        case .customMCP, .researchTools, .testing, .scenarios, .advanced: .none
         }
     }
 
@@ -81,10 +85,16 @@ struct SettingsView: View {
         case .jira: JiraPane()
         case .linear: LinearPane()
         case .customMCP(let id):
-            if let id, settings.customTrackers.contains(where: { $0.id == id }) {
+            if let id, settings.trackerServers.contains(where: { $0.id == id }) {
                 CustomMCPDetailPane(trackerID: id, selection: $selection).id(id)
             } else {
                 CustomMCPListPane(selection: $selection)
+            }
+        case .researchTools(let id):
+            if let id, settings.researchTools.contains(where: { $0.id == id }) {
+                CustomMCPDetailPane(trackerID: id, selection: $selection).id(id)
+            } else {
+                CustomMCPListPane(role: .research, selection: $selection)
             }
         case .testing: TestingPane()
         case .scenarios: ScenariosPane()

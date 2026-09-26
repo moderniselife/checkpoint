@@ -220,7 +220,7 @@ struct AdvancedPane: View {
             Section {
                 if settings.isAtlassianConfigured && settings.isLinearConfigured {
                     Picker("Bare keys go to", selection: $settings.defaultTracker) {
-                        ForEach(Tracker.allCases) { Text($0.label).tag($0) }
+                        ForEach(Tracker.builtIn) { Text($0.label).tag($0) }
                     }
                 } else {
                     LabeledContent("Bare keys go to", value: settings.defaultTracker.label)

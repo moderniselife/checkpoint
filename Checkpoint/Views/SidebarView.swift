@@ -632,15 +632,15 @@ private struct PlanRow: View {
                 }
                 Button("Run in \(saved.mode == .dev ? "QA" : "Dev") mode", systemImage: TestMode.qa.icon) {
                     store.analyze(saved.plan.ticket.key, mode: saved.mode == .dev ? .qa : .dev,
-                                  tracker: saved.tracker, settings: settings)
+                                  tracker: saved.tracker, customTracker: saved.customTrackerID, settings: settings)
                 }
                 Button("Re-run", systemImage: "arrow.clockwise") {
                     if saved.preset == "quick" {
                         let q = PlanStore.quickOverrides(settings: settings)
-                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker,
+                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, customTracker: saved.customTrackerID,
                                       modelOverride: q.model, effortOverride: q.effort, settings: settings)
                     } else {
-                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
+                        store.analyze(saved.plan.ticket.key, mode: saved.mode, tracker: saved.tracker, customTracker: saved.customTrackerID, settings: settings)
                     }
                 }
                 if let url = URL(string: saved.plan.ticket.url) {
