@@ -539,6 +539,8 @@ section { padding: 96px 0; }
 .tile .spark { position: absolute; right: -40px; bottom: -40px; width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(circle, rgba(43,181,168,.25), transparent 70%); animation: pulse 6s ease-in-out infinite; }
 @keyframes pulse { 50% { transform: scale(1.2); opacity: .6; } }
 @media (max-width: 980px) { .tile, .tile.wide { grid-column: span 3; } }
+/* Two per row: a lone last tile takes the whole row instead of leaving a gap. */
+@media (max-width: 980px) and (min-width: 641px) { .bento > .tile:last-child:nth-child(odd) { grid-column: span 6; } }
 @media (max-width: 640px) { .bento { grid-template-columns: 1fr; } .tile, .tile.wide, .tile.full { grid-column: auto; } }
 
 /* ---------- Research showcase ---------- */
@@ -894,6 +896,11 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
       <h3>Work the plan, not a spreadsheet</h3>
       <p>Pass, fail or block each task with what happened, add notes, drag screenshots onto a task as evidence, and turn a failure into a pre-filled bug report. Smoke and P0 lenses cut a big plan down to what matters first.</p>
     </div>
+    <div class="tile glass wide reveal">
+      <div class="ic"><svg><use href="#i-doc"/></svg></div>
+      <h3>Export &amp; share</h3>
+      <p>Save any plan as Markdown or a beautiful self-contained HTML page — light/dark, printable, tickable in the browser. Perfect for sign-offs and Jira comments.</p>
+    </div>
     <div class="tile glass reveal">
       <div class="ic"><svg><use href="#i-timer"/></svg></div>
       <h3>Time every task</h3>
@@ -904,12 +911,7 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
       <h3>A tour that shows you around</h3>
       <p>A spotlight walks you through every part of a real plan — with a sample plan to explore before you've connected anything.</p>
     </div>
-    <div class="tile glass wide reveal">
-      <div class="ic"><svg><use href="#i-doc"/></svg></div>
-      <h3>Export &amp; share</h3>
-      <p>Save any plan as Markdown or a beautiful self-contained HTML page — light/dark, printable, tickable in the browser. Perfect for sign-offs and Jira comments.</p>
-    </div>
-    <div class="tile glass wide reveal">
+    <div class="tile glass reveal">
       <div class="ic"><svg><use href="#i-link"/></svg></div>
       <h3>Jira &amp; Linear, any AI</h3>
       <p>Same features for both trackers — paste a link and Checkpoint picks the right one. Plans by Claude, GPT, Gemini, Grok, OpenRouter or a local model.</p>
