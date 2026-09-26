@@ -98,7 +98,9 @@ actor MCPOAuth {
         // Mac: default browser (already signed in to Atlassian). iOS: in-app web sheet.
         // Either way the loopback redirect needs no admin allowlisting.
         let authURL = comps.url!
-        await MainActor.run { AuthBrowser.shared.present(authURL) { server.stop() } }
+        // Atlassian signs in inside Checkpoint on iOS so the Jira app can't catch the flow.
+        let inApp = name == "Atlassian"
+        await MainActor.run { AuthBrowser.shared.present(authURL, inApp: inApp) { server.stop() } }
         let callback: URL
         do {
             callback = try await server.waitForCallback()
