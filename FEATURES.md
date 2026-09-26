@@ -128,7 +128,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | Archive (hidden by default, restorable) | 🧪 | `SavedPlan.archived`, `PlanStore.toggleArchive` | Right-click → Archive |
 | Tags on plans (editor, chips, filter) | 🧪 | `SavedPlan.tags`, `TagEditor` | ⌘T, More → Tags…, or right-click a plan |
 | Due dates with local notifications + overdue badges | 🧪 | `SavedPlan.dueDate`, `Reminders.swift` | Plan toolbar → More → Remind Me |
-| Batch planning: JQL sprint import, epic children, paste-a-list → one plan each in a folder | 🧪 | `BatchSheet.swift`, `PlanStore.startBatch` | Test plans header ＋ → Plan Several Tickets; panel “Plan each child” |
+| Batch planning: Jira JQL, Linear filters, custom tracker search, epic children, paste-a-list → one plan each in a folder | 🧪 | `BatchSheet.swift`, `PlanStore.startBatch` | Test plans header ＋ → Plan Several Tickets; panel “Plan each child” |
 | Smart folders (label/component/fix-version/epic rules, live, convertible) | 🧪 | `SmartFolder.swift`, `PlanStore.smartFolders` | Test plans header ＋ → New Smart Folder; old plans need a re-run for metadata |
 | Testing dashboard (7-day stats, 8-week trend, in progress) | 🧪 | `DashboardView.swift` | Sidebar Dashboard |
 
@@ -168,6 +168,8 @@ verified, what's known to be rough, and how to fix things when they break.
 | Regenerate one section (tasks/AC/edge cases) | 🧪 | `PlanStore.regenerate` | ⋯ on AC / Edge cases; Test tasks pill |
 | Why-this-task rationale popovers | 🧪 | `TaskRow` ⋯ menu | Task ⋯ → Why This Task? |
 | Custom MCP servers as research sources | 🧪 | `CustomMCPTracker.useForResearch` | Custom server → Use for research |
+| Custom MCP trackers: plan and batch-import from any ticket server | 🧪 | `Tracker.custom`, `AppSettings.route` | Match hint / Bare keys go to → plan from it |
+| Research tools (Obsidian, Corellium…) with notes and per-tool action allowlist | 🧪 | `CustomMCPTracker.Role.research`, `ToolAccess` | Settings → Research Tools |
 | Strip-and-retry unsupported params (reasoning effort, JSON schema…) | 🧪 | `OpenAIChatClient.stream` | Fixture 400 on `reasoning_effort` recovered |
 | Gemini-safe tool schemas | 🧪 | `PlanGenerator.cleanSchema` | Unit-checked |
 

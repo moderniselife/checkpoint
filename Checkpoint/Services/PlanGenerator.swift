@@ -41,11 +41,23 @@ nonisolated struct PlanGenerator: Sendable {
     let tracker: Tracker
     /// Hosted app URL/name QA tests against (optional).
     let environment: String
-    /// Extra read-only MCP research sources (IDEA-065): docs, wikis, specs.
-    var researchSources: [(name: String, client: MCPClient)] = []
+    /// Extra MCP servers for research: docs, wikis, vaults, device farms. Each says what it's
+    /// for and which of its tools the planner may call.
+    var researchSources: [ResearchSource] = []
+    /// Display name of the custom tracker when `tracker == .custom`.
+    var trackerName: String = ""
+
+    struct ResearchSource: Sendable {
+        var name: String
+        var notes: String
+        var client: MCPClient
+        var allows: @Sendable (String) -> Bool
+    }
     /// Tool name → owning client, built in run().
     // Internal (not private) so the memberwise initializer stays usable from PlanStore.
     var toolOwners: [String: MCPClient] = [:]
+    /// Tool name → the rule for calling it, for research-source tools.
+    var toolRules: [String: @Sendable (String) -> Bool] = [:]
     /// Team-wide extra instructions appended to the prompt (IDEA-009).
     var houseRules: String = ""
     /// Forced plan shape (IDEA-010); nil = let the ticket type decide.
@@ -93,24 +105,30 @@ nonisolated struct PlanGenerator: Sendable {
     }
 
     func run(ticketKey: String, onEvent: @Sendable (Event) async -> Void) async throws -> (plan: TestPlan, usage: LLMUsage) {
-        await onEvent(.status("Connecting to \(tracker == .jira ? "Atlassian" : "Linear")…"))
+        await onEvent(.status("Connecting to \(trackerDisplayName)…"))
         let listed = tracker == .jira ? try await mcp.authenticatedTools() : try await mcp.listTools()
-        // Jira: expose only read tools. Linear: the /mcp/readonly endpoint only lists
-        // read tools and the server rejects writes, so keep everything it offers.
+        // Jira and custom trackers: only read tools. Linear: the /mcp/readonly endpoint only
+        // lists read tools and the server rejects writes, so keep everything it offers.
         var tools = listed
             .filter { tracker == .linear || Self.isReadOnly($0.name) }
             .sorted { $0.name < $1.name }
-        // Extra research sources (IDEA-065): read-only tools only, failures skipped.
+        // Research sources: whatever each one allows (read-only unless tools were chosen), failures skipped.
         var owners: [String: MCPClient] = [:]
+        var rules: [String: @Sendable (String) -> Bool] = [:]
         for source in researchSources {
-            guard let extra = try? await source.client.listTools() else { continue }
-            for tool in extra where Self.isReadOnly(tool.name) && !tools.contains(where: { $0.name == tool.name }) {
+            guard let extra = try? await source.client.listTools() else {
+                await onEvent(.status("Couldn't reach \(source.name) — researching without it."))
+                continue
+            }
+            for tool in extra where source.allows(tool.name) && !tools.contains(where: { $0.name == tool.name }) {
                 tools.append(tool)
                 owners[tool.name] = source.client
+                rules[tool.name] = source.allows
             }
         }
         var runner = self
         runner.toolOwners = owners
+        runner.toolRules = rules
         if effectiveScenarios == .ticketsAndCode { tools += CodebaseTools.tools }
         if scenarios == .ticketsAndCode && codebase == nil {
             await onEvent(.status("No codebase folder set — building scenarios from tickets only."))
@@ -124,13 +142,19 @@ nonisolated struct PlanGenerator: Sendable {
                 : "Jira site / cloudId: \(site)"
         case .linear:
             siteLine = "The issue is in Linear."
+        case .custom:
+            siteLine = "The issue is in \(trackerDisplayName), reached through its MCP tools. Find it by the id or link given (search or list tools if there's no direct get), then read everything linked to it."
         }
-        var request = "Build the \(mode == .qa ? "QA" : "developer") test brief for \(tracker.label) issue \(ticketKey).\n\(siteLine)"
+        var request = "Build the \(mode == .qa ? "QA" : "developer") test brief for \(trackerDisplayName) issue \(ticketKey).\n\(siteLine)"
         if mode == .qa, !environment.isEmpty {
             request += "\nHosted environment under test: \(environment). Unless the tickets say otherwise, write the plan for this environment."
         }
         if !researchSources.isEmpty {
-            request += "\nExtra research sources are available as tools (\(researchSources.map(\.name).joined(separator: ", "))): use them for specs and docs, and cite findings in task sources."
+            request += "\n\nResearch tools you can use as well, beside the tracker:"
+            for source in researchSources {
+                request += "\n- \(source.name)" + (source.notes.isEmpty ? "" : ": \(source.notes)")
+            }
+            request += "\nUse them where they help (specs, notes, docs, test devices or environments) and cite what you found in task sources. If any of them can act (create devices, install builds, set up data), only do what this plan's testing needs, and list what you set up under preconditions."
         }
 
         await onEvent(.status("Reading \(ticketKey) with \(llm.provider.shortLabel)…"))
@@ -372,7 +396,8 @@ nonisolated struct PlanGenerator: Sendable {
                         let r = codebase.call(call.name, call.input)
                         return (i, CallResult(id: call.id, text: r.text, isError: r.isError))
                     }
-                    guard tracker == .linear || Self.isReadOnly(call.name) else {
+                    let allowed = toolRules[call.name]?(call.name) ?? (tracker == .linear || Self.isReadOnly(call.name))
+                    guard allowed else {
                         return (i, CallResult(id: call.id, text: "Tool \(call.name) is not available (read-only app).", isError: true))
                     }
                     do {
@@ -550,8 +575,22 @@ nonisolated struct PlanGenerator: Sendable {
         }
     }
 
+    private var trackerDisplayName: String {
+        switch tracker {
+        case .jira: "Atlassian"
+        case .linear: "Linear"
+        case .custom: trackerName.isEmpty ? "the tracker" : trackerName
+        }
+    }
+
     static func systemPrompt(for mode: TestMode, tracker: Tracker, template: PlanTemplate? = nil) -> String {
-        research + (tracker == .jira ? jiraResearch : linearResearch) + (mode == .dev ? devPlan : qaPlan)
+        let specifics: String
+        switch tracker {
+        case .jira: specifics = jiraResearch
+        case .linear: specifics = linearResearch
+        case .custom: specifics = customResearch
+        }
+        return research + specifics + (mode == .dev ? devPlan : qaPlan)
             + (template?.instruction ?? "") + shared
     }
 
@@ -584,6 +623,14 @@ nonisolated struct PlanGenerator: Sendable {
     Linear specifics: fetch the issue (including its sub-issues, parent, relations, labels, project and \
     cycle), then its comments. Project descriptions and Linear documents often hold the spec. Use the \
     issue identifier (e.g. ENG-123) as the source id and its Linear URL as the url.
+
+
+    """
+
+    private static let customResearch = """
+    Tracker specifics: this is a custom tracker reached through its own MCP tools. Look at the tools \
+    you have, fetch the item (and anything it links to: parent, sub-items, comments, attachments or \
+    docs), and use the tracker's own id as the source id and its link as the url when there is one.
 
 
     """

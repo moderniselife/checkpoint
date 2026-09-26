@@ -49,10 +49,17 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {    ///
     var itemTimerSince: Date? = nil
     /// The plan timer was started by an item timer, so stopping the item stops it too.
     var planTimerFromItem = false
+    /// For `tracker == .custom`: which server, and its name when the plan was made.
+    var customTrackerID: UUID? = nil
+    var customTrackerName: String? = nil
+
+    /// "Jira", "Linear", or the custom tracker's name.
+    var trackerName: String { tracker == .custom ? (customTrackerName ?? Tracker.custom.label) : tracker.label }
 
     /// Jira ids stay "KEY:mode" so plans saved before Linear support keep their identity.
     static func id(_ key: String, _ mode: TestMode, _ tracker: Tracker) -> String {
-        (tracker == .jira ? "" : "linear:") + "\(key):\(mode.rawValue)"
+        let prefix = switch tracker { case .jira: ""; case .linear: "linear:"; case .custom: "custom:" }
+        return prefix + "\(key):\(mode.rawValue)"
     }
 
     init(plan: TestPlan, mode: TestMode, tracker: Tracker, createdAt: Date, done: Set<String>) {
@@ -97,6 +104,8 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {    ///
         itemTimer = try c.decodeIfPresent(String.self, forKey: .itemTimer)
         itemTimerSince = try c.decodeIfPresent(Date.self, forKey: .itemTimerSince)
         planTimerFromItem = try c.decodeIfPresent(Bool.self, forKey: .planTimerFromItem) ?? false
+        customTrackerID = try c.decodeIfPresent(UUID.self, forKey: .customTrackerID)
+        customTrackerName = try c.decodeIfPresent(String.self, forKey: .customTrackerName)
     }
 
     var isOverdue: Bool { dueDate.map { $0 < .now && progress < 1 } ?? false }
@@ -820,6 +829,15 @@ final class PlanStore {
         return String(match.output)
     }
 
+    /// The id to analyze. Custom trackers aren't limited to KEY-123 ids: a numeric id, a slug
+    /// or a pasted link is passed through for the model to look up.
+    static func ticketKey(_ input: String, tracker: Tracker) -> String? {
+        if let key = extractKey(input) { return key }
+        guard tracker == .custom else { return nil }
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(300))
+    }
+
     private(set) var runningMode: TestMode = .dev
     private(set) var runningTracker: Tracker = .jira
 
@@ -829,13 +847,17 @@ final class PlanStore {
     }
 
     /// `mode`/`tracker` default to the toggle and link detection; re-runs pass the plan's own.
-    func analyze(_ input: String, mode: TestMode? = nil, tracker: Tracker? = nil,
+    func analyze(_ input: String, mode: TestMode? = nil, tracker: Tracker? = nil, customTracker: UUID? = nil,
                  template: PlanGenerator.PlanTemplate? = nil,
                  modelOverride: String? = nil, effortOverride: String? = nil,
                  settings: AppSettings) {
         let mode = mode ?? settings.mode
-        let tracker = tracker ?? settings.tracker(for: input)
-        guard let key = Self.extractKey(input) else {
+        let routed = settings.route(input)
+        let tracker = tracker ?? routed.tracker
+        let server = tracker == .custom
+            ? (settings.customTrackers.first { $0.id == customTracker } ?? routed.custom ?? settings.trackerServers.first)
+            : nil
+        guard let key = Self.ticketKey(input, tracker: tracker) else {
             error = "That doesn't look like a Jira key (e.g. PROJ-1234)."
             return
         }
@@ -843,7 +865,7 @@ final class PlanStore {
             error = "Set up an AI provider in \(Platform.settingsName) — \(settings.provider.label) needs \(settings.provider.requiresKey ? "an API key and " : "")a model."
             return
         }
-        guard settings.isConfigured(tracker) else {
+        guard tracker == .custom ? server != nil : settings.isConfigured(tracker) else {
             error = "Connect \(tracker.label) in \(Platform.settingsName) to analyze \(tracker.label) issues."
             return
         }
@@ -862,7 +884,7 @@ final class PlanStore {
 
         task = Task {
             do {
-                let saved = try await self.runSingle(key: key, mode: mode, tracker: tracker,
+                let saved = try await self.runSingle(key: key, mode: mode, tracker: tracker, customServer: server,
                                                      settings: settings, targetFolder: targetFolder, startedAt: startedAt,
                                                      template: template,
                                                      modelOverride: modelOverride, effortOverride: effortOverride)
@@ -878,7 +900,8 @@ final class PlanStore {
     /// Shared single-plan runner: research via the generator, then merge with
     /// any previous run (ticks, verdicts, tags, folder survive). Used by both
     /// `analyze()` and the batch queue. Reports progress into the shared feed.
-    private func runSingle(key: String, mode: TestMode, tracker: Tracker, settings: AppSettings,
+    private func runSingle(key: String, mode: TestMode, tracker: Tracker, customServer: CustomMCPTracker? = nil,
+                           settings: AppSettings,
                            targetFolder: UUID?, startedAt: Date,
                            template: PlanGenerator.PlanTemplate? = nil,
                            modelOverride: String? = nil, effortOverride: String? = nil) async throws -> SavedPlan {
@@ -887,7 +910,7 @@ final class PlanStore {
         if let effortOverride { cfg.effort = effortOverride }
         let generator = PlanGenerator(
             llm: cfg,
-            mcp: settings.makeMCPClient(for: tracker),
+            mcp: customServer.flatMap { settings.makeMCPClient(forCustom: $0) } ?? settings.makeMCPClient(for: tracker),
             site: settings.siteHost,
             mode: mode,
             tracker: tracker,
@@ -898,9 +921,15 @@ final class PlanStore {
         generatorWithScenarios.scenarios = settings.scenarioMode
         generatorWithScenarios.houseRules = settings.houseRules
         generatorWithScenarios.templateOverride = template
-        generatorWithScenarios.researchSources = settings.customTrackers
-            .filter(\.useForResearch)
-            .compactMap { t in settings.makeMCPClient(forCustom: t).map { (t.displayName, $0) } }
+        generatorWithScenarios.trackerName = customServer?.displayName ?? ""
+        generatorWithScenarios.researchSources = settings.activeResearchSources
+            .filter { $0.id != customServer?.id }
+            .compactMap { source in
+                settings.makeMCPClient(forCustom: source).map { client in
+                    PlanGenerator.ResearchSource(name: source.displayName, notes: source.notes, client: client,
+                                                 allows: { source.allows($0) })
+                }
+            }
         let codebaseURL = settings.scenarioMode == .ticketsAndCode ? settings.openCodebase() : nil
         if let codebaseURL { generatorWithScenarios.codebase = CodebaseTools(root: codebaseURL) }
         let runGenerator = generatorWithScenarios
@@ -914,6 +943,8 @@ final class PlanStore {
         let keepable = Set(plan.tasks.map(\.id) + plan.scenarios.map { "scenario:" + $0.id })
         let kept = previous?.done.intersection(keepable) ?? []
         var saved = SavedPlan(plan: plan, mode: mode, tracker: tracker, createdAt: .now, done: kept)
+        saved.customTrackerID = customServer?.id
+        saved.customTrackerName = customServer?.displayName
         saved.metCriteria = previous?.metCriteria.intersection(plan.acceptanceCriteria.map(\.id)) ?? []
         saved.failed = (previous?.failed ?? [:]).filter { keepable.contains($0.key) }
         saved.blocked = (previous?.blocked ?? [:]).filter { keepable.contains($0.key) }
@@ -960,16 +991,18 @@ final class PlanStore {
 
     /// Runs `inputs` one at a time into a new folder. Invalid keys are skipped
     /// up front; per-plan failures are collected and summarized at the end.
-    func startBatch(inputs: [String], mode: TestMode, tracker: Tracker, settings: AppSettings,
-                    folderName: String, template: PlanGenerator.PlanTemplate? = nil) {
+    func startBatch(inputs: [String], mode: TestMode, tracker: Tracker, customTracker: UUID? = nil,
+                    settings: AppSettings, folderName: String, template: PlanGenerator.PlanTemplate? = nil) {
         cancelBatch(silent: true)
-        let keys = inputs.compactMap(Self.extractKey)
+        let server = tracker == .custom ? settings.customTrackers.first { $0.id == customTracker } : nil
+        var seen = Set<String>()
+        let keys = inputs.compactMap { Self.ticketKey($0, tracker: tracker) }.filter { seen.insert($0).inserted }
         guard !keys.isEmpty else {
             error = "No ticket keys found in that input."
             return
         }
-        guard settings.isLLMConfigured, settings.isConfigured(tracker) else {
-            error = "Connect an AI provider and \(tracker.label) in \(Platform.settingsName) first."
+        guard settings.isLLMConfigured, tracker == .custom ? server != nil : settings.isConfigured(tracker) else {
+            error = "Connect an AI provider and \(server?.displayName ?? tracker.label) in \(Platform.settingsName) first."
             return
         }
         let folder = createFolder(named: folderName, in: selectedFolder?.id ?? selected?.folderID)
@@ -990,7 +1023,7 @@ final class PlanStore {
                 runningMode = mode
                 runningTracker = tracker
                 do {
-                    _ = try await self.runSingle(key: key, mode: mode, tracker: tracker,
+                    _ = try await self.runSingle(key: key, mode: mode, tracker: tracker, customServer: server,
                                                  settings: settings, targetFolder: folder.id, startedAt: startedAt,
                                                  template: template)
                 } catch is CancellationError {

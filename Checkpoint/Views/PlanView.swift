@@ -339,7 +339,7 @@ struct PlanView: View {
     private func rerun() {
         if saved.preset == "quick" {
             let q = PlanStore.quickOverrides(settings: settings)
-            store.analyze(plan.ticket.key, mode: saved.mode, tracker: saved.tracker,
+            store.analyze(plan.ticket.key, mode: saved.mode, tracker: saved.tracker, customTracker: saved.customTrackerID,
                           modelOverride: q.model, effortOverride: q.effort, settings: settings)
         } else {
             rerunDeep()
@@ -347,7 +347,7 @@ struct PlanView: View {
     }
 
     private func rerunDeep() {
-        store.analyze(plan.ticket.key, mode: saved.mode, tracker: saved.tracker, settings: settings)
+        store.analyze(plan.ticket.key, mode: saved.mode, tracker: saved.tracker, customTracker: saved.customTrackerID, settings: settings)
     }
 
     private func remind(days: Int) {

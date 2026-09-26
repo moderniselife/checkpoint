@@ -39,6 +39,18 @@ final class AppSettings {
         didSet { persistCustomTrackers() }
     }
 
+    /// Custom servers that hold tickets.
+    var trackerServers: [CustomMCPTracker] { customTrackers.filter { $0.role == .tracker } }
+    /// Custom servers the planner can use while researching (Obsidian, Corellium…).
+    var researchTools: [CustomMCPTracker] { customTrackers.filter { $0.role == .research } }
+    /// Servers offered during research: switched-on research tools, plus trackers marked for it.
+    var activeResearchSources: [CustomMCPTracker] { customTrackers.filter(\.useForResearch) }
+
+    /// When set, bare keys go to this custom tracker instead of Jira/Linear.
+    var defaultCustomTrackerID: UUID? {
+        didSet { UserDefaults.standard.set(defaultCustomTrackerID?.uuidString, forKey: "defaultCustomTracker") }
+    }
+
     // MARK: AI provider
 
     var provider: LLMProvider { didSet { UserDefaults.standard.set(provider.rawValue, forKey: "llmProvider") } }
@@ -124,6 +136,7 @@ final class AppSettings {
         linearUser = MCPOAuth.linear.isSignedIn ? d.string(forKey: "linearUser") ?? "Signed in" : nil
         defaultTracker = Tracker(rawValue: d.string(forKey: "defaultTracker") ?? "") ?? .jira
         customTrackers = Self.loadCustomTrackers()
+        defaultCustomTrackerID = d.string(forKey: "defaultCustomTracker").flatMap(UUID.init)
     }
 
     var isLinearConfigured: Bool {
@@ -134,20 +147,48 @@ final class AppSettings {
     }
 
     func isConfigured(_ tracker: Tracker) -> Bool {
-        tracker == .jira ? isAtlassianConfigured : isLinearConfigured
+        switch tracker {
+        case .jira: isAtlassianConfigured
+        case .linear: isLinearConfigured
+        case .custom: !trackerServers.isEmpty
+        }
     }
 
-    var connectedTrackers: [Tracker] { Tracker.allCases.filter(isConfigured) }
+    /// Jira and/or Linear, whichever are connected.
+    var connectedTrackers: [Tracker] { Tracker.builtIn.filter(isConfigured) }
 
     /// Tracker for an input: link wins, else the only connected one, else the default.
-    func tracker(for input: String) -> Tracker {
-        if let t = Tracker.detect(in: input) { return t }
+    func tracker(for input: String) -> Tracker { route(input).tracker }
+
+    /// Where an input goes: a pasted link or match hint wins, then the default for bare keys.
+    func route(_ input: String) -> (tracker: Tracker, custom: CustomMCPTracker?) {
+        if let t = Tracker.detect(in: input) { return (t, nil) }
+        if let server = customTracker(for: input) { return (.custom, server) }
+        if let id = defaultCustomTrackerID, let server = trackerServers.first(where: { $0.id == id }) {
+            return (.custom, server)
+        }
         let connected = connectedTrackers
-        return connected.count == 1 ? connected[0] : defaultTracker
+        if connected.isEmpty, let only = trackerServers.first, trackerServers.count == 1 { return (.custom, only) }
+        return (connected.count == 1 ? connected[0] : defaultTracker, nil)
     }
 
     func makeMCPClient(for tracker: Tracker) -> MCPClient {
-        tracker == .jira ? makeMCPClient() : makeLinearClient()
+        switch tracker {
+        case .jira: makeMCPClient()
+        case .linear: makeLinearClient()
+        case .custom:
+            // Callers with a specific server use makeMCPClient(forCustom:); this is the default one.
+            (trackerServers.first { $0.id == defaultCustomTrackerID } ?? trackerServers.first)
+                .flatMap { makeMCPClient(forCustom: $0) } ?? makeMCPClient()
+        }
+    }
+
+    func makeMCPClient(for tracker: Tracker, customID: UUID?) -> MCPClient {
+        if tracker == .custom, let id = customID, let server = customTrackers.first(where: { $0.id == id }),
+           let client = makeMCPClient(forCustom: server) {
+            return client
+        }
+        return makeMCPClient(for: tracker)
     }
 
     /// Linear's read-only MCP endpoint: the server itself refuses any write.
@@ -225,11 +266,16 @@ final class AppSettings {
         Keychain.set(token, for: tracker.keychainAccount)
     }
 
-    func addCustomTracker(name: String, endpoint: String, matchHint: String = "", token: String = "") {
-        let t = CustomMCPTracker(name: name, endpoint: endpoint, matchHint: matchHint)
+    @discardableResult
+    func addCustomTracker(name: String, endpoint: String, matchHint: String = "", token: String = "",
+                          role: CustomMCPTracker.Role = .tracker, notes: String = "") -> CustomMCPTracker {
+        // Research tools are useful straight away; trackers opt in to double as a research source.
+        let t = CustomMCPTracker(name: name, endpoint: endpoint, matchHint: matchHint,
+                                 useForResearch: role == .research, role: role, notes: notes)
         // Token goes to Keychain, not UserDefaults.
         customTrackers.append(t)
         if !token.isEmpty { Keychain.set(token, for: t.keychainAccount) }
+        return t
     }
 
     func updateCustomTracker(_ tracker: CustomMCPTracker) {
@@ -239,6 +285,7 @@ final class AppSettings {
 
     func removeCustomTracker(_ tracker: CustomMCPTracker) {
         customTrackers.removeAll { $0.id == tracker.id }
+        if defaultCustomTrackerID == tracker.id { defaultCustomTrackerID = nil }
         Keychain.set("", for: tracker.keychainAccount)
     }
 
@@ -257,7 +304,7 @@ final class AppSettings {
     /// Route free-form input to a custom tracker via its match hint.
     func customTracker(for input: String) -> CustomMCPTracker? {
         let s = input.lowercased()
-        return customTrackers.first { t in
+        return trackerServers.first { t in
             !t.matchHint.isEmpty && s.contains(t.matchHint.lowercased())
         }
     }
