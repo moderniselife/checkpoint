@@ -86,10 +86,17 @@ struct MobileRootView: View {
                         }
                     }
             }
+            // A sheet can't be shown from under this one, so tickets tapped in the feed open here.
+            .sheet(isPresented: Binding(get: { inspector.isOpen }, set: { if !$0 { inspector.close() } })) {
+                TicketPanel()
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
             .presentationDetents([.medium, .large])
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
-        .sheet(isPresented: Binding(get: { inspector.isOpen }, set: { if !$0 { inspector.close() } })) {
+        .sheet(isPresented: Binding(get: { inspector.isOpen && !(phone && store.isRunning) },
+                                    set: { if !$0 { inspector.close() } })) {
             TicketPanel()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)

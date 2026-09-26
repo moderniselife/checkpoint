@@ -39,6 +39,32 @@ extension AppSettings {
         return user["displayName"]?.stringValue ?? user["name"]?.stringValue
     }
 
+    /// Models the current provider actually offers.
+    func listModels() async throws -> [String] {
+        let config = llmConfig
+        switch config.provider.style {
+        case .anthropic:
+            return try await ClaudeClient(apiKey: config.apiKey, baseURL: config.baseURL,
+                                          sendBearer: config.provider != .anthropic).listModels()
+        case .openAIChat:
+            return try await OpenAIChatClient(provider: config.provider, apiKey: config.apiKey,
+                                              baseURL: config.baseURL).listModels()
+        }
+    }
+
+    /// Fetches the model list and, if the chosen model isn't on it (a local server that
+    /// doesn't have the default `llama3.1`, say), switches to one that is.
+    @discardableResult
+    func refreshModels() async throws -> [String] {
+        let models = try await listModels()
+        if let first = models.first, !models.contains(model) {
+            // Prefer something chat-shaped over embedding models when a local server lists both.
+            model = models.first { !$0.localizedCaseInsensitiveContains("embed") } ?? first
+        }
+        if !quickModel.isEmpty, !models.isEmpty, !models.contains(quickModel) { quickModel = "" }
+        return models
+    }
+
     /// Sends a tiny prompt to prove the key, URL and model work. Returns the model's reply.
     func testModel() async throws -> String {
         let config = llmConfig

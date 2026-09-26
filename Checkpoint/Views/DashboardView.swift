@@ -46,7 +46,7 @@ struct DashboardView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top, spacing: 20) {
+                AdaptiveHeader {
                     VStack(alignment: .leading, spacing: 8) {
                         Label {
                             Text("Dashboard").font(.largeTitle.weight(.semibold))
@@ -58,7 +58,7 @@ struct DashboardView: View {
                              : "\(touched.count) plan\(touched.count == 1 ? "" : "s") worked on in the last 7 days")
                             .foregroundStyle(.secondary)
                     }
-                    Spacer(minLength: 0)
+                } trailing: {
                     HStack(spacing: 16) {
                         MetricRing(value: tasksTotal == 0 ? 0 : Double(tasksPassed) / Double(tasksTotal),
                                    label: "tested", text: "\(tasksPassed)/\(tasksTotal)")
@@ -69,7 +69,7 @@ struct DashboardView: View {
                 .padding(24)
                 .glassEffect(.regular.tint(.indigo.opacity(0.08)), in: .rect(cornerRadius: 28))
 
-                HStack(spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                     StatTile(value: touched.count, label: "plans touched", icon: "tray.full", tint: .indigo)
                     StatTile(value: inProgress.count, label: "in progress", icon: "hourglass", tint: .orange)
                     StatTile(value: touched.reduce(0) { $0 + $1.failedCount }, label: "failed tasks",
@@ -148,6 +148,8 @@ private struct StatTile: View {
                 Text("\(value)").font(.title2.weight(.semibold).monospacedDigit())
                 Text(label).font(.caption).foregroundStyle(.secondary)
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
             Spacer(minLength: 0)
         }
         .padding(14)

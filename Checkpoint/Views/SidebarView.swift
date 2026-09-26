@@ -552,7 +552,7 @@ struct SmartFolderOverview: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top, spacing: 20) {
+                AdaptiveHeader {
                     VStack(alignment: .leading, spacing: 8) {
                         Label {
                             Text(smart.name).font(.largeTitle.weight(.semibold))
@@ -569,7 +569,7 @@ struct SmartFolderOverview: View {
                         .buttonStyle(.glass)
                         .controlSize(.small)
                     }
-                    Spacer(minLength: 0)
+                } trailing: {
                     HStack(spacing: 16) {
                         MetricRing(value: tasksTotal == 0 ? 0 : Double(tasksDone) / Double(tasksTotal),
                                    label: "tested", text: "\(tasksDone)/\(tasksTotal)")
