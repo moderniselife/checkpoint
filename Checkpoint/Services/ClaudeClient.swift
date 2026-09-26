@@ -97,11 +97,15 @@ nonisolated struct ClaudeClient: Sendable {
     /// Streams a Messages request over SSE, reporting progress, and returns the
     /// reassembled message (content blocks — including thinking signatures and
     /// tool inputs — exactly as the non-streaming API would return them).
+    /// `thinkingBudget` caps thinking characters (local Anthropic-compatible
+    /// servers can yap forever); when hit, the turn ends early and the flag
+    /// reports it. Answer text is never capped.
     func streamMessage(
         _ body: JSONValue,
         betas: [String],
+        thinkingBudget: Int? = nil,
         onEvent: @Sendable (StreamEvent) async -> Void
-    ) async throws -> JSONValue {
+    ) async throws -> (message: JSONValue, thinkingBudgetHit: Bool) {
         var streamingBody = body
         if case .object(var o) = streamingBody { o["stream"] = true; streamingBody = .object(o) }
 
@@ -118,7 +122,7 @@ nonisolated struct ClaudeClient: Sendable {
         while true {
             let (bytes, response) = try await Self.session.bytes(for: req)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if status == 200 { return try await assemble(bytes, onEvent: onEvent) }
+            if status == 200 { return try await assemble(bytes, thinkingBudget: thinkingBudget, onEvent: onEvent) }
             var body = ""
             for try await line in bytes.lines { body += line; if body.count > 4000 { break } }
             if [429, 500, 502, 503, 504, 529].contains(status), attempt < 3 {
@@ -132,13 +136,16 @@ nonisolated struct ClaudeClient: Sendable {
 
     private func assemble(
         _ bytes: URLSession.AsyncBytes,
+        thinkingBudget: Int?,
         onEvent: @Sendable (StreamEvent) async -> Void
-    ) async throws -> JSONValue {
+    ) async throws -> (JSONValue, Bool) {
         var message: [String: JSONValue] = [:]
         var blocks: [Int: [String: JSONValue]] = [:]
         var partialJSON: [Int: String] = [:]
         var textCount = 0
+        var thinkingCount = 0
         var lastReported = 0
+        var budgetHit = false
 
         func appendString(_ i: Int, _ key: String, _ add: String) {
             let cur = blocks[i]?[key]?.stringValue ?? ""
@@ -147,6 +154,7 @@ nonisolated struct ClaudeClient: Sendable {
 
         for try await line in bytes.lines {
             try Task.checkCancellation()
+            if budgetHit { break }
             guard line.hasPrefix("data:") else { continue }
             let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
             guard let event = try? JSONCoding.decoder.decode(JSONValue.self, from: Data(payload.utf8)) else { continue }
@@ -170,6 +178,11 @@ nonisolated struct ClaudeClient: Sendable {
                     }
                 case "thinking_delta":
                     let t = delta?["thinking"]?.stringValue ?? ""
+                    thinkingCount += t.count
+                    if let budget = thinkingBudget, thinkingCount > budget {
+                        budgetHit = true
+                        break
+                    }
                     appendString(index, "thinking", t)
                     await onEvent(.thinking(index: index, text: blocks[index]?["thinking"]?.stringValue ?? ""))
                 case "signature_delta":
@@ -198,6 +211,6 @@ nonisolated struct ClaudeClient: Sendable {
         }
         if textCount != lastReported { await onEvent(.writing(characters: textCount)) }
         message["content"] = .array(blocks.keys.sorted().compactMap { blocks[$0].map(JSONValue.object) })
-        return .object(message)
+        return (.object(message), budgetHit)
     }
 }

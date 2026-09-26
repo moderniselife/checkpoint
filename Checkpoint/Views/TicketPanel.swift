@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 /// Floating Liquid Glass panel on the right showing everything about one ticket.
 struct TicketPanel: View {
@@ -11,6 +10,12 @@ struct TicketPanel: View {
             TicketTabStrip()
             pane
         }
+        #if os(iOS)
+        // In a sheet: clear of the grabber and the rounded corners.
+        .padding(.top, 22)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 8)
+        #endif
         .background {
             // ⌃Tab / ⌃⇧Tab cycle through open tickets.
             Group {
@@ -29,6 +34,12 @@ struct TicketPanel: View {
                 if let key = inspector.currentKey {
                     switch inspector.currentState {
                     case .loaded(let detail): TicketDetailView(detail: detail)
+                    case .sample:
+                        ContentUnavailableView {
+                            Label("\(key) is a sample", systemImage: "doc.text.magnifyingglass")
+                        } description: {
+                            Text("The sample plan isn't a real ticket, so there's nothing to fetch. For your own Jira and Linear tickets this panel shows everything: description, comments, attachments, children and history.")
+                        }
                     case .failed(let msg):
                         ContentUnavailableView {
                             Label("Couldn't load \(key)", systemImage: "exclamationmark.triangle")
@@ -77,13 +88,12 @@ struct TicketPanel: View {
                 .help("Refresh")
             if let url = currentURL {
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    Platform.copy(url.absoluteString)
                 } label: { Image(systemName: "link") }
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                     .help("Copy link")
-                Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.right") }
+                Button { Platform.open(url) } label: { Image(systemName: "arrow.up.right") }
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                     .help("Open in \(inspector.current?.tracker.label ?? "tracker")")
@@ -153,7 +163,7 @@ private struct TicketDetailView: View {
 
                 if !detail.children.isEmpty {
                     PanelCard(title: "Child issues (\(detail.children.count))", icon: "list.bullet.indent") {
-                        ChildIssuesView(children: detail.children)
+                        ChildIssuesView(children: detail.children, parentKey: detail.key, tracker: detail.tracker)
                     }
                 }
 
@@ -491,7 +501,7 @@ private struct AttachmentsGrid: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 10)], spacing: 10) {
                 ForEach(attachments) { a in
                     AttachmentTile(attachment: a) {
-                        if a.isImage { preview = a } else if let url = settings.browserURL(for: a) { NSWorkspace.shared.open(url) }
+                        if a.isImage { preview = a } else if let url = settings.browserURL(for: a) { Platform.open(url) }
                     }
                 }
             }
@@ -508,7 +518,7 @@ private struct AttachmentTile: View {
     let attachment: TicketDetail.Attachment
     let action: () -> Void
     @Environment(AppSettings.self) private var settings
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
 
     var body: some View {
         Button(action: action) {
@@ -516,7 +526,7 @@ private struct AttachmentTile: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10).fill(.quaternary.opacity(0.5))
                     if let image {
-                        Image(nsImage: image).resizable().scaledToFill()
+                        Image(platformImage: image).resizable().scaledToFill()
                     } else {
                         Image(systemName: icon).font(.title).foregroundStyle(.secondary)
                     }
@@ -533,7 +543,7 @@ private struct AttachmentTile: View {
         .task(id: attachment.id) {
             guard attachment.isImage else { return }
             if let data = await AttachmentLoader.shared.data(for: attachment, full: false, creds: settings.attachmentCredentials) {
-                image = NSImage(data: data)
+                image = PlatformImage(data: data)
             }
         }
     }
@@ -553,7 +563,7 @@ private struct AttachmentPreview: View {
     let attachment: TicketDetail.Attachment
     @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
     @State private var failed = false
 
     var body: some View {
@@ -571,7 +581,7 @@ private struct AttachmentPreview: View {
             Group {
                 if let image {
                     ScrollView([.horizontal, .vertical]) {
-                        Image(nsImage: image).resizable().scaledToFit()
+                        Image(platformImage: image).resizable().scaledToFit()
                             .frame(maxWidth: max(image.size.width, 400))
                     }
                 } else if failed {
@@ -586,7 +596,7 @@ private struct AttachmentPreview: View {
         .frame(minWidth: 640, minHeight: 480)
         .task {
             if let data = await AttachmentLoader.shared.data(for: attachment, full: true, creds: settings.attachmentCredentials) {
-                image = NSImage(data: data)
+                image = PlatformImage(data: data)
             } else {
                 failed = true
             }
@@ -607,7 +617,7 @@ private struct ExternalLinkRow: View {
     let link: TicketDetail.ExternalLink
 
     var body: some View {
-        Button { NSWorkspace.shared.open(link.url) } label: {
+        Button { Platform.open(link.url) } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon).foregroundStyle(.tint).frame(width: 18)
                 VStack(alignment: .leading, spacing: 1) {
@@ -721,7 +731,7 @@ private struct TicketTab: View {
             Button("Close Other Tabs") { inspector.closeOtherTabs(ref) }
             if let url = detail?.webURL ?? (ref.tracker == .jira ? settings.browseURL(for: ref.key) : nil) {
                 Divider()
-                Button("Open in \(ref.tracker.label)") { NSWorkspace.shared.open(url) }
+                Button("Open in \(ref.tracker.label)") { Platform.open(url) }
             }
         }
     }
@@ -739,7 +749,12 @@ private struct TicketTab: View {
 /// Epic children with a done / in-progress / to-do breakdown and a filter.
 private struct ChildIssuesView: View {
     let children: [TicketDetail.LinkedIssue]
+    var parentKey: String = ""
+    var tracker: Tracker = .jira
+    @Environment(PlanStore.self) private var store
+    @Environment(AppSettings.self) private var settings
     @State private var filter = "all"
+    @State private var showingBatch = false
 
     private var counts: (done: Int, active: Int, todo: Int) {
         (children.filter { $0.category == "done" }.count,
@@ -780,6 +795,16 @@ private struct ChildIssuesView: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(shown) { LinkedRow(issue: $0) }
             }
+            Button("Plan each child", systemImage: "tray.and.arrow.down") { showingBatch = true }
+                .buttonStyle(.glass)
+                .controlSize(.small)
+                .disabled(store.batchRunning)
+        }
+        .sheet(isPresented: $showingBatch) {
+            BatchSheet(initialKeys: children.map(\.key), initialTracker: tracker,
+                       initialFolderName: "\(parentKey) children")
+                .environment(store)
+                .environment(settings)
         }
     }
 }

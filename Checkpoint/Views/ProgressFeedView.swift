@@ -3,6 +3,10 @@ import SwiftUI
 struct ProgressFeedView: View {
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
+    /// Follows the bottom only while the user is already there. Scrolling up
+    /// to read (or to collapse a long thought) pauses auto-scroll; scrolling
+    /// back down resumes it.
+    @State private var pinnedToBottom = true
 
     /// Consecutive tool calls are grouped into one wrapping row of chips.
     private enum Segment: Identifiable {
@@ -71,13 +75,19 @@ struct ProgressFeedView: View {
                 .environment(\.ticketTracker, store.runningTracker)
                 .animation(.smooth(duration: 0.3), value: store.feed)
                 .frame(maxWidth: 720, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.top, 96)
+                .padding(.horizontal, PageLayout.side)
+                .padding(.top, PageLayout.feedTop)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity)
             }
             .glassScrollIndicator()
+            .onScrollGeometryChange(for: CGFloat.self, of: { geo in
+                max(0, geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height)
+            }, action: { _, distanceFromBottom in
+                pinnedToBottom = distanceFromBottom < 60
+            })
             .onChange(of: store.feed) {
+                guard pinnedToBottom else { return }
                 withAnimation(.smooth) { proxy.scrollTo("bottom", anchor: .bottom) }
             }
         }
@@ -222,7 +232,8 @@ struct FeedRow: View {
                 .disabled(key == nil)
                 .help(key.map { "Show \($0) details" } ?? "")
         case .thinking:
-            let multiline = item.detail.contains("\n") || item.detail.count > 90
+            // Anything past a short line can be cut off on a phone, so let it expand.
+            let multiline = item.detail.contains("\n") || item.detail.count > 60
             VStack(alignment: .leading, spacing: 6) {
                 Button {
                     withAnimation(.smooth) { expanded.toggle() }
@@ -230,8 +241,10 @@ struct FeedRow: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "brain")
                             .symbolEffect(.pulse, options: .repeating, isActive: isLive)
-                        Text(expanded ? "Thinking" : item.title)
-                            .lineLimit(1)
+                        // Collapsed rows show the thought itself, filling the row's width.
+                        Text(expanded ? "Thinking" : preview)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if multiline {
                             Image(systemName: "chevron.right")
@@ -262,6 +275,12 @@ struct FeedRow: View {
         }
     }
 
+    /// First line of the thought, falling back to its title.
+    private var preview: String {
+        let line = item.detail.split(separator: "\n").first.map(String.init) ?? ""
+        return line.trimmingCharacters(in: .whitespaces).isEmpty ? item.title : line
+    }
+
     private func toolChip(key: String?) -> some View {
         HStack(spacing: 10) {
             Group {
@@ -275,14 +294,18 @@ struct FeedRow: View {
             .frame(width: 16)
             .transition(.scale.combined(with: .opacity))
             Text(item.title)
+                .lineLimit(1)
+                .fixedSize()
             if !item.detail.isEmpty {
                 Text(item.detail)
                     .font(.callout.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    // Ticket keys and other short details are never cut.
+                    .fixedSize(horizontal: item.detail.count <= 20, vertical: false)
             }
-            if key != nil {
+            if key != nil && Platform.isMac {
                 Image(systemName: "sidebar.right").font(.caption).foregroundStyle(.tertiary)
             }
         }

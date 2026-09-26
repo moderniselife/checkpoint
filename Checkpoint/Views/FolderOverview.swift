@@ -4,6 +4,7 @@ import SwiftUI
 struct FolderOverview: View {
     let folder: PlanFolder
     @Environment(PlanStore.self) private var store
+    @State private var showingSuite = false
 
     var body: some View {
         let all = store.allPlans(under: folder.id)
@@ -16,7 +17,7 @@ struct FolderOverview: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Header
-                HStack(alignment: .top, spacing: 20) {
+                AdaptiveHeader {
                     VStack(alignment: .leading, spacing: 8) {
                         breadcrumb
                         Label {
@@ -26,8 +27,15 @@ struct FolderOverview: View {
                         }
                         Text("\(all.count) plan\(all.count == 1 ? "" : "s") · \(finished) fully tested")
                             .foregroundStyle(.secondary)
+                        Button("Build regression suite", systemImage: "square.stack.3d.up") {
+                            showingSuite = true
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                        .disabled(all.isEmpty)
+                        .help("Merge plans into one deduplicated run (IDEA-015)")
                     }
-                    Spacer(minLength: 0)
+                } trailing: {
                     HStack(spacing: 16) {
                         MetricRing(value: tasksTotal == 0 ? 0 : Double(tasksDone) / Double(tasksTotal),
                                    label: "tested", text: "\(tasksDone)/\(tasksTotal)")
@@ -69,12 +77,17 @@ struct FolderOverview: View {
                 }
             }
             .frame(maxWidth: 820, alignment: .leading)
-            .padding(.horizontal, 28)
-            .padding(.top, 92)
+            .padding(.horizontal, PageLayout.side)
+            .padding(.top, PageLayout.top)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
         .glassScrollIndicator()
+        .drivesScrollChrome()
+        .sheet(isPresented: $showingSuite) {
+            SuiteBuilderSheet(folder: folder)
+                .environment(store)
+        }
     }
 
     private var breadcrumb: some View {

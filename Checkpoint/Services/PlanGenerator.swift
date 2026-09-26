@@ -41,6 +41,15 @@ nonisolated struct PlanGenerator: Sendable {
     let tracker: Tracker
     /// Hosted app URL/name QA tests against (optional).
     let environment: String
+    /// Extra read-only MCP research sources (IDEA-065): docs, wikis, specs.
+    var researchSources: [(name: String, client: MCPClient)] = []
+    /// Tool name → owning client, built in run().
+    // Internal (not private) so the memberwise initializer stays usable from PlanStore.
+    var toolOwners: [String: MCPClient] = [:]
+    /// Team-wide extra instructions appended to the prompt (IDEA-009).
+    var houseRules: String = ""
+    /// Forced plan shape (IDEA-010); nil = let the ticket type decide.
+    var templateOverride: PlanTemplate? = nil
     /// Optional end-to-end scenarios; `.ticketsAndCode` needs `codebase`.
     var scenarios: ScenarioMode = .off
     /// Read-only local codebase for scenario research.
@@ -52,7 +61,13 @@ nonisolated struct PlanGenerator: Sendable {
     }
 
     private var prompt: String {
-        Self.systemPrompt(for: mode, tracker: tracker) + Self.scenarioPrompt(effectiveScenarios, mode: mode)
+        var p = Self.systemPrompt(for: mode, tracker: tracker, template: templateOverride)
+            + Self.scenarioPrompt(effectiveScenarios, mode: mode)
+        let rules = houseRules.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !rules.isEmpty {
+            p += "\n\nTeam house rules (always follow):\n\(rules)"
+        }
+        return p
     }
 
     private static let maxTurns = 30
@@ -77,7 +92,7 @@ nonisolated struct PlanGenerator: Sendable {
         let isError: Bool
     }
 
-    func run(ticketKey: String, onEvent: @Sendable (Event) async -> Void) async throws -> TestPlan {
+    func run(ticketKey: String, onEvent: @Sendable (Event) async -> Void) async throws -> (plan: TestPlan, usage: LLMUsage) {
         await onEvent(.status("Connecting to \(tracker == .jira ? "Atlassian" : "Linear")…"))
         let listed = tracker == .jira ? try await mcp.authenticatedTools() : try await mcp.listTools()
         // Jira: expose only read tools. Linear: the /mcp/readonly endpoint only lists
@@ -85,6 +100,17 @@ nonisolated struct PlanGenerator: Sendable {
         var tools = listed
             .filter { tracker == .linear || Self.isReadOnly($0.name) }
             .sorted { $0.name < $1.name }
+        // Extra research sources (IDEA-065): read-only tools only, failures skipped.
+        var owners: [String: MCPClient] = [:]
+        for source in researchSources {
+            guard let extra = try? await source.client.listTools() else { continue }
+            for tool in extra where Self.isReadOnly(tool.name) && !tools.contains(where: { $0.name == tool.name }) {
+                tools.append(tool)
+                owners[tool.name] = source.client
+            }
+        }
+        var runner = self
+        runner.toolOwners = owners
         if effectiveScenarios == .ticketsAndCode { tools += CodebaseTools.tools }
         if scenarios == .ticketsAndCode && codebase == nil {
             await onEvent(.status("No codebase folder set — building scenarios from tickets only."))
@@ -103,20 +129,24 @@ nonisolated struct PlanGenerator: Sendable {
         if mode == .qa, !environment.isEmpty {
             request += "\nHosted environment under test: \(environment). Unless the tickets say otherwise, write the plan for this environment."
         }
+        if !researchSources.isEmpty {
+            request += "\nExtra research sources are available as tools (\(researchSources.map(\.name).joined(separator: ", "))): use them for specs and docs, and cite findings in task sources."
+        }
 
         await onEvent(.status("Reading \(ticketKey) with \(llm.provider.shortLabel)…"))
         switch llm.provider.style {
-        case .anthropic: return try await runAnthropic(tools: tools, request: request, onEvent: onEvent)
-        case .openAIChat: return try await runOpenAI(tools: tools, request: request, onEvent: onEvent)
+        case .anthropic: return try await runner.runAnthropic(tools: tools, request: request, onEvent: onEvent)
+        case .openAIChat: return try await runner.runOpenAI(tools: tools, request: request, onEvent: onEvent)
         }
     }
 
     // MARK: - Anthropic Messages engine
 
     private func runAnthropic(tools: [MCPClient.Tool], request: String,
-                              onEvent: @Sendable (Event) async -> Void) async throws -> TestPlan {
+                              onEvent: @Sendable (Event) async -> Void) async throws -> (TestPlan, LLMUsage) {
         let native = llm.provider == .anthropic
         let claude = ClaudeClient(apiKey: llm.apiKey, baseURL: llm.baseURL, sendBearer: !native)
+        var usage = LLMUsage()
         let toolDefs: [JSONValue] = tools.map {
             ["name": .string($0.name), "description": .string($0.description), "input_schema": Self.cleanSchema($0.inputSchema, strict: false)]
         }
@@ -124,6 +154,7 @@ nonisolated struct PlanGenerator: Sendable {
         let system = prompt + (native ? "" : Self.jsonInstruction)
         var messages: [JSONValue] = [["role": "user", "content": .string(request)]]
         let usesFallbacks = native && (llm.model.hasPrefix("claude-opus") || llm.model.hasPrefix("claude-fable"))
+        var retriedFinal = false
 
         for turn in 1...Self.maxTurns {
             try Task.checkCancellation()
@@ -146,16 +177,29 @@ nonisolated struct PlanGenerator: Sendable {
             }
 
             // Streamed so thinking and plan-writing progress show live on long epics.
-            let response = try await claude.streamMessage(
-                .object(body), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : []
+            let (response, thinkingBudgetHit) = try await claude.streamMessage(
+                .object(body), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : [],
+                thinkingBudget: Self.thinkingBudget(for: llm.effort)
             ) { event in
                 switch event {
                 case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
                 case .writing(let n): await onEvent(.writing(characters: n))
                 }
             }
+            usage.add(Self.responseUsage(response))
             let content = response["content"]?.arrayValue ?? []
             let stopReason = response["stop_reason"]?.stringValue ?? ""
+            if thinkingBudgetHit && !content.contains(where: { $0["type"]?.stringValue == "tool_use" }) {
+                // Cut off mid-yap with nothing actionable: nudge it to wrap up.
+                await onEvent(.status("Thinking ran long — wrapping up."))
+                if content.isEmpty {
+                    messages.append(["role": "assistant", "content": .string("(thinking cut short by budget)")])
+                } else {
+                    messages.append(["role": "assistant", "content": .array(content)])
+                }
+                messages.append(["role": "user", "content": .string("Thinking budget spent. Write the plan now with what you have researched.")])
+                continue
+            }
 
             switch stopReason {
             case "refusal":
@@ -177,7 +221,18 @@ nonisolated struct PlanGenerator: Sendable {
                     .filter { $0["type"]?.stringValue == "text" }
                     .compactMap { $0["text"]?.stringValue }
                     .joined()
-                return try Self.decodePlan(text)
+                do {
+                    return try (Self.decodePlan(text), usage)
+                } catch {
+                    // Compatible servers can't enforce the schema, and weak models
+                    // narrate instead of answering. One stern retry, then fail.
+                    guard !native, !retriedFinal else { throw error }
+                    retriedFinal = true
+                    await onEvent(.status("Answer wasn't usable — asking once more, JSON only…"))
+                    messages.append(["role": "assistant", "content": .string(String(text.suffix(4000)))])
+                    messages.append(["role": "user", "content": .string("That reply was not a JSON object. " + Self.jsonInstruction)])
+                    continue
+                }
             }
         }
         throw GeneratorError.tooManyTurns
@@ -189,8 +244,9 @@ nonisolated struct PlanGenerator: Sendable {
     /// call (no tools) that writes the plan as JSON. Splitting the phases keeps
     /// this portable: not every provider/model handles tools + a JSON schema at once.
     private func runOpenAI(tools: [MCPClient.Tool], request: String,
-                           onEvent: @Sendable (Event) async -> Void) async throws -> TestPlan {
+                           onEvent: @Sendable (Event) async -> Void) async throws -> (TestPlan, LLMUsage) {
         let client = OpenAIChatClient(provider: llm.provider, apiKey: llm.apiKey, baseURL: llm.baseURL)
+        var usage = LLMUsage()
         let strictSchemas = llm.provider == .gemini
         let toolDefs: [JSONValue] = tools.map {
             ["type": "function", "function": [
@@ -213,6 +269,7 @@ nonisolated struct PlanGenerator: Sendable {
 
         func body(tools: Bool, final: Bool) -> JSONValue {
             var b: [String: JSONValue] = ["model": .string(llm.model), "messages": .array(messages)]
+            b["stream_options"] = ["include_usage": true]
             if tools { b["tools"] = .array(toolDefs); b["parallel_tool_calls"] = true }
             switch llm.provider {
             case .openai: b["max_completion_tokens"] = 32000
@@ -237,8 +294,13 @@ nonisolated struct PlanGenerator: Sendable {
         for turn in 1...Self.maxTurns {
             try Task.checkCancellation()
             await onEvent(.waiting(turn: turn))
-            let reply = try await client.stream(body(tools: true, final: false)) { event in
+            let reply = try await client.stream(body(tools: true, final: false),
+                                                      generationBudget: Self.thinkingBudget(for: llm.effort)) { event in
                 if case .reasoning(let text) = event { await onEvent(.thinking(turn: turn, index: 0, text: text)) }
+            }
+            usage.add(reply.usage)
+            if reply.truncatedByBudget {
+                await onEvent(.status("Thinking ran long — moving on with what's gathered."))
             }
             if reply.finishReason == "content_filter" { throw GeneratorError.refused("The provider's content filter blocked it.") }
 
@@ -254,8 +316,27 @@ nonisolated struct PlanGenerator: Sendable {
                     case .writing(let n): await onEvent(.writing(characters: n))
                     }
                 }
+                usage.add(final.usage)
                 if final.finishReason == "length" { throw GeneratorError.truncated }
-                return try Self.decodePlan(final.text)
+                do {
+                    return try (Self.decodePlan(final.text), usage)
+                } catch {
+                    // Small/weak models often narrate instead of answering. One stern
+                    // retry before failing — bounded, only on the failure path.
+                    await onEvent(.status("Answer wasn't usable — asking once more, JSON only…"))
+                    messages.append(["role": "assistant", "content": .string(String(final.text.suffix(4000)))])
+                    messages.append(["role": "user", "content": .string("That reply was not a JSON object. " + Self.jsonInstruction)])
+                    await onEvent(.waiting(turn: turn + 2))
+                    let retry = try await client.stream(body(tools: false, final: true)) { event in
+                        switch event {
+                        case .reasoning(let text): await onEvent(.thinking(turn: turn + 2, index: 0, text: text))
+                        case .writing(let n): await onEvent(.writing(characters: n))
+                        }
+                    }
+                    usage.add(retry.usage)
+                    if retry.finishReason == "length" { throw GeneratorError.truncated }
+                    return try (Self.decodePlan(retry.text), usage)
+                }
             }
 
             messages.append(["role": "assistant",
@@ -295,7 +376,8 @@ nonisolated struct PlanGenerator: Sendable {
                         return (i, CallResult(id: call.id, text: "Tool \(call.name) is not available (read-only app).", isError: true))
                     }
                     do {
-                        let r = try await mcp.callTool(call.name, arguments: call.input)
+                        let owner = toolOwners[call.name] ?? mcp
+                        let r = try await owner.callTool(call.name, arguments: call.input)
                         var text = r.text
                         if text.count > Self.maxToolResultChars {
                             text = String(text.prefix(Self.maxToolResultChars))
@@ -313,6 +395,32 @@ nonisolated struct PlanGenerator: Sendable {
                 await onEvent(.toolDone(id: r.1.id, ok: !r.1.isError))
             }
             return out.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+    }
+
+    /// Tokens reported by one Anthropic response (`usage` is merged in by `ClaudeClient`).
+    static func responseUsage(_ response: JSONValue) -> LLMUsage {
+        let u = response["usage"]
+        func num(_ v: JSONValue?) -> Int {
+            if case .number(let n) = v ?? .null { return Int(n) }
+            return 0
+        }
+        var r = LLMUsage()
+        r.add(input: num(u?["input_tokens"]) + num(u?["cache_read_input_tokens"]),
+              output: num(u?["output_tokens"]))
+        return r
+    }
+
+    /// Characters of reasoning + text a research turn may generate before we
+    /// cut it off (local models sometimes yap forever instead of acting).
+    /// Effort finally means something on local servers too. Final-write
+    /// turns are never capped — long plans are legitimate.
+    static func thinkingBudget(for effort: String) -> Int {
+        switch effort {
+        case "low": 20_000
+        case "medium": 40_000
+        case "xhigh": 150_000
+        default: 80_000
         }
     }
 
@@ -416,8 +524,35 @@ nonisolated struct PlanGenerator: Sendable {
         }
     }
 
-    static func systemPrompt(for mode: TestMode, tracker: Tracker) -> String {
-        research + (tracker == .jira ? jiraResearch : linearResearch) + (mode == .dev ? devPlan : qaPlan) + shared
+    /// Plan shape presets (IDEA-010). Auto lets the ticket type decide.
+    nonisolated enum PlanTemplate: String, Codable, Sendable, CaseIterable {
+        case auto, bug, feature, epic
+
+        var label: String {
+            switch self {
+            case .auto: "Auto"
+            case .bug: "Bug"
+            case .feature: "Feature"
+            case .epic: "Epic"
+            }
+        }
+
+        var instruction: String {
+            switch self {
+            case .auto: ""
+            case .bug:
+                "\n\nTemplate: BUG. Lead with exact reproduction steps (environment, data, clicks), then fix verification, then regression on adjacent features. Keep setup minimal."
+            case .feature:
+                "\n\nTemplate: FEATURE. Lead with the happy path end to end, then roles/permissions, then negative and edge cases. Include a setup task for test data."
+            case .epic:
+                "\n\nTemplate: EPIC. Keep tasks strictly grouped per child ticket, one group each, in dependency order. Add a final cross-cutting regression task."
+            }
+        }
+    }
+
+    static func systemPrompt(for mode: TestMode, tracker: Tracker, template: PlanTemplate? = nil) -> String {
+        research + (tracker == .jira ? jiraResearch : linearResearch) + (mode == .dev ? devPlan : qaPlan)
+            + (template?.instruction ?? "") + shared
     }
 
     private static let research = """
@@ -497,6 +632,14 @@ nonisolated struct PlanGenerator: Sendable {
     For every plan:
     - acceptanceCriteria: quote explicit criteria faithfully (ids like AC1, AC2…) and set source to the \
     ticket key they came from. If a ticket has none, derive them from the description and set source to "derived".
+    - ticket: copy the ticket's labels, components and fix versions verbatim, and set parentKey to the \
+    parent/epic key when the ticket is a child or sub-task (null otherwise).
+    - testData: 2–4 concrete synthetic sample inputs per task (valid, invalid, boundary). Never real user data.
+    - estimateMin: realistic manual-testing minutes per task, as a number.
+    - sources: for each task, where it came from — ticket key plus kind (ac, comment, page, code or spec) \
+    plus ref (the AC id, or a short hint like "deploy comment").
+    - Adapt emphasis to the ticket type: bugs lead with reproduction, then fix verification, then regression; \
+    features lead with the happy path, then roles/permissions and edge cases; epics keep tasks grouped per child ticket.
     - Each task has numbered steps, a single observable expected result, the AC ids it covers, and the \
     ticket it belongs to. Every AC should be covered by at least one task.
     - sources: every ticket and page you actually used, with how it relates (this ticket, parent, child, \

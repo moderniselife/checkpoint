@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Checkpoint — AI Test Plan Generator for Jira &amp; Linear (macOS)</title>
-<meta name="description" content="Turn any Jira or Linear ticket into a QA test plan in a minute: test cases, an acceptance-criteria checklist and edge cases, written for you. Free macOS app.">
-<meta name="keywords" content="test plan generator, AI test cases, Jira test plan, Linear test plan, test cases from Jira ticket, acceptance criteria checklist, QA checklist, manual testing, UAT, regression testing, macOS app, Claude, OpenAI, GPT, Gemini, Grok, OpenRouter, local LLM, Ollama, LM Studio, test scenarios, end-to-end testing">
+<title>Checkpoint — AI Test Plan Generator for Jira &amp; Linear (Mac, iPhone &amp; iPad)</title>
+<meta name="description" content="Turn any Jira or Linear ticket into a QA test plan in a minute: test cases, an acceptance-criteria checklist and edge cases, written for you. Free for Mac, iPhone and iPad.">
+<meta name="keywords" content="test plan generator, AI test cases, Jira test plan, Linear test plan, test cases from Jira ticket, acceptance criteria checklist, QA checklist, manual testing, UAT, regression testing, macOS app, iPhone app, iPad app, Claude, OpenAI, GPT, Gemini, Grok, OpenRouter, local LLM, Ollama, LM Studio, test scenarios, end-to-end testing">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
 <meta name="author" content="Checkpoint">
 <meta name="application-name" content="Checkpoint">
@@ -28,7 +28,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:url" content="https://checkpoint.guide/">
 <meta property="og:title" content="Checkpoint — Paste a ticket. Get a test plan.">
-<meta property="og:description" content="A free Liquid Glass macOS app that turns Jira and Linear tickets into tickable QA test plans with acceptance-criteria tracking.">
+<meta property="og:description" content="A free Liquid Glass app for Mac, iPhone and iPad that turns Jira and Linear tickets into tickable QA test plans with acceptance-criteria tracking.">
 <meta property="og:image" content="https://checkpoint.guide/og.jpg">
 <meta property="og:image:secure_url" content="https://checkpoint.guide/og.jpg">
 <meta property="og:image:type" content="image/jpeg">
@@ -39,7 +39,7 @@
 <!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Checkpoint — Paste a ticket. Get a test plan.">
-<meta name="twitter:description" content="Turn Jira and Linear tickets into tickable QA test plans. Free, open-source macOS app.">
+<meta name="twitter:description" content="Turn Jira and Linear tickets into tickable QA test plans. Free and open source, for Mac, iPhone and iPad.">
 <meta name="twitter:image" content="https://checkpoint.guide/og.jpg">
 <meta name="twitter:image:alt" content="Checkpoint — Paste a ticket. Get a test plan. The app showing a test plan with acceptance criteria and tickable test tasks.">
 
@@ -52,15 +52,15 @@
       "@id": "https://checkpoint.guide/#app",
       "name": "Checkpoint",
       "alternateName": "Checkpoint test plan generator",
-      "description": "Checkpoint is a native macOS app that turns Jira and Linear tickets into tickable QA test plans. It reads comments, epic children, linked issues and specs, then writes — with Claude, GPT, Gemini, Grok or a local model — test cases, an acceptance-criteria checklist, edge cases and open questions.",
+      "description": "Checkpoint is a native app for Mac, iPhone and iPad that turns Jira and Linear tickets into tickable QA test plans. It reads comments, epic children, linked issues and specs, then writes — with Claude, GPT, Gemini, Grok or a local model — test cases, an acceptance-criteria checklist, edge cases and open questions.",
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "Software testing",
-      "operatingSystem": "macOS 26 or later",
+      "operatingSystem": "macOS 26 or later, iOS 26 or later, iPadOS 26 or later",
       "processorRequirements": "Apple Silicon or Intel (universal)",
       "url": "https://checkpoint.guide/",
       "downloadUrl": "https://github.com/moderniselife/checkpoint/releases/latest",
       "installUrl": "https://github.com/moderniselife/checkpoint/releases/latest",
-      "softwareVersion": "0.3.0",
+      "softwareVersion": "0.4.0",
       "image": "https://checkpoint.guide/og.jpg",
       "screenshot": "https://checkpoint.guide/og.jpg",
       "isAccessibleForFree": true,
@@ -82,7 +82,11 @@
         "Reads comments, epic children, linked issues and Confluence specs",
         "Ticket details panel with comments, attachments and history",
         "Folders, research log and live progress",
-        "Read-only access to Jira and Linear"
+        "Read-only access to Jira and Linear",
+        "iPhone and iPad app with photo evidence and background research",
+        "Sync through iCloud Drive, OneDrive, Google Drive or Dropbox",
+        "Pass, fail and blocked verdicts, notes, evidence and per-task timers",
+        "Guided tour and a sample plan to explore"
       ],
       "keywords": "test plan generator, AI test cases, Jira, Linear, acceptance criteria, QA, manual testing, UAT, regression testing, OpenAI, Gemini, Grok, OpenRouter, local LLM, Ollama, test scenarios, end-to-end testing, user journeys"
     },
@@ -91,7 +95,7 @@
       "@id": "https://checkpoint.guide/#website",
       "url": "https://checkpoint.guide/",
       "name": "Checkpoint",
-      "description": "AI test plan generator for Jira and Linear on macOS.",
+      "description": "AI test plan generator for Jira and Linear on Mac, iPhone and iPad.",
       "inLanguage": "en",
       "about": {
         "@id": "https://checkpoint.guide/#app"
@@ -221,15 +225,31 @@
           "name": "Does my data go through your servers?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "There are no Checkpoint servers. The app talks directly to your tracker's MCP server and to Anthropic's API. Plans are saved locally on your Mac."
+            "text": "There are no Checkpoint servers. The app talks directly to your tracker's MCP server and to the AI provider you choose. Plans are saved on your devices, and only sync through a folder you pick (iCloud Drive, OneDrive, Google Drive or Dropbox)."
           }
         },
         {
           "@type": "Question",
-          "name": "Which Macs does it run on?",
+          "name": "Which devices does it run on?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Any Mac on macOS 26 or later — it's a universal app for Apple Silicon and Intel."
+            "text": "Any Mac on macOS 26 or later (a universal app for Apple Silicon and Intel), and iPhone or iPad on iOS / iPadOS 26 or later."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is there an iPhone and iPad app?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. The iOS app has the same plans and features: analyze a ticket on your phone, work through it on a test device, attach photos from the camera as evidence, and keep research running when you leave the app. Each release includes an .ipa you can install with AltStore or Sideloadly, or build it yourself in Xcode."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do my plans sync between Mac and iPhone?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Choose a sync folder in iCloud Drive, OneDrive, Google Drive or Dropbox on each device. Checkpoint keeps each plan as its own file there, merges changes by the most recent edit, and syncs ticks, notes, tags and evidence. On a work machine, point it at your company OneDrive or Google Drive so nothing goes to a personal iCloud. API keys and sign-ins never sync."
           }
         },
         {
@@ -370,13 +390,23 @@ section { padding: 96px 0; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; }
 .brand img { width: 30px; height: 30px; border-radius: 8px; }
 .nav-links { display: flex; gap: 4px; margin-left: auto; }
-.nav-links a { padding: 8px 12px; border-radius: 999px; font-size: 14px; color: var(--muted); transition: background .2s, color .2s; }
+.nav-links a { padding: 8px 12px; border-radius: 999px; font-size: 14px; color: var(--muted); white-space: nowrap; transition: background .2s, color .2s; }
 .nav-links a:hover { background: var(--glass-strong); color: var(--text); }
 .nav .btn { padding: 9px 16px; font-size: 14px; }
 .icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 999px; background: transparent; border: 0; color: var(--muted); cursor: pointer; }
 .icon-btn:hover { background: var(--glass-strong); color: var(--text); }
 .icon-btn svg { width: 18px; height: 18px; }
-@media (max-width: 820px) { .nav-links { display: none; } .nav .spacer { margin-left: auto; } }
+/* Compact menu once the links would crowd the bar. */
+.menu-btn { display: none; }
+.nav-menu { position: absolute; top: calc(100% + 10px); right: 8px; min-width: 220px; padding: 8px; border-radius: 22px; display: none; flex-direction: column; gap: 2px; }
+.nav-menu.open { display: flex; }
+.nav-menu a { padding: 10px 14px; border-radius: 14px; font-size: 15px; color: var(--text); }
+.nav-menu a:hover { background: var(--glass-strong); }
+@media (max-width: 1020px) { .nav-links { display: none; } .nav .spacer { margin-left: auto; } .menu-btn { display: grid; } }
+@media (min-width: 1021px) { .nav-menu.open { display: none; } }
+/* Small phones: GitHub moves into the menu to give the brand room. */
+.nav-menu .menu-gh { display: none; }
+@media (max-width: 480px) { .nav > a.icon-btn[aria-label="GitHub"] { display: none; } .nav-menu .menu-gh { display: block; } }
 
 /* ---------- Hero ---------- */
 .hero { padding: 150px 0 60px; text-align: center; }
@@ -581,7 +611,18 @@ section { padding: 96px 0; }
 @media (max-width: 820px) { .start { grid-template-columns: 1fr; } }
 
 /* ---------- FAQ ---------- */
-.faq { max-width: 820px; margin: 44px auto 0; display: grid; gap: 12px; }
+.faq { max-width: 1040px; margin: 20px auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+@media (max-width: 820px) { .faq { grid-template-columns: 1fr; } }
+.faq details[hidden] { display: none; }
+.faq-tools { max-width: 1040px; margin: 36px auto 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }
+.faq-search { flex: 1 1 260px; max-width: 360px; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 999px; }
+.faq-search svg { width: 16px; height: 16px; color: var(--faint); flex: none; }
+.faq-search input { flex: 1; min-width: 0; border: 0; background: transparent; font: inherit; font-size: 15px; color: var(--text); outline: none; }
+.faq-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.faq-chip { border: 0; cursor: pointer; font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 999px; color: var(--muted); background: var(--glass); }
+.faq-chip[aria-pressed="true"] { background: linear-gradient(135deg, var(--indigo), var(--teal)); color: #fff; }
+.faq-foot { margin-top: 18px; color: var(--muted); font-size: 14px; }
+.faq-foot button { border: 0; background: none; color: var(--indigo); font: inherit; font-weight: 600; cursor: pointer; }
 .faq details { border-radius: 18px; padding: 4px 22px; }
 .faq summary { cursor: pointer; list-style: none; padding: 16px 0; font-weight: 600; display: flex; justify-content: space-between; gap: 16px; }
 .faq summary::-webkit-details-marker { display: none; }
@@ -632,6 +673,11 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
     <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></g></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z"/></symbol>
     <symbol id="i-route" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="5" r="2.2"/><path d="M8.2 19H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.8"/></g></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.8"/><path d="M10.5 18.5h3"/></g></symbol>
+    <symbol id="i-sync" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.5-4.5M4 13a8 8 0 0 0 14.5 4.5"/><path d="M5.5 2.5v4h4M18.5 21.5v-4h-4"/></g></symbol>
+    <symbol id="i-timer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M9.5 2.5h5M18.5 6.5l1.5-1.5"/></g></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" d="M12 2.5l2.2 6.3 6.3 2.2-6.3 2.2L12 19.5l-2.2-6.3L3.5 11l6.3-2.2z"/></symbol>
     <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5M9 12h6M9 16h6"/></g></symbol>
   </defs>
 </svg>
@@ -642,13 +688,24 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
   <div class="nav-links">
     <a href="#how">How it works</a>
     <a href="#features">Features</a>
+    <a href="#devices">iPhone &amp; iPad</a>
+    <a href="#modes">Dev vs QA</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#faq">FAQ</a>
+  </div>
+  <span class="spacer"></span>
+  <button class="icon-btn menu-btn" id="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu"><svg><use href="#i-menu"/></svg></button>
+  <div class="nav-menu glass" id="nav-menu">
+    <a href="#how">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#devices">iPhone &amp; iPad</a>
     <a href="#use-cases">Use cases</a>
     <a href="#modes">Dev vs QA</a>
     <a href="#models">Models</a>
     <a href="#privacy">Privacy</a>
     <a href="#faq">FAQ</a>
+    <a class="menu-gh" href="https://github.com/moderniselife/checkpoint">GitHub</a>
   </div>
-  <span class="spacer"></span>
   <button class="icon-btn" id="theme" type="button" aria-label="Toggle dark mode"><svg><use href="#i-moon"/></svg></button>
   <a class="icon-btn" href="https://github.com/moderniselife/checkpoint" aria-label="GitHub"><svg><use href="#i-gh"/></svg></a>
   <a class="btn btn-primary dl-link" href="https://github.com/moderniselife/checkpoint/releases/latest">Download</a>
@@ -665,11 +722,12 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
     <a class="btn btn-primary dl-link" href="https://github.com/moderniselife/checkpoint/releases/latest">
       <svg><use href="#i-apple"/></svg> Download for macOS <small class="dl-version"></small>
     </a>
+    <a class="btn glass" href="https://github.com/moderniselife/checkpoint/releases/latest"><svg><use href="#i-phone"/></svg> iPhone &amp; iPad</a>
     <a class="btn glass" href="https://github.com/moderniselife/checkpoint"><svg><use href="#i-gh"/></svg> View on GitHub</a>
   </div>
   <div class="meta-row">
     <span><svg><use href="#i-check"/></svg> Free &amp; open source</span>
-    <span><svg><use href="#i-check"/></svg> macOS 26 or later</span>
+    <span><svg><use href="#i-check"/></svg> Mac, iPhone &amp; iPad</span>
     <span><svg><use href="#i-check"/></svg> Jira &amp; Linear</span>
     <span><svg><use href="#i-check"/></svg> Read-only by design</span>
   </div>
@@ -813,8 +871,8 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
     </div>
     <div class="tile glass reveal">
       <div class="ic"><svg><use href="#i-folder"/></svg></div>
-      <h3>Folders, any depth</h3>
-      <p>Colour-coded, drag-and-drop, with rolled-up progress for sprints, releases or customers.</p>
+      <h3>Folders, search, dashboard</h3>
+      <p>Colour-coded folders, smart folders, sidebar search and filters, pins, archive, tags, due dates, batch sprint import, regression suites — and a dashboard for the week.</p>
     </div>
     <div class="tile glass reveal">
       <div class="ic"><svg><use href="#i-bolt"/></svg></div>
@@ -832,6 +890,21 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
       <p>Optional: realistic user journeys through neighbouring features, built from related tickets — or your codebase, read-only.</p>
     </div>
     <div class="tile glass wide reveal">
+      <div class="ic"><svg><use href="#i-check"/></svg></div>
+      <h3>Work the plan, not a spreadsheet</h3>
+      <p>Pass, fail or block each task with what happened, add notes, drag screenshots onto a task as evidence, and turn a failure into a pre-filled bug report. Smoke and P0 lenses cut a big plan down to what matters first.</p>
+    </div>
+    <div class="tile glass reveal">
+      <div class="ic"><svg><use href="#i-timer"/></svg></div>
+      <h3>Time every task</h3>
+      <p>Each task and scenario has its own timer that adds to the plan's total, next to the time estimate for each task.</p>
+    </div>
+    <div class="tile glass reveal">
+      <div class="ic"><svg><use href="#i-spark"/></svg></div>
+      <h3>A tour that shows you around</h3>
+      <p>A spotlight walks you through every part of a real plan — with a sample plan to explore before you've connected anything.</p>
+    </div>
+    <div class="tile glass wide reveal">
       <div class="ic"><svg><use href="#i-doc"/></svg></div>
       <h3>Export &amp; share</h3>
       <p>Save any plan as Markdown or a beautiful self-contained HTML page — light/dark, printable, tickable in the browser. Perfect for sign-offs and Jira comments.</p>
@@ -844,6 +917,27 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
   </div>
 </section>
 
+
+<!-- Devices -->
+<section id="devices" class="wrap">
+  <div class="center">
+    <span class="eyebrow">iPhone, iPad &amp; sync</span>
+    <h2 class="section-title reveal">Plan at your desk. Test on the device.</h2>
+    <p class="section-sub reveal">The same plans on Mac, iPhone and iPad — ticks, notes and photos follow you.</p>
+  </div>
+  <div class="bento">
+    <div class="tile glass wide reveal">
+      <div class="ic"><svg><use href="#i-phone"/></svg></div>
+      <h3>A real iPhone and iPad app</h3>
+      <p>Analyze a ticket from your phone, work through the plan on the device you're testing, and attach photos straight from the camera as evidence. Research keeps going when you leave the app, with progress on your Lock Screen.</p>
+    </div>
+    <div class="tile glass wide reveal">
+      <div class="ic"><svg><use href="#i-sync"/></svg></div>
+      <h3>Sync through storage you already use</h3>
+      <p>Pick a folder in iCloud Drive — or your company's OneDrive, Google Drive or Dropbox — and every device stays in step. Each plan is its own file, and the newest edit wins. Your API keys never leave each device's Keychain.</p>
+    </div>
+  </div>
+</section>
 
 <!-- Use cases -->
 <section id="use-cases" class="wrap">
@@ -972,12 +1066,12 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
 <section id="privacy" class="wrap center">
   <span class="eyebrow">Privacy &amp; safety</span>
   <h2 class="section-title reveal">Your tickets stay yours.</h2>
-  <p class="section-sub reveal">Checkpoint runs on your Mac and talks directly to Atlassian, Linear and the AI provider you choose — no Checkpoint servers in between. Run a local model and your tickets never leave your network.</p>
+  <p class="section-sub reveal">Checkpoint runs on your Mac, iPhone or iPad and talks directly to Atlassian, Linear and the AI provider you choose — no Checkpoint servers in between. Run a local model and your tickets never leave your network.</p>
   <div class="trust" style="text-align:left">
     <div class="glass reveal"><svg><use href="#i-shield"/></svg><h3>Read-only by design</h3><p>Jira: only read tools are exposed. Linear: its read-only endpoint and scope, enforced by Linear.</p></div>
-    <div class="glass reveal"><svg><use href="#i-lock"/></svg><h3>Keys in your Keychain</h3><p>Your AI provider keys and tracker tokens never leave the macOS Keychain.</p></div>
+    <div class="glass reveal"><svg><use href="#i-lock"/></svg><h3>Keys in your Keychain</h3><p>Your AI provider keys and tracker tokens stay in each device's Keychain — they never sync.</p></div>
     <div class="glass reveal"><svg><use href="#i-key"/></svg><h3>Sign in with OAuth</h3><p>Standard Atlassian and Linear sign-in with PKCE — no admin allowlisting needed.</p></div>
-    <div class="glass reveal"><svg><use href="#i-mac"/></svg><h3>Sandboxed &amp; local</h3><p>A sandboxed native app. Plans are stored locally on your Mac.</p></div>
+    <div class="glass reveal"><svg><use href="#i-mac"/></svg><h3>Sandboxed &amp; local</h3><p>Native, sandboxed apps. Plans live on your devices and only sync through a folder you choose.</p></div>
   </div>
 </section>
 
@@ -986,8 +1080,8 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
   <span class="eyebrow">Get started</span>
   <h2 class="section-title reveal">Up and running in two minutes.</h2>
   <div class="start" style="text-align:left">
-    <div class="glass reveal"><h3>Download</h3><p>Grab the latest DMG and drag Checkpoint to Applications. Requires macOS 26.</p></div>
-    <div class="glass reveal"><h3>Pick your AI</h3><p>Choose Claude, OpenAI, Gemini, Grok, OpenRouter or a local model in Settings (<code>⌘,</code>), add a key, and hit <b>Fetch models</b>.</p></div>
+    <div class="glass reveal"><h3>Download</h3><p>Grab the latest DMG and drag Checkpoint to Applications (macOS 26), or install the iPhone and iPad .ipa from the same release.</p></div>
+    <div class="glass reveal"><h3>Follow the welcome</h3><p>First launch walks you through Dev or QA, your AI (Claude, OpenAI, Gemini, Grok, OpenRouter or a local model, with a live key test), your trackers and sync — then offers a quick tour.</p></div>
     <div class="glass reveal"><h3>Connect your tracker</h3><p>Sign in with Atlassian and/or Linear, hit <b>Test connection</b>, then paste your first ticket.</p></div>
   </div>
 </section>
@@ -996,24 +1090,38 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
 <section id="faq" class="wrap center">
   <span class="eyebrow">FAQ</span>
   <h2 class="section-title reveal">Questions, answered.</h2>
-  <div class="faq" style="text-align:left">
-    <details class="glass"><summary>How do I generate test cases from a Jira ticket?</summary><p>Install Checkpoint, choose an AI provider, sign in with Atlassian, then paste the ticket key (for example PROJ-123) or its link. Checkpoint reads the ticket, its comments, linked issues, epic children and Confluence specs, and writes a numbered test plan with expected results in about a minute.</p></details>
-    <details class="glass"><summary>Does Checkpoint work with Linear?</summary><p>Yes. Sign in with Linear or use a Linear API key. Linear issues get the same test plans, Dev and QA modes, ticket panel, folders and acceptance-criteria tracking as Jira.</p></details>
-    <details class="glass"><summary>Can it turn acceptance criteria into test cases?</summary><p>Yes. Explicit acceptance criteria are quoted from the ticket, every criterion is mapped to the test cases that cover it, and criteria with no covering test are flagged so nothing slips through. You can tick each criterion as met.</p></details>
-    <details class="glass"><summary>Which AI model does Checkpoint use?</summary><p>Whichever you like: Anthropic Claude, OpenAI, Google Gemini, xAI Grok, anything on OpenRouter, or a local model. Bring your own key, pick the model from a live list, and set how much effort it spends — lower for quick plans, higher for large epics. Claude gets extras like adaptive thinking and schema-enforced plans.</p></details>
-    <details class="glass"><summary>How is this different from a test case management tool?</summary><p>Test management tools store test cases you write by hand. Checkpoint writes the test plan for you from the ticket itself, keeps it next to the full ticket details, and tracks what you've tested — no spreadsheet or separate tool to maintain.</p></details>
-    <details class="glass"><summary>Does it work with OpenAI, Gemini or Grok?</summary><p>Yes. Checkpoint supports OpenAI, Google Gemini, xAI Grok and OpenRouter alongside Anthropic Claude. Paste your API key, fetch the model list, and pick any model that supports tool calling.</p></details>
-    <details class="glass"><summary>Can I use a local LLM like Ollama or LM Studio?</summary><p>Yes. Point Checkpoint at any OpenAI-compatible server (Ollama, LM Studio, vLLM, llama.cpp) or Anthropic-compatible endpoint (such as LiteLLM) on your machine or network. No API key needed, and ticket content stays local. Use a model with tool calling and a large context window for big epics.</p></details>
-    <details class="glass"><summary>What are test scenarios?</summary><p>An optional extra: besides the step-by-step test cases, Checkpoint can write 3–6 end-to-end user journeys that exercise the change in context — through the screens and features around it — with a role, goal, steps and end result. Build them from related tickets alone, or also let Checkpoint read your codebase (read-only, only the folder you choose) for journeys that match how the product really works.</p></details>
-    <details class="glass"><summary>Can I build Checkpoint from source?</summary><p>Yes. Clone the GitHub repository and run ./build.sh — it checks for Xcode 26 and XcodeGen and produces a universal Checkpoint.app in the dist folder. Add --install to copy it to Applications.</p></details>
-    <details class="glass"><summary>Can I share or export a test plan?</summary><p>Yes. Copy a plan as Markdown for Jira comments and pull requests, or save it as a self-contained HTML page styled like the app — light and dark mode, print-friendly, with checkboxes anyone can tick in their browser.</p></details>
-    <details class="glass"><summary>Is Checkpoint free?</summary><p>Yes — it's free and open source under the MIT license. You bring your own AI provider key and pay that provider directly for what your plans use — or run a local model for free.</p></details>
-    <details class="glass"><summary>Can it change my tickets?</summary><p>No. Checkpoint only ever reads. For Jira it exposes read tools only; for Linear it uses Linear's read-only MCP endpoint with a read-only scope, so Linear itself blocks writes.</p></details>
-    <details class="glass"><summary>Does my data go through your servers?</summary><p>There are no Checkpoint servers. The app talks directly to your tracker's MCP server and to Anthropic's API. Plans are saved locally on your Mac.</p></details>
-    <details class="glass"><summary>Which Macs does it run on?</summary><p>Any Mac on macOS 26 or later — it's a universal app for Apple Silicon and Intel.</p></details>
-    <details class="glass"><summary>My org restricts Atlassian API tokens. Will it work?</summary><p>Use <b>Sign in with Atlassian</b>. It uses OAuth with a local redirect that Atlassian pre-approves for every org, so no admin change is usually needed.</p></details>
-    <details class="glass"><summary>macOS says the app can't be opened.</summary><p>If a release isn't notarized yet, right-click Checkpoint in Applications and choose <b>Open</b> the first time, or run <span class="mono">xattr -dr com.apple.quarantine /Applications/Checkpoint.app</span>.</p></details>
+  <div class="faq-tools">
+    <label class="faq-search glass"><svg><use href="#i-search"/></svg><input id="faq-q" type="search" placeholder="Search questions" aria-label="Search questions"></label>
+    <div class="faq-chips" role="group" aria-label="Filter questions">
+      <button class="faq-chip" type="button" data-filter="popular" aria-pressed="true">Popular</button>
+      <button class="faq-chip" type="button" data-filter="start" aria-pressed="false">Getting started</button>
+      <button class="faq-chip" type="button" data-filter="ai" aria-pressed="false">AI &amp; models</button>
+      <button class="faq-chip" type="button" data-filter="trackers" aria-pressed="false">Jira &amp; Linear</button>
+      <button class="faq-chip" type="button" data-filter="devices" aria-pressed="false">iPhone, Mac &amp; sync</button>
+      <button class="faq-chip" type="button" data-filter="privacy" aria-pressed="false">Privacy</button>
+    </div>
   </div>
+  <div class="faq" id="faq-list" style="text-align:left">
+    <details class="glass" data-cat="start" data-popular><summary>How do I generate test cases from a Jira ticket?</summary><p>Install Checkpoint, choose an AI provider, sign in with Atlassian, then paste the ticket key (for example PROJ-123) or its link. Checkpoint reads the ticket, its comments, linked issues, epic children and Confluence specs, and writes a numbered test plan with expected results in about a minute.</p></details>
+    <details class="glass" data-cat="trackers" data-popular><summary>Does Checkpoint work with Linear?</summary><p>Yes. Sign in with Linear or use a Linear API key. Linear issues get the same test plans, Dev and QA modes, ticket panel, folders and acceptance-criteria tracking as Jira.</p></details>
+    <details class="glass" data-cat="start"><summary>Can it turn acceptance criteria into test cases?</summary><p>Yes. Explicit acceptance criteria are quoted from the ticket, every criterion is mapped to the test cases that cover it, and criteria with no covering test are flagged so nothing slips through. You can tick each criterion as met.</p></details>
+    <details class="glass" data-cat="ai" data-popular><summary>Which AI model does Checkpoint use?</summary><p>Whichever you like: Anthropic Claude, OpenAI, Google Gemini, xAI Grok, anything on OpenRouter, or a local model. Bring your own key, pick the model from a live list, and set how much effort it spends — lower for quick plans, higher for large epics. Claude gets extras like adaptive thinking and schema-enforced plans.</p></details>
+    <details class="glass" data-cat="start"><summary>How is this different from a test case management tool?</summary><p>Test management tools store test cases you write by hand. Checkpoint writes the test plan for you from the ticket itself, keeps it next to the full ticket details, and tracks what you've tested — no spreadsheet or separate tool to maintain.</p></details>
+    <details class="glass" data-cat="ai"><summary>Does it work with OpenAI, Gemini or Grok?</summary><p>Yes. Checkpoint supports OpenAI, Google Gemini, xAI Grok and OpenRouter alongside Anthropic Claude. Paste your API key, fetch the model list, and pick any model that supports tool calling.</p></details>
+    <details class="glass" data-cat="ai"><summary>Can I use a local LLM like Ollama or LM Studio?</summary><p>Yes. Point Checkpoint at any OpenAI-compatible server (Ollama, LM Studio, vLLM, llama.cpp) or Anthropic-compatible endpoint (such as LiteLLM) on your machine or network. No API key needed, and ticket content stays local. Use a model with tool calling and a large context window for big epics.</p></details>
+    <details class="glass" data-cat="start"><summary>What are test scenarios?</summary><p>An optional extra: besides the step-by-step test cases, Checkpoint can write 3–6 end-to-end user journeys that exercise the change in context — through the screens and features around it — with a role, goal, steps and end result. Build them from related tickets alone, or also let Checkpoint read your codebase (read-only, only the folder you choose) for journeys that match how the product really works.</p></details>
+    <details class="glass" data-cat="devices"><summary>Can I build Checkpoint from source?</summary><p>Yes. Clone the GitHub repository and run ./build.sh — it checks for Xcode 26 and XcodeGen and produces a universal Checkpoint.app in the dist folder. Add --install to copy it to Applications.</p></details>
+    <details class="glass" data-cat="start"><summary>Can I share or export a test plan?</summary><p>Yes. Copy a plan as Markdown for Jira comments and pull requests, or save it as a self-contained HTML page styled like the app — light and dark mode, print-friendly, with checkboxes anyone can tick in their browser.</p></details>
+    <details class="glass" data-cat="start" data-popular><summary>Is Checkpoint free?</summary><p>Yes — it's free and open source under the MIT license. You bring your own AI provider key and pay that provider directly for what your plans use — or run a local model for free.</p></details>
+    <details class="glass" data-cat="privacy" data-popular><summary>Can it change my tickets?</summary><p>No. Checkpoint only ever reads. For Jira it exposes read tools only; for Linear it uses Linear's read-only MCP endpoint with a read-only scope, so Linear itself blocks writes.</p></details>
+    <details class="glass" data-cat="privacy"><summary>Does my data go through your servers?</summary><p>There are no Checkpoint servers. The app talks directly to your tracker's MCP server and to the AI provider you choose. Plans are saved on your devices, and only sync through a folder you pick (iCloud Drive, OneDrive, Google Drive or Dropbox).</p></details>
+    <details class="glass" data-cat="devices"><summary>Which devices does it run on?</summary><p>Any Mac on macOS 26 or later (a universal app for Apple Silicon and Intel), and iPhone or iPad on iOS / iPadOS 26 or later.</p></details>
+    <details class="glass" data-cat="devices" data-popular><summary>Is there an iPhone and iPad app?</summary><p>Yes. The iOS app has the same plans and features: analyze a ticket on your phone, work through it on a test device, attach photos from the camera as evidence, and keep research running when you leave the app. Each release includes an <span class="mono">.ipa</span> you can install with AltStore or Sideloadly, or build it yourself in Xcode.</p></details>
+    <details class="glass" data-cat="devices"><summary>How do my plans sync between Mac and iPhone?</summary><p>Choose a sync folder in iCloud Drive, OneDrive, Google Drive or Dropbox on each device. Checkpoint keeps each plan as its own file there, merges changes by the most recent edit, and syncs ticks, notes, tags and evidence. On a work machine, point it at your company OneDrive or Google Drive so nothing goes to a personal iCloud. API keys and sign-ins never sync.</p></details>
+    <details class="glass" data-cat="trackers"><summary>My org restricts Atlassian API tokens. Will it work?</summary><p>Use <b>Sign in with Atlassian</b>. It uses OAuth with a local redirect that Atlassian pre-approves for every org, so no admin change is usually needed.</p></details>
+    <details class="glass" data-cat="devices"><summary>macOS says the app can't be opened.</summary><p>If a release isn't notarized yet, right-click Checkpoint in Applications and choose <b>Open</b> the first time, or run <span class="mono">xattr -dr com.apple.quarantine /Applications/Checkpoint.app</span>.</p></details>
+  </div>
+  <p class="faq-foot" id="faq-foot"><span id="faq-count"></span> <button type="button" id="faq-all">Show all questions</button></p>
 </section>
 
 <!-- Final CTA -->
@@ -1021,7 +1129,7 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
   <div class="final glass reveal">
     <img src="logo.png" alt="" width="84" height="84" loading="lazy">
     <h2>Test the ticket,<br><span class="grad">not your patience.</span></h2>
-    <p>Download Checkpoint and turn your next ticket into a plan in about a minute.</p>
+    <p>Download Checkpoint for Mac, iPhone or iPad and turn your next ticket into a plan in about a minute.</p>
     <div class="cta-row">
       <a class="btn btn-primary dl-link" href="https://github.com/moderniselife/checkpoint/releases/latest"><svg><use href="#i-apple"/></svg> Download for macOS <small class="dl-version"></small></a>
       <a class="btn glass" href="https://github.com/moderniselife/checkpoint"><svg><use href="#i-gh"/></svg> Star on GitHub</a>
@@ -1045,6 +1153,49 @@ footer { padding: 40px 0 60px; color: var(--faint); font-size: 14px; }
   </div>
 </footer>
 
+<script>
+// Nav menu for narrow screens.
+(() => {
+  const btn = document.getElementById('menu-btn'), menu = document.getElementById('nav-menu');
+  if (!btn || !menu) return;
+  const set = open => { menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open); };
+  btn.addEventListener('click', e => { e.stopPropagation(); set(!menu.classList.contains('open')); });
+  menu.addEventListener('click', e => { if (e.target.closest('a')) set(false); });
+  document.addEventListener('click', e => { if (!menu.contains(e.target)) set(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') set(false); });
+})();
+
+// FAQ: popular questions first, topic chips and search over all of them.
+(() => {
+  const items = [...document.querySelectorAll('#faq-list details')];
+  const chips = [...document.querySelectorAll('.faq-chip')];
+  const q = document.getElementById('faq-q'), count = document.getElementById('faq-count'), all = document.getElementById('faq-all');
+  if (!items.length) return;
+  let filter = 'popular';
+  const apply = () => {
+    const term = (q.value || '').trim().toLowerCase();
+    let shown = 0;
+    items.forEach(d => {
+      const text = d.textContent.toLowerCase();
+      const ok = term ? text.includes(term)
+               : filter === 'all' ? true
+               : filter === 'popular' ? d.hasAttribute('data-popular')
+               : d.dataset.cat === filter;
+      d.hidden = !ok;
+      if (ok) shown++;
+    });
+    chips.forEach(c => c.setAttribute('aria-pressed', !term && c.dataset.filter === filter));
+    count.textContent = term
+      ? (shown ? `${shown} of ${items.length} questions match.` : 'No questions match — ask on GitHub.')
+      : `Showing ${shown} of ${items.length} questions.`;
+    all.hidden = !term && filter === 'all';
+  };
+  chips.forEach(c => c.addEventListener('click', () => { filter = c.dataset.filter; q.value = ''; apply(); }));
+  q.addEventListener('input', apply);
+  all.addEventListener('click', () => { filter = 'all'; q.value = ''; apply(); });
+  apply();
+})();
+</script>
 <script>
 // Theme toggle (remembered per browser).
 (function () {

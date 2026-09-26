@@ -124,7 +124,25 @@ nonisolated extension TicketDetail {
     enum ParseError: LocalizedError {
         case notFound(String)
         var errorDescription: String? {
-            switch self { case .notFound(let s): "Jira didn't return that ticket. \(s.prefix(200))" }
+            switch self { case .notFound(let s): "Jira didn't return that ticket. " + Self.readable(s) }
+        }
+
+        /// Pulls Jira's own sentence out of an error payload like
+        /// `{"error":true,"message":"{\"errorMessages\":[\"Issue does not exist…\"]}"}`.
+        static func readable(_ raw: String) -> String {
+            func messages(_ text: String, depth: Int = 0) -> [String] {
+                guard depth < 3, let data = text.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+                if let list = json["errorMessages"] as? [String], !list.isEmpty { return list }
+                if let errors = json["errors"] as? [String: String], !errors.isEmpty { return Array(errors.values) }
+                if let message = json["message"] as? String {
+                    let inner = messages(message, depth: depth + 1)
+                    return inner.isEmpty ? [message] : inner
+                }
+                return []
+            }
+            let found = messages(raw)
+            return found.isEmpty ? String(raw.prefix(200)) : found.joined(separator: " ")
         }
     }
 
