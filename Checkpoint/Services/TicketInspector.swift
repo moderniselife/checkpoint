@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import Observation
 
@@ -10,6 +9,8 @@ final class TicketInspector {
         case loading
         case loaded(TicketDetail)
         case failed(String)
+        /// The built-in sample plan's ticket: nothing to fetch.
+        case sample
     }
 
     struct Ref: Hashable {
@@ -133,8 +134,12 @@ final class TicketInspector {
     func refresh() { if let current { load(current) } }
 
     private func load(_ ref: Ref) {
+        if ref.key.uppercased() == SamplePlan.key {
+            states[ref.cacheKey] = .sample
+            return
+        }
         guard let settings, settings.isConfigured(ref.tracker) else {
-            states[ref.cacheKey] = .failed("Connect \(ref.tracker.label) in Settings (⌘,) to view its issues.")
+            states[ref.cacheKey] = .failed("Connect \(ref.tracker.label) in \(Platform.settingsName) to view its issues.")
             return
         }
         states[ref.cacheKey] = .loading
@@ -306,7 +311,7 @@ actor AttachmentLoader {
             req.setValue("image/*", forHTTPHeaderField: "Accept")
             guard let (data, response) = try? await URLSession.shared.data(for: req),
                   (response as? HTTPURLResponse)?.statusCode == 200,
-                  NSImage(data: data) != nil else { continue }
+                  PlatformImage(data: data) != nil else { continue }
             cache[cacheKey] = data
             return data
         }

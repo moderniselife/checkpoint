@@ -3,8 +3,13 @@ import SwiftUI
 struct ContentView: View {
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
+    @Environment(\.tourGuide) private var tour
     @AppStorage("panelWidth") private var panelWidth = 460.0
+    @AppStorage("onboardingComplete") private var onboarded = false
     @State private var dragStartWidth: Double?
+    /// Width of the detail area; the ticket panel never takes more than 45% of it.
+    @State private var detailWidth: Double = 1200
+    @State private var chrome = ScrollChrome()
 
     var body: some View {
         @Bindable var store = store
@@ -12,18 +17,26 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
-            HStack(spacing: 0) {
-                main
-                if inspector.isOpen {
-                    TicketPanel()
-                        .frame(width: panelWidth)
-                        .padding(.vertical, 12)
-                        .padding(.trailing, 12)
-                        .overlay(alignment: .leading) { resizeHandle }
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+            // Wide windows: the ticket panel sits beside the plan. Narrow ones: it floats over
+            // the plan's right side, so neither gets squashed past usefulness.
+            ZStack(alignment: .trailing) {
+                HStack(spacing: 0) {
+                    main
+                        .frame(minWidth: 0, maxWidth: .infinity)
+                    if inspector.isOpen && !panelFloats {
+                        ticketPanel(width: max(320, min(panelWidth, detailWidth * 0.45)))
+                    }
+                }
+                if inspector.isOpen && panelFloats {
+                    ticketPanel(width: max(300, min(panelWidth, detailWidth - 72)))
+                        // Below the ticket bar, so both stay usable.
+                        .padding(.top, 64)
+                        .shadow(color: .black.opacity(0.18), radius: 24, x: -6, y: 8)
                 }
             }
+            .clipped()
             .background { Backdrop() }
+            .onGeometryChange(for: Double.self) { $0.size.width } action: { detailWidth = $0 }
             .animation(.smooth(duration: 0.35), value: inspector.isOpen)
             .toolbar {
                 if !inspector.isOpen && !inspector.tabs.isEmpty {
@@ -38,6 +51,27 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(isPresented: Binding(get: { !onboarded }, set: { if !$0 { onboarded = true } })) {
+            OnboardingView { takeTour in
+                onboarded = true
+                if takeTour { Task { try? await Task.sleep(for: .milliseconds(450)); tour?.start() } }
+            }
+            .frame(width: 820, height: 640)
+            .interactiveDismissDisabled()
+        }
+        .tourOverlay(tour)
+    }
+
+    /// Below this the plan would get too narrow beside the panel.
+    private var panelFloats: Bool { detailWidth < 900 }
+
+    private func ticketPanel(width: Double) -> some View {
+        TicketPanel()
+            .frame(width: width)
+            .padding(.vertical, 12)
+            .padding(.trailing, 12)
+            .overlay(alignment: .leading) { resizeHandle }
+            .transition(.move(edge: .trailing).combined(with: .opacity))
     }
 
     /// Drag the panel's leading edge to resize it.
@@ -46,7 +80,9 @@ struct ContentView: View {
             .fill(.clear)
             .frame(width: 10)
             .contentShape(.rect)
+            #if os(macOS)
             .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+            #endif
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { value in
                     let start = dragStartWidth ?? panelWidth
@@ -67,15 +103,24 @@ struct ContentView: View {
                         PlanView(saved: saved).id(saved.id)
                     } else if let folder = store.selectedFolder {
                         FolderOverview(folder: folder)
+                    } else if let smart = store.selectedSmartFolder {
+                        SmartFolderOverview(smart: smart).id(smart.id)
+                    } else if store.showingDashboard {
+                        DashboardView()
                     } else {
                         EmptyStateView()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .environment(\.scrollChrome, chrome)
+                .onChange(of: store.selection) { chrome.show() }
 
                 TicketInputBar()
                     .padding(.top, 12)
                     .padding(.horizontal, 24)
+                    .offset(y: chrome.barHidden ? -96 : 0)
+                    .opacity(chrome.barHidden ? 0 : 1)
+                    .allowsHitTesting(!chrome.barHidden)
             }
             .overlay(alignment: .bottom) {
                 if let error = store.error {
@@ -133,6 +178,9 @@ struct Backdrop: View {
 struct EmptyStateView: View {
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.showSettings) private var showSettings
+    @Environment(\.tourGuide) private var tour
 
     var body: some View {
         VStack(spacing: 16) {
@@ -148,12 +196,26 @@ struct EmptyStateView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 420)
             if !settings.isConfigured {
-                SettingsLink {
+                Button {
+                    #if os(macOS)
+                    openWindow(id: SettingsView.windowID)
+                    #else
+                    showSettings()
+                    #endif
+                } label: {
                     Label("Connect an AI provider + your tracker", systemImage: "key.fill")
                 }
                 .buttonStyle(.glassProminent)
                 .padding(.top, 8)
             }
+            HStack(spacing: 10) {
+                Button("Explore a Sample Plan", systemImage: "doc.text.magnifyingglass") {
+                    withAnimation(.smooth) { store.openSamplePlan() }
+                }
+                Button("Take the Tour", systemImage: "hand.point.up.left") { tour?.start() }
+            }
+            .buttonStyle(.glass)
+            .padding(.top, settings.isConfigured ? 8 : 0)
         }
         .padding(40)
     }

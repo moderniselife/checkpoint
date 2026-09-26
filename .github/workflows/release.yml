@@ -1,7 +1,8 @@
 name: Release
 
-# Builds Checkpoint.app (universal), signs it, and publishes a GitHub Release
-# with a DMG, a zip and SHA-256 checksums.
+# Builds Checkpoint for Mac (universal, signed when secrets are set) and for iPhone/iPad
+# (unsigned .ipa), and publishes a GitHub Release with a DMG, a zip, the .ipa and
+# SHA-256 checksums.
 #
 # Trigger: push a tag like `v0.2.0`, or run manually from the Actions tab.
 #
@@ -57,6 +58,8 @@ jobs:
           fi
           VERSION="${VERSION#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # CFBundleShortVersionString must be plain numbers: 0.4.0-dev.2 ships as 0.4.0.
+          echo "marketing=${VERSION%%-*}" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing $VERSION (build ${{ github.run_number }})"
 
@@ -109,7 +112,7 @@ jobs:
             -derivedDataPath build \
             ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
-            MARKETING_VERSION="$VERSION" \
+            MARKETING_VERSION="${{ steps.version.outputs.marketing }}" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             "${SIGNING[@]}" \
             build | xcbeautify --renderer github-actions
@@ -123,6 +126,29 @@ jobs:
           if codesign -d --entitlements - "dist/$APP_NAME.app" 2>/dev/null | grep -q get-task-allow; then
             echo "::error::Release build still has get-task-allow"; exit 1
           fi
+
+      - name: Build iPhone and iPad app (unsigned .ipa)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "$APP_NAME.xcodeproj" \
+            -scheme CheckpointMobile \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            MARKETING_VERSION="${{ steps.version.outputs.marketing }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM= \
+            build | xcbeautify --renderer github-actions
+          APP="build/Build/Products/Release-iphoneos/$APP_NAME.app"
+          test -d "$APP"
+          STAGE="$RUNNER_TEMP/ipa"
+          mkdir -p "$STAGE/Payload"
+          cp -R "$APP" "$STAGE/Payload/"
+          (cd "$STAGE" && zip -qry "$GITHUB_WORKSPACE/dist/$APP_NAME-$VERSION-iOS.ipa" Payload)
+          ls -la "dist/$APP_NAME-$VERSION-iOS.ipa"
 
       - name: Create DMG
         env:
@@ -162,7 +188,7 @@ jobs:
         run: |
           cd dist
           ditto -c -k --keepParent "$APP_NAME.app" "$APP_NAME-$VERSION.zip"
-          shasum -a 256 "$APP_NAME-$VERSION.dmg" "$APP_NAME-$VERSION.zip" > SHA256SUMS.txt
+          shasum -a 256 "$APP_NAME-$VERSION.dmg" "$APP_NAME-$VERSION.zip" "$APP_NAME-$VERSION-iOS.ipa" > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Release notes header
@@ -177,10 +203,17 @@ jobs:
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           ## Checkpoint $VERSION
 
-          Requires **macOS 26** or later · Universal (Apple Silicon + Intel)
+          **Mac:** macOS 26 or later · Universal (Apple Silicon + Intel)
+          **iPhone and iPad:** iOS / iPadOS 26 or later
 
-          ### Install
+          ### Install on Mac
           $INSTALL
+
+          ### Install on iPhone or iPad
+          \`Checkpoint-$VERSION-iOS.ipa\` is unsigned. Install it with a sideloading tool that signs it with
+          your own Apple ID, such as [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io),
+          or build it yourself: open the project in Xcode, pick the **CheckpointMobile** scheme and your
+          team, and run it on your device.
 
           Verify downloads against \`SHA256SUMS.txt\`.
           EOF
@@ -192,9 +225,12 @@ jobs:
           name: Checkpoint ${{ steps.version.outputs.version }}
           body_path: ${{ runner.temp }}/notes.md
           generate_release_notes: true
+          # v0.4.0-dev.2 and friends are pre-releases, so "Latest" stays on the stable build.
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           files: |
             dist/Checkpoint-${{ steps.version.outputs.version }}.dmg
             dist/Checkpoint-${{ steps.version.outputs.version }}.zip
+            dist/Checkpoint-${{ steps.version.outputs.version }}-iOS.ipa
             dist/SHA256SUMS.txt
 
       - name: Clean up keychain

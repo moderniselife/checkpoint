@@ -11,6 +11,15 @@ nonisolated enum ScenarioMode: String, Codable, Sendable, CaseIterable, Identifi
 
     var id: Self { self }
 
+    /// Modes this platform can run: reading a local codebase is Mac-only.
+    static var available: [ScenarioMode] {
+        #if os(macOS)
+        allCases
+        #else
+        [.off, .tickets]
+        #endif
+    }
+
     var label: String {
         switch self {
         case .off: "No scenarios"
