@@ -46,16 +46,27 @@ nonisolated struct ClaudeClient: Sendable {
         if sendBearer { req.setValue("Bearer " + apiKey, forHTTPHeaderField: "Authorization") }
     }
 
-    /// Model ids from `GET /v1/models`.
+    /// Model ids from `GET /v1/models`, every page, newest first (the API's own order).
     func listModels() async throws -> [String] {
-        var req = URLRequest(url: url.deletingLastPathComponent().appending(path: "models"))
-        authorize(&req)
-        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        let (data, response) = try await Self.session.data(for: req)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 else { throw ClaudeError.http(status, String(decoding: data, as: UTF8.self)) }
-        let json = try JSONCoding.decoder.decode(JSONValue.self, from: data)
-        return (json["data"]?.arrayValue ?? []).compactMap { $0["id"]?.stringValue }.sorted()
+        var out: [String] = []
+        var after: String?
+        for _ in 0..<20 {
+            var comps = URLComponents(url: url.deletingLastPathComponent().appending(path: "models"), resolvingAgainstBaseURL: false)!
+            comps.queryItems = [URLQueryItem(name: "limit", value: "1000")] + (after.map { [URLQueryItem(name: "after_id", value: $0)] } ?? [])
+            var req = URLRequest(url: comps.url!)
+            authorize(&req)
+            req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            let (data, response) = try await Self.session.data(for: req)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else { throw ClaudeError.http(status, String(decoding: data, as: UTF8.self)) }
+            let json = try JSONCoding.decoder.decode(JSONValue.self, from: data)
+            out += (json["data"]?.arrayValue ?? []).compactMap { $0["id"]?.stringValue }
+            // Compatible gateways often don't paginate at all.
+            guard json["has_more"]?.boolValue == true, let last = json["last_id"]?.stringValue, last != after else { break }
+            after = last
+        }
+        var seen = Set<String>()
+        return out.filter { seen.insert($0).inserted }
     }
     private static let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral

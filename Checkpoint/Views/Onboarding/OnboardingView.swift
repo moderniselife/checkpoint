@@ -483,6 +483,8 @@ private struct AIPage: View {
     @State private var result: Result<String, Error>?
     @State private var models: [String] = []
     @State private var fetching = false
+    @State private var modelError: String?
+    @State private var pickingModel = false
 
     private let featured: [LLMProvider] = [.anthropic, .openai, .gemini, .xai, .openrouter, .openAICompatible]
 
@@ -496,7 +498,7 @@ private struct AIPage: View {
                 ForEach(featured) { p in
                     let on = settings.provider == p
                     Button {
-                        withAnimation(.spring(duration: 0.3)) { settings.provider = p; result = nil; models = [] }
+                        withAnimation(.spring(duration: 0.3)) { settings.provider = p; result = nil; models = []; modelError = nil }
                         fetchModels()
                     } label: {
                         HStack(spacing: 6) {
@@ -531,6 +533,10 @@ private struct AIPage: View {
                                 text: $settings.llmKey, prompt: Text(settings.provider.keyPrompt))
                         .noAutocorrect()
                         .onSubmit(fetchModels)
+                        .task(id: settings.llmKey) {
+                            try? await Task.sleep(for: .milliseconds(800))
+                            if !Task.isCancelled, !settings.llmKey.isEmpty { fetchModels() }
+                        }
                 }
                 field(icon: "cpu") {
                     HStack(spacing: 8) {
@@ -540,6 +546,18 @@ private struct AIPage: View {
                         if fetching {
                             ProgressView().controlSize(.small)
                         } else {
+                            #if os(iOS)
+                            // A big target that opens the searchable list, not a tiny menu chevron.
+                            Button { pickingModel = true } label: {
+                                Label(modelOptions.isEmpty ? "Choose" : "\(modelOptions.count) models",
+                                      systemImage: "chevron.up.chevron.down")
+                                    .labelStyle(.titleAndIcon)
+                                    .font(.callout)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(.quaternary, in: .capsule)
+                            }
+                            .buttonStyle(.plain)
+                            #else
                             Menu {
                                 ForEach(modelOptions, id: \.self) { m in
                                     Button(m) { settings.model = m; result = nil }
@@ -556,8 +574,18 @@ private struct AIPage: View {
                             .menuIndicator(.hidden)
                             .fixedSize()
                             .help("Pick from the models \(settings.provider.shortLabel) offers")
+                            #endif
                         }
                     }
+                }
+                if let modelError, !fetching {
+                    Label("Couldn't load \(settings.provider.shortLabel)'s models: \(modelError)", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange).lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else if !models.isEmpty, !fetching {
+                    Text("\(models.count) models available from \(settings.provider.shortLabel).")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 HStack {
                     if let url = settings.provider.keyURL {
@@ -594,6 +622,16 @@ private struct AIPage: View {
             Spacer(minLength: 0)
         }
         .onAppear(perform: fetchModels)
+        #if os(iOS)
+        .sheet(isPresented: $pickingModel) {
+            NavigationStack {
+                ModelPickerList(title: "Model", text: $settings.model, items: modelOptions,
+                                placeholder: settings.provider.defaultModel, emptyLabel: nil,
+                                loading: fetching, onRefresh: fetchModels)
+            }
+            .presentationDetents([.medium, .large])
+        }
+        #endif
     }
 
     private func field<C: View>(icon: String, @ViewBuilder content: () -> C) -> some View {
@@ -615,7 +653,12 @@ private struct AIPage: View {
         fetching = true
         Task {
             defer { fetching = false }
-            if let list = try? await settings.refreshModels() { models = list }
+            do {
+                models = try await settings.refreshModels()
+                modelError = models.isEmpty ? "the provider returned no models." : nil
+            } catch {
+                modelError = error.localizedDescription
+            }
         }
     }
 
