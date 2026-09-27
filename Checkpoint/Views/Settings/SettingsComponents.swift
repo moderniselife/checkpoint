@@ -218,8 +218,12 @@ struct ComboBox: View {
     }
 }
 
-/// iOS: a whole-row model setting that opens a searchable list. Big targets instead of a
-/// text field with a tiny menu chevron; typing a name that isn't listed offers "Use …".
+/// iOS: a whole-row model setting that opens a searchable list in a sheet. Big targets instead
+/// of a text field with a tiny menu chevron; typing a name that isn't listed offers "Use …".
+///
+/// A sheet, not a pushed page: Settings is a collapsed split view on iPhone, and pushing a
+/// NavigationLink onto its detail breaks the stack on the way back (pops to the root, stops
+/// responding).
 struct ModelPickerRow: View {
     let title: String
     @Binding var text: String
@@ -229,19 +233,32 @@ struct ModelPickerRow: View {
     var emptyLabel: String? = nil
     var loading = false
     var onRefresh: (() -> Void)? = nil
+    @State private var showing = false
 
     var body: some View {
-        NavigationLink {
-            ModelPickerList(title: title, text: $text, items: items, placeholder: placeholder,
-                            emptyLabel: emptyLabel, loading: loading, onRefresh: onRefresh)
-        } label: {
+        Button { showing = true } label: {
             LabeledContent(title) {
-                Text(text.isEmpty ? (emptyLabel ?? placeholder) : text)
-                    .font(text.isEmpty ? .callout : .callout.monospaced())
-                    .foregroundStyle(text.isEmpty ? .tertiary : .secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 6) {
+                    Text(text.isEmpty ? (emptyLabel ?? placeholder) : text)
+                        .font(text.isEmpty ? .callout : .callout.monospaced())
+                        .foregroundStyle(text.isEmpty ? .tertiary : .secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
+            .contentShape(.rect)
+        }
+        .tint(.primary)
+        .sheet(isPresented: $showing) {
+            NavigationStack {
+                ModelPickerList(title: title, text: $text, items: items, placeholder: placeholder,
+                                emptyLabel: emptyLabel, loading: loading, onRefresh: onRefresh)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 }
@@ -295,6 +312,9 @@ private struct ModelPickerList: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
             if let onRefresh {
                 ToolbarItem(placement: .primaryAction) {
                     if loading {
