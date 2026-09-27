@@ -43,6 +43,7 @@ struct BatchSheet: View {
     @State private var keys: [String] = []
     @State private var folderName = ""
     @State private var runMode: TestMode = .dev
+    @AppStorage("batchParallel") private var parallel = 1
     @State private var resolving = false
     @State private var resolveError: String?
 
@@ -117,12 +118,28 @@ struct BatchSheet: View {
                 }
             }
 
-            Section("Plan into") {
+            Section {
                 TextField("Folder", text: $folderName, prompt: Text("Sprint import"))
                 Picker("Mode", selection: $runMode) {
                     ForEach(TestMode.allCases) { Label($0.label, systemImage: $0.icon).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                Picker("Plans at once", selection: $parallel) {
+                    Text("1").tag(1)
+                    Text("2").tag(2)
+                    Text("3").tag(3)
+                    Text("4").tag(4)
+                }
+                #if os(macOS)
+                .pickerStyle(.segmented)
+                #endif
+            } header: {
+                Text("Plan into")
+            } footer: {
+                Text(parallel == 1
+                    ? "One plan at a time: slowest, but easiest on rate limits."
+                    : "\(parallel) plans at once: faster, but uses your AI provider's rate limit \(parallel)× as fast. Plans that hit it wait in Unfinished to resume.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .onAppear(perform: setup)
@@ -322,7 +339,8 @@ struct BatchSheet: View {
     private func start() {
         let dest = destination
         store.startBatch(inputs: keys, mode: runMode, tracker: dest.tracker, customTracker: dest.custom,
-                         settings: settings, folderName: folderName.trimmingCharacters(in: .whitespaces))
+                         settings: settings, folderName: folderName.trimmingCharacters(in: .whitespaces),
+                         parallel: min(parallel, keys.count))
         dismiss()
     }
 }
