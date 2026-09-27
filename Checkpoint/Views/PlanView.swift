@@ -50,7 +50,15 @@ struct PlanView: View {
                     }
 
                     if !plan.preconditions.isEmpty {
-                        Section(title: "Before you start", icon: "wrench.and.screwdriver") {
+                        Section(title: "Before you start", icon: "wrench.and.screwdriver", accessory: {
+                            Button { correctingPlan = true } label: {
+                                Label("Correct", systemImage: "lightbulb.max")
+                                    .font(.callout)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .help("Wrong role, environment or setup? Correct it and Checkpoint remembers.")
+                        }) {
                             BulletList(items: plan.preconditions)
                         }
                     }
@@ -315,6 +323,7 @@ struct PlanView: View {
                 Button(saved.pinned ? "Unpin" : "Pin", systemImage: saved.pinned ? "pin.slash" : "pin") {
                     store.togglePin(saved.id)
                 }
+                Button("Correct This Plan…", systemImage: "lightbulb.max") { correctingPlan = true }
                 Button("Tags…  ⌘T", systemImage: "tag") { editingTags = true }
                 Menu("Remind Me", systemImage: "bell") {
                     Button("Tomorrow") { remind(days: 1) }
@@ -1035,6 +1044,7 @@ private struct TaskRow: View {
                 }
                 .contentShape(.rect)
                 .onTapGesture { withAnimation(.smooth) { expanded.toggle() } }
+                .contextMenu { menuItems }
                 if compactRow {
                     FlowLayout(spacing: 6) {
                         if !task.area.isEmpty { Chip(text: task.area) }
@@ -1164,15 +1174,17 @@ private struct TaskRow: View {
         #endif
     }
 
-    /// Everything you can do to a task, in one place.
-    private var actionsMenu: some View {
-        Menu {
+    /// Everything you can do to a task: in its ⋯ menu, and on right-click / touch and hold.
+    @ViewBuilder
+    private var menuItems: some View {
             Button("Pass", systemImage: TaskVerdict.pass.icon) { set(.pass) }
             Button("Fail…", systemImage: TaskVerdict.fail.icon) { set(.fail) }
             Button("Blocked…", systemImage: TaskVerdict.blocked.icon) { set(.blocked) }
             if verdict != .todo {
                 Button("Reset to To Do", systemImage: TaskVerdict.todo.icon) { set(.todo) }
             }
+            Divider()
+            Button("Correct This…", systemImage: "lightbulb.max") { correcting = true }
             Divider()
             Button(note == nil ? "Add Note" : "Edit Note", systemImage: "note.text") {
                 noteText = note ?? ""
@@ -1187,7 +1199,11 @@ private struct TaskRow: View {
             }
             Divider()
             Button("Why This Task?", systemImage: "questionmark.circle") { showingWhy = true }
-            Button("Correct This…", systemImage: "lightbulb.max") { correcting = true }
+    }
+
+    private var actionsMenu: some View {
+        Menu {
+            menuItems
         } label: {
             Image(systemName: "ellipsis.circle").foregroundStyle(.tertiary)
         }
