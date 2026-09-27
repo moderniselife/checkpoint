@@ -92,7 +92,7 @@ extension PlanStore {
 
     /// Runs waiting to be resumed, newest first (the live one isn't listed).
     var unfinishedDrafts: [ResearchDraft] {
-        drafts.filter { $0.binnedAt == nil && $0.id != runningDraftID }.sorted { $0.updatedAt > $1.updatedAt }
+        drafts.filter { $0.binnedAt == nil && liveRuns[$0.id] == nil }.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     var binnedDrafts: [ResearchDraft] {
@@ -150,7 +150,7 @@ extension PlanStore {
     func saveSnapshot(_ snapshot: ResearchSnapshot, for id: UUID) {
         guard let i = drafts.firstIndex(where: { $0.id == id }) else { return }
         drafts[i].snapshot = snapshot
-        drafts[i].feed = feed
+        drafts[i].feed = liveFeed(for: id)
         drafts[i].updatedAt = .now
         saveDrafts()
     }
@@ -163,16 +163,16 @@ extension PlanStore {
 
     /// The run stopped early. Paused and discarded runs are kept quietly; failures say what happened.
     func draftStopped(_ id: UUID, error: Error, reportError: Bool = true) {
+        // Not reset here: every run of a paused or discarded parallel batch reads the same reason.
         let reason = stopReason
-        stopReason = .none
         guard let i = drafts.firstIndex(where: { $0.id == id }) else { return }
         var d = drafts[i]
-        d.feed = feed.map { item in
+        d.feed = liveFeed(for: id).map { item in
             var item = item
             if item.state == .pending { item.state = .failed }
             return item
         }
-        if let startedAt { d.researchSeconds += Date().timeIntervalSince(startedAt) }
+        if let startedAt = liveStartedAt(for: id) { d.researchSeconds += Date().timeIntervalSince(startedAt) }
         d.updatedAt = .now
         let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
         // Dropped in the background (iOS suspended the app, the connection went): no alarm,

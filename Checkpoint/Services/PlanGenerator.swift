@@ -241,7 +241,7 @@ nonisolated struct PlanGenerator: Sendable {
             } catch let error as ClaudeClient.ClaudeError where enforceSchema && error.isSchemaTooComplex {
                 enforceSchema = false
                 system += Self.jsonInstruction
-                await onEvent(.status("Too many tools for a schema-checked plan — asking for JSON in the prompt instead."))
+                await onEvent(.status("Too many tools to lock the plan format, asking for JSON in the instructions instead."))
                 // Same turn again, without the format.
                 body["system"] = .string(system)
                 body["output_config"] = ["effort": .string(llm.effort)]

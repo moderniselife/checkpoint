@@ -36,8 +36,10 @@ one; saying no keeps dates and badges, just no banners. Finishing a plan retires
   - **Custom tracker**: one of the server's own search or list tools, with your search text.
   - **Epic children** (Jira or Linear), or a **pasted list** with the tracker to look them up in.
 
-  Each issue gets its own plan in a new folder, run sequentially with progress, cancel, and an
-  error summary at the end.
+  Each issue gets its own plan in a new folder, with progress in the sidebar and an error summary at
+  the end. **Plans at once** (1–4) runs several side by side: faster, but it uses your AI provider's
+  rate limit that much quicker. Tap a running ticket in the sidebar to watch its research. Pausing the
+  batch keeps both the plans in progress and the ones not started yet in Unfinished.
 - **Plan each child** (ticket panel): same engine, pre-filled from the epic's children.
 - **Regression suites** (folder page → **Build regression suite**): merge a folder's plans into one deduplicated
   run with local ticks and Markdown export. Suites are transient by design — source plans stay canonical.
