@@ -8,6 +8,7 @@ struct AIProviderPane: View {
     @State private var llmState: ConnectionTestState = .idle
     @State private var fetchedModels: [String] = []
     @State private var fetchingModels = false
+    @State private var modelError: String?
 
     var body: some View {
         @Bindable var settings = settings
@@ -16,7 +17,7 @@ struct AIProviderPane: View {
                 Picker("Provider", selection: $settings.provider) {
                     ForEach(LLMProvider.allCases) { Text($0.label).tag($0) }
                 }
-                .onChange(of: settings.provider) { llmState = .idle; fetchedModels = []; autoFetch() }
+                .onChange(of: settings.provider) { llmState = .idle; fetchedModels = []; modelError = nil; autoFetch() }
                 .onAppear(perform: autoFetch)
 
                 if settings.provider.hasEditableBaseURL {
@@ -27,6 +28,11 @@ struct AIProviderPane: View {
                 SecureField(settings.provider.requiresKey ? "API key" : "API key (optional)",
                             text: $settings.llmKey, prompt: Text(settings.provider.keyPrompt))
                     .onSubmit(autoFetch)
+                    // A pasted key fills the model list without pressing Return.
+                    .task(id: settings.llmKey) {
+                        try? await Task.sleep(for: .milliseconds(800))
+                        if !Task.isCancelled, !settings.llmKey.isEmpty { autoFetch() }
+                    }
 
                 #if os(iOS)
                 ModelPickerRow(title: "Model", text: $settings.model, items: modelOptions,
@@ -38,6 +44,14 @@ struct AIProviderPane: View {
                         .frame(maxWidth: 280)
                 }
                 #endif
+
+                if let modelError, !fetchingModels {
+                    Label("Couldn't load \(settings.provider.shortLabel)'s models: \(modelError)", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange).lineLimit(3)
+                } else if !fetchedModels.isEmpty {
+                    Text("\(fetchedModels.count) models from \(settings.provider.shortLabel)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
 
                 Picker("Effort", selection: $settings.effort) {
                     ForEach(AppSettings.efforts, id: \.self) { Text($0.capitalized) }
@@ -121,8 +135,7 @@ struct AIProviderPane: View {
 
     /// Quietly fills the dropdowns for providers without a built-in list.
     private func autoFetch() {
-        guard settings.provider != .anthropic, !fetchingModels,
-              !settings.provider.requiresKey || !settings.llmKey.isEmpty else { return }
+        guard !fetchingModels, !settings.provider.requiresKey || !settings.llmKey.isEmpty else { return }
         fetchModels(quiet: true)
     }
 
@@ -150,8 +163,10 @@ struct AIProviderPane: View {
             do {
                 let models = try await settings.refreshModels()
                 fetchedModels = models
+                modelError = models.isEmpty ? "the provider returned no models." : nil
                 if !quiet { llmState = .ok("\(models.count) models available", 0) }
             } catch {
+                modelError = error.localizedDescription
                 if !quiet { llmState = .failed(error.localizedDescription) }
             }
         }

@@ -204,8 +204,11 @@ nonisolated struct OpenAIChatClient: Sendable {
         return turn
     }
 
-    /// Model ids the provider offers (`GET /models`).
+    /// Chat models the provider offers. Gemini uses Google's own models API (its OpenAI-style
+    /// `/models` isn't reliable); everyone else `GET /models`. Embedding, speech and image
+    /// models are left out: they can't write plans.
     func listModels() async throws -> [String] {
+        if provider == .gemini { return try await listGeminiModels() }
         var req = request(path: "/models", method: "GET")
         req.setValue(nil, forHTTPHeaderField: "Content-Type")
         let (data, response) = try await Self.session.data(for: req)
@@ -213,9 +216,43 @@ nonisolated struct OpenAIChatClient: Sendable {
         guard status == 200 else { throw ChatError.http(status, String(decoding: data, as: UTF8.self)) }
         let json = try JSONCoding.decoder.decode(JSONValue.self, from: data)
         let items = json["data"]?.arrayValue ?? json["models"]?.arrayValue ?? json.arrayValue ?? []
-        return items.compactMap { $0["id"]?.stringValue ?? $0["name"]?.stringValue }
-            .map { $0.hasPrefix("models/") ? String($0.dropFirst(7)) : $0 }   // Gemini lists "models/…"
-            .sorted()
+        let ids = items.compactMap { $0["id"]?.stringValue ?? $0["name"]?.stringValue }
+            .map { $0.hasPrefix("models/") ? String($0.dropFirst(7)) : $0 }
+        let chat = ids.filter(Self.isChatModel)
+        // Never filter a list down to nothing: a local server may name things oddly.
+        return Array(Set(chat.isEmpty ? ids : chat)).sorted()
+    }
+
+    /// Google's models API: `GET /v1beta/models`, paged, keeping models that can chat.
+    private func listGeminiModels() async throws -> [String] {
+        var out: [String] = []
+        var page: String?
+        for _ in 0..<20 {
+            var comps = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models")!
+            comps.queryItems = [URLQueryItem(name: "pageSize", value: "1000")] + (page.map { [URLQueryItem(name: "pageToken", value: $0)] } ?? [])
+            var req = URLRequest(url: comps.url!)
+            req.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+            let (data, response) = try await Self.session.data(for: req)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else { throw ChatError.http(status, String(decoding: data, as: UTF8.self)) }
+            let json = try JSONCoding.decoder.decode(JSONValue.self, from: data)
+            for m in json["models"]?.arrayValue ?? [] {
+                let methods = m["supportedGenerationMethods"]?.arrayValue?.compactMap(\.stringValue) ?? []
+                guard methods.contains("generateContent"), let name = m["name"]?.stringValue else { continue }
+                out.append(name.hasPrefix("models/") ? String(name.dropFirst(7)) : name)
+            }
+            guard let next = json["nextPageToken"]?.stringValue, !next.isEmpty, next != page else { break }
+            page = next
+        }
+        return Array(Set(out)).sorted()
+    }
+
+    /// Whether a model id looks like one that can hold a conversation.
+    static func isChatModel(_ id: String) -> Bool {
+        let n = id.lowercased()
+        let notChat = ["embed", "tts", "whisper", "dall-e", "dalle", "moderation", "transcribe",
+                       "image", "audio", "realtime", "speech", "davinci-002", "babbage-002", "rerank", "sora"]
+        return !notChat.contains { n.contains($0) }
     }
 }
 

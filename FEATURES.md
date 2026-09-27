@@ -208,7 +208,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | iOS: run paused (not failed) when iOS stops it in the background, auto-resumes on return | 🧪 | `BackgroundResearch`, `PlanStore.resumeAfterBackground` | Background a run on a device |
 | iOS: tap outside a field closes the keyboard; searchable model picker; separate Test / Refresh rows | 🧪 | `KeyboardDismisser`, `ModelPickerRow` | Settings → AI Provider on iPhone |
 | iOS Atlassian sign-in in an in-app web view (Jira app can't hijack it), Safari fallback | ✅ | `AuthBrowser` | Tested by the maintainer on iPhone, iPad and Mac |
-| Model list fetched in onboarding/Settings; unknown model replaced with one the server has | ✅ | `AppSettings.refreshModels` | Tested by the maintainer on iPhone, iPad and Mac |
+| Model list fetched in onboarding/Settings (all pages, chat models only, Gemini via Google's models API, errors shown); unknown model replaced with one the server has | ✅ | `AppSettings.refreshModels` | Tested by the maintainer on iPhone, iPad and Mac |
 | Guided spotlight tour (10 stops, opens a sample plan if needed) | ✅ | `Shared/TourGuide.swift`, `Models/SamplePlan.swift` | Tested by the maintainer on iPhone, iPad and Mac |
 | Help menu: tour, welcome, guides, shortcuts window, what's new, report an issue | ✅ | `CheckpointApp.HelpCommands`, `KeyboardShortcutsView` | Tested by the maintainer on iPhone, iPad and Mac |
 

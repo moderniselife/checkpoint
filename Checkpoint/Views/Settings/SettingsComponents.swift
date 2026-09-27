@@ -263,7 +263,7 @@ struct ModelPickerRow: View {
     }
 }
 
-private struct ModelPickerList: View {
+struct ModelPickerList: View {
     let title: String
     @Binding var text: String
     let items: [String]
