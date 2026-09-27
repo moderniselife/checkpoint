@@ -3,6 +3,7 @@ import SwiftUI
 /// The built-in Unfinished folder (runs that paused, failed or were cut off) and the Bin
 /// (discarded runs, deleted for good after 30 days).
 struct DraftsView: View {
+    @Environment(\.layout) private var layout
     let bin: Bool
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
@@ -31,7 +32,7 @@ struct DraftsView: View {
             }
             .padding(Platform.isMac ? 24 : 16)
             .padding(.top, Platform.isMac ? 64 : 0)
-            .frame(maxWidth: 760)
+            .frame(maxWidth: layout.readableWidth)
             .frame(maxWidth: .infinity)
         }
         .confirmationDialog("Empty the bin?", isPresented: $confirmingEmpty) {

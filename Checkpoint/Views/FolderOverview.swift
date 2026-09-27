@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Detail view for a selected folder: breadcrumb, rolled-up metrics, subfolders and plans.
 struct FolderOverview: View {
+    @Environment(\.layout) private var layout
     let folder: PlanFolder
     @Environment(PlanStore.self) private var store
     @State private var showingSuite = false
@@ -76,7 +77,7 @@ struct FolderOverview: View {
                     }
                 }
             }
-            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: layout.readableWidth, alignment: .leading)
             .padding(.horizontal, PageLayout.side)
             .padding(.top, PageLayout.top)
             .padding(.bottom, 40)

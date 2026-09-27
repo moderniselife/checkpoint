@@ -585,6 +585,7 @@ private struct SmartFolderEditor: View {
 
 /// Contents of a smart folder: the live rule, rolled-up progress and matching plans.
 struct SmartFolderOverview: View {
+    @Environment(\.layout) private var layout
     let smart: SmartFolder
     @Environment(PlanStore.self) private var store
     @State private var editing = false
@@ -643,7 +644,7 @@ struct SmartFolderOverview: View {
                     }
                 }
             }
-            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: layout.readableWidth, alignment: .leading)
             .padding(.horizontal, PageLayout.side)
             .padding(.top, PageLayout.top)
             .padding(.bottom, 40)

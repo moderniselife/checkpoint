@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ProgressFeedView: View {
+    @Environment(\.layout) private var layout
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
     /// Follows the bottom only while the user is already there. Scrolling up
@@ -74,7 +75,7 @@ struct ProgressFeedView: View {
                 }
                 .environment(\.ticketTracker, store.runningTracker)
                 .animation(.smooth(duration: 0.3), value: store.feed)
-                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: layout.readableWidth, alignment: .leading)
                 .padding(.horizontal, PageLayout.side)
                 .padding(.top, PageLayout.feedTop)
                 .padding(.bottom, 40)

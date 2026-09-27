@@ -165,6 +165,10 @@ verified, what's known to be rough, and how to fix things when they break.
 | Quick model preset at low effort | 🧪 | `AppSettings.quickModel` | Ticket-field options menu → Quick; model in Settings → AI Provider |
 | Cost readout per plan (tokens + ≈$) | 🧪 | `LLMUsage`, research log stat | Plan → Research tab |
 | Follow-up chat with plan updates | 🧪 | `PlanChat`, Chat tab | Plan toolbar → Chat |
+| Chat edits the plan on request (tasks, steps, ACs, edge cases, preconditions…), reports what changed | 🧪 | `PlanChat.respond`, `PlanStore.performRevision` | Chat → "add a task for…" |
+| Claude model traits: adaptive / fixed-budget / no thinking per model, learned from refusals; Thinking setting | 🧪 | `ClaudeModelTraits`, `AppSettings.thinkingMode` | Pick Haiku 4.5 → plan still runs |
+| Thinking error → offer to turn thinking off (or use a budget) and resume | 🧪 | `ThinkingProblemAlert` | A model refusing reasoning |
+| Mac layout grows with the window: wider content, larger ticket bar | 🧪 | `LayoutMetrics` | Maximise the window |
 | Regenerate one section (tasks/AC/edge cases) | 🧪 | `PlanStore.regenerate` | ⋯ on AC / Edge cases; Test tasks pill |
 | Why-this-task rationale popovers | 🧪 | `TaskRow` ⋯ menu | Task ⋯ → Why This Task? |
 | Custom MCP servers as research sources | 🧪 | `CustomMCPTracker.useForResearch` | Custom server → Use for research |

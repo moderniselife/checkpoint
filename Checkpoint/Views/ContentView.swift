@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    /// Grows content and the ticket bar with the window.
+    @State private var layout = LayoutMetrics()
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
     @Environment(\.tourGuide) private var tour
@@ -115,15 +117,19 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .environment(\.scrollChrome, chrome)
+                .environment(\.layout, layout)
                 .onChange(of: store.selection) { chrome.show() }
 
                 TicketInputBar()
+                    .environment(\.layout, layout)
                     .padding(.top, 12)
                     .padding(.horizontal, 24)
                     .offset(y: chrome.barHidden ? -96 : 0)
                     .opacity(chrome.barHidden ? 0 : 1)
                     .allowsHitTesting(!chrome.barHidden)
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { layout = LayoutMetrics(mainWidth: $0) }
+            .thinkingProblemAlert()
             .overlay(alignment: .bottom) {
                 if let error = store.error {
                     ErrorBanner(message: error)

@@ -14,6 +14,12 @@ model and URL; **Fetch models** lists what's actually available; **Test** proves
   Lower effort also means a tighter cap.
 - Requirements: tool calling, and a big context window for epics (small local models overflow).
 
+**Thinking (Claude).** Settings → AI Provider → **Thinking**: *Automatic* uses adaptive thinking where
+the model supports it (Claude 5 family), a fixed thinking budget where it doesn't (Haiku 4.5, Sonnet 4.5,
+Opus 4.1), and none on older models. If a model refuses an option, Checkpoint remembers that for the
+model and carries on; if a run still stops over thinking, it offers to turn it off and resume. Other
+providers: *Off* stops sending a reasoning setting, for models that reject one.
+
 ## Jira, Linear, custom MCP
 
 - **Jira**: Sign in with Atlassian (OAuth, recommended) or email + API token (needs your org admin

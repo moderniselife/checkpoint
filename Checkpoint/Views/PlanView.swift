@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 import PhotosUI
 
 struct PlanView: View {
+    @Environment(\.layout) private var layout
     let saved: SavedPlan
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
@@ -142,7 +143,7 @@ struct PlanView: View {
                 }
             }
             .environment(\.ticketTracker, saved.tracker)
-            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: layout.readableWidth, alignment: .leading)
             .padding(.horizontal, PageLayout.side)
             .padding(.top, PageLayout.top)
             .padding(.bottom, 40)
@@ -1711,7 +1712,8 @@ private struct ChatView: View {
     private var suggestions: [String] {
         var out = ["What's the riskiest part of this change?", "Which tasks can I skip for a quick smoke test?"]
         if saved.mode == .qa { out.append("What should I check as an admin?") } else { out.append("What should I unit test instead?") }
-        out.append("Add coverage for slow or offline networks")
+        out.append("Add a task for slow or offline networks")
+        out.append("Make every task log in as a Company Admin")
         return out
     }
 
@@ -1722,8 +1724,8 @@ private struct ChatView: View {
                     Image(systemName: "bubble.left.and.text.bubble.right")
                         .font(.system(size: 30))
                         .foregroundStyle(.tint)
-                    Text("Ask anything about this plan").font(.title3.weight(.semibold))
-                    Text("Answers stay with the plan, and any useful one can update it — your ticks stay put.")
+                    Text("Ask about this plan, or tell it what to change").font(.title3.weight(.semibold))
+                    Text("Ask a question, or say “add a task for…”, “reword AC2”, “drop the smoke tasks”. Changes happen straight away and your ticks stay put.")
                         .font(.callout).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                     FlowLayout(spacing: 8) {
@@ -1767,7 +1769,10 @@ private struct ChatView: View {
                                 .font(.callout)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
-                            if !msg.text.hasPrefix("Couldn't answer") {
+                            if msg.edited == true {
+                                Label("Changed the plan", systemImage: "checkmark.circle")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            } else if !msg.text.hasPrefix("Couldn't answer") {
                                 Button("Update Plan from This", systemImage: "arrow.triangle.2.circlepath") {
                                     store.applyChatRevision(msg.text, in: saved.id, settings: settings)
                                 }
@@ -1816,6 +1821,7 @@ private struct ChatAvatar: View {
 
 /// Glass composer pinned under the chat thread, styled like the ticket bar.
 private struct ChatComposer: View {
+    @Environment(\.layout) private var layout
     let saved: SavedPlan
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
@@ -1835,7 +1841,7 @@ private struct ChatComposer: View {
                 .onSubmit(ask)
                 .background(alignment: .leading) {
                     if question.isEmpty {
-                        Text("Ask a follow-up…").foregroundStyle(.tertiary).allowsHitTesting(false)
+                        Text("Ask a question or ask for a change…").foregroundStyle(.tertiary).allowsHitTesting(false)
                     }
                 }
                 .padding(.vertical, 4)
@@ -1854,7 +1860,7 @@ private struct ChatComposer: View {
         .padding(.trailing, 8)
         .padding(.vertical, 8)
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
-        .frame(maxWidth: 820)
+        .frame(maxWidth: layout.readableWidth)
         .padding(.horizontal, PageLayout.side)
         .padding(.bottom, 16)
         // Mac: ready to type. iOS: no keyboard until you tap the field.

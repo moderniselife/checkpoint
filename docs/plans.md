@@ -49,6 +49,13 @@ Prices are a snapshot and unknown models show tokens only.
 The Scenarios menu adds 3–6 end-to-end journeys: **from related tickets** (tracker only) or
 **tickets + codebase** (reads a repo folder you choose — sandboxed, read-only, confined to it).
 
+## Chat
+
+The **Chat** tab answers questions about the plan and makes changes when you ask: "add a task for
+offline mode", "reword AC2 to…", "drop the smoke tasks", "make every task log in as a Company Admin".
+It edits the plan straight away, tells you what changed, and highlights it. Ticks, notes and evidence
+stay on every task that survives. It remembers the conversation, so "do the same for the others" works.
+
 ## Context, corrections and memories
 
 **Context for one run.** In the ticket field's options (the slider icon), **Add Context for This Run…**

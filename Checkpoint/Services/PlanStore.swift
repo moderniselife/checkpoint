@@ -234,6 +234,8 @@ final class PlanStore {
     /// Runs in flight, oldest first, for the sidebar.
     var activeRuns: [LiveRun] { liveRuns.values.sorted { $0.startedAt < $1.startedAt } }
     var error: String?
+    /// A run failed because the model refused a thinking option; the app offers to turn it off.
+    var thinkingProblem: ThinkingProblem?
     private var task: Task<Void, Never>?
     /// Runs that haven't finished: paused, failed, interrupted, or in the bin (see ResearchDrafts.swift).
     var drafts: [ResearchDraft] = []
@@ -599,21 +601,38 @@ final class PlanStore {
         appendChat(planID: planID, role: .user, text: q)
         chatBusyID = planID
         let plan = saved.plan
+        let history = saved.chat   // read before this message was added
         let config = settings.llmConfig
+        let known = memories(for: plan.ticket.key)
         Task {
             do {
-                let reply = try await PlanChat.answer(plan: plan, question: q, config: config)
-                appendChat(planID: planID, role: .assistant, text: reply)
+                let turn = try await PlanChat.respond(plan: plan, history: history, message: q,
+                                                      memories: known, config: config)
+                guard !turn.edit.isEmpty else {
+                    appendChat(planID: planID, role: .assistant, text: turn.reply)
+                    chatBusyID = nil
+                    return
+                }
+                // A change request: make it, then say what actually changed.
+                chatBusyID = nil
+                switch await performRevision(planID: planID, instruction: turn.edit, section: nil, settings: settings) {
+                case .success(let summary):
+                    appendChat(planID: planID, role: .assistant,
+                               text: turn.reply + (summary.isEmpty ? "" : "\n\nPlan updated: \(summary)."), edited: true)
+                case .failure(let error):
+                    appendChat(planID: planID, role: .assistant,
+                               text: "I couldn't change the plan: \(error.localizedDescription)", edited: true)
+                }
             } catch {
                 appendChat(planID: planID, role: .assistant, text: "Couldn't answer that: \(error.localizedDescription)")
+                chatBusyID = nil
             }
-            chatBusyID = nil
         }
     }
 
-    private func appendChat(planID: String, role: ChatMsg.Role, text: String) {
+    private func appendChat(planID: String, role: ChatMsg.Role, text: String, edited: Bool? = nil) {
         guard let i = plans.firstIndex(where: { $0.id == planID }) else { return }
-        plans[i].chat.append(ChatMsg(role: role, text: text))
+        plans[i].chat.append(ChatMsg(role: role, text: text, edited: edited))
         plans[i].updatedAt = .now
         save()
     }
@@ -649,24 +668,54 @@ final class PlanStore {
     }
 
     private func revise(planID: String, instruction: String, section: RevisionSection?, settings: AppSettings) {
-        guard let saved = plans.first(where: { $0.id == planID }),
-              regenerating == nil, chatBusyID == nil else { return }
-        regenerating = planID + (section.map { ":\($0.rawValue)" } ?? ":full")
-        let plan = saved.plan
-        let config = settings.llmConfig
-        // Revisions keep to the same corrections as the first write.
-        let known = memories(for: plan.ticket.key)
-        let instruction = known.isEmpty ? instruction
-            : instruction + "\n\nKeep to these corrections from earlier plans:\n" + known.map { "- \($0)" }.joined(separator: "\n")
         Task {
-            do {
-                let revised = try await PlanChat.revise(plan: plan, instruction: instruction, config: config)
-                await MainActor.run { self.mergeRevision(revised, into: planID, section: section) }
-            } catch {
+            if case .failure(let error) = await performRevision(planID: planID, instruction: instruction,
+                                                                section: section, settings: settings) {
                 self.error = "Revision failed: \(error.localizedDescription)"
             }
-            regenerating = nil
         }
+    }
+
+    private struct Busy: LocalizedError {
+        var errorDescription: String? { "Another update to this plan is still running." }
+    }
+
+    /// Revises the plan, merges it (ticks, notes and evidence survive by id), highlights what
+    /// changed, and returns a short summary of the changes.
+    private func performRevision(planID: String, instruction: String, section: RevisionSection?,
+                                 settings: AppSettings) async -> Result<String, Error> {
+        guard let saved = plans.first(where: { $0.id == planID }),
+              regenerating == nil, chatBusyID == nil else { return .failure(Busy()) }
+        regenerating = planID + (section.map { ":\($0.rawValue)" } ?? ":full")
+        defer { regenerating = nil }
+        let before = saved.plan
+        let config = settings.llmConfig
+        // Revisions keep to the same corrections as the first write.
+        let known = memories(for: before.ticket.key)
+        let instruction = known.isEmpty ? instruction
+            : instruction + "\n\nKeep to these corrections from earlier plans:\n" + known.map { "- \($0)" }.joined(separator: "\n")
+        do {
+            let revised = try await PlanChat.revise(plan: before, instruction: instruction, config: config)
+            mergeRevision(revised, into: planID, section: section)
+            guard let after = plans.first(where: { $0.id == planID })?.plan else { return .success("") }
+            let diff = PlanDiff.compare(old: before, new: after, planID: planID)
+            planDiff = diff
+            return .success([diff?.summary, Self.otherChanges(before, after)].compactMap { $0 }.filter { !$0.isEmpty }
+                .joined(separator: " · "))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// Changes the diff doesn't track: edge cases, preconditions, questions, summary, scenarios.
+    private static func otherChanges(_ a: TestPlan, _ b: TestPlan) -> String {
+        var parts: [String] = []
+        if a.preconditions != b.preconditions { parts.append("preconditions") }
+        if a.edgeCases != b.edgeCases { parts.append("edge cases") }
+        if a.openQuestions != b.openQuestions { parts.append("open questions") }
+        if a.summary != b.summary { parts.append("summary") }
+        if a.scenarios.map(\.title) != b.scenarios.map(\.title) { parts.append("scenarios") }
+        return parts.isEmpty ? "" : parts.joined(separator: ", ") + " updated"
     }
 
     /// Merges a revision, preserving outcomes/notes/evidence by surviving ID.

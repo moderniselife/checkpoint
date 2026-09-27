@@ -9,6 +9,7 @@ struct AIProviderPane: View {
     @State private var fetchedModels: [String] = []
     @State private var fetchingModels = false
     @State private var modelError: String?
+    @State private var learnedReset = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -55,6 +56,22 @@ struct AIProviderPane: View {
 
                 Picker("Effort", selection: $settings.effort) {
                     ForEach(AppSettings.efforts, id: \.self) { Text($0.capitalized) }
+                }
+
+                Picker("Thinking", selection: $settings.thinkingMode) {
+                    ForEach(settings.provider.style == .anthropic ? ThinkingMode.allCases : [.auto, .off]) { mode in
+                        Text(settings.provider.style == .anthropic || mode == .off ? mode.label : "On").tag(mode)
+                    }
+                }
+                Text(thinkingNote)
+                    .font(.caption).foregroundStyle(.secondary)
+                if !ClaudeModelTraits.Learned.isEmpty || learnedReset {
+                    Button(learnedReset ? "Forgotten" : "Forget What Checkpoint Learned About Models") {
+                        ClaudeModelTraits.Learned.reset()
+                        learnedReset = true
+                    }
+                    .font(.caption)
+                    .disabled(learnedReset)
                 }
 
                 #if os(iOS)
@@ -119,6 +136,18 @@ struct AIProviderPane: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// What Thinking does for the chosen model, so Automatic isn't a mystery.
+    private var thinkingNote: String {
+        let config = settings.llmConfig
+        guard config.provider.style == .anthropic else {
+            return settings.thinkingMode == .off
+                ? "Reasoning isn't requested. Use this for models that reject a reasoning setting."
+                : "Reasoning effort is sent where the provider supports it."
+        }
+        return ClaudeModelTraits.summary(model: config.model, mode: settings.thinkingMode, effort: config.effort)
+            + " Checkpoint also learns from any option a model refuses."
     }
 
     private var canFetch: Bool { !settings.provider.requiresKey || !settings.llmKey.isEmpty }
