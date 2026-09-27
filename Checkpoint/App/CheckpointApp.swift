@@ -29,6 +29,10 @@ struct CheckpointApp: App {
                     inspector.attach(settings)
                     sync.startIfNeeded()
                 }
+                // Coming back to Checkpoint: pick up changes made on other devices straight away.
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    sync.syncNow()
+                }
                 .frame(minWidth: 900, minHeight: 600)
         }
         .windowToolbarStyle(.unified)

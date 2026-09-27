@@ -14,8 +14,15 @@ import Foundation
 nonisolated final class FolderSyncIO: @unchecked Sendable {
     let root: URL
     private let fm = FileManager.default
+    /// Decoded files by path, reused while their modification date is unchanged, so checking
+    /// the folder every few seconds only reads what actually changed.
+    private var cache: [String: (modified: Date, size: Int, value: Any)] = [:]
+    private let cacheLock = NSLock()
 
     init(root: URL) { self.root = root }
+
+    /// Folders to watch for files arriving from other devices.
+    var watchedDirectories: [URL] { [root, plansDir, foldersDir, smartDir, memoriesDir] }
 
     struct Tombstones: Codable, Sendable {
         var plans: [String: Date] = [:]
@@ -103,8 +110,18 @@ nonisolated final class FolderSyncIO: @unchecked Sendable {
                 pending += 1
                 continue
             }
-            guard name.hasSuffix(".json"), let data = coordinatedRead(dir.appending(path: name)),
-                  let value = try? JSONDecoder().decode(T.self, from: data) else { continue }
+            guard name.hasSuffix(".json") else { continue }
+            let url = dir.appending(path: name)
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+            let modified = values?.contentModificationDate ?? .distantPast
+            let size = values?.fileSize ?? -1
+            if let hit = cacheLock.withLock({ cache[url.path] }), hit.modified == modified, hit.size == size,
+               let value = hit.value as? T {
+                out.append(value)
+                continue
+            }
+            guard let data = coordinatedRead(url), let value = try? JSONDecoder().decode(T.self, from: data) else { continue }
+            cacheLock.withLock { cache[url.path] = (modified, size, value) }
             out.append(value)
         }
         return out
@@ -208,6 +225,11 @@ final class FolderSyncBackend {
     private let report: (SyncStatus) -> Void
     private var pollTask: Task<Void, Never>?
     private var busy = false
+    /// A change arrived mid-sync: go again straight after.
+    private var again = false
+    private var watchers: [DispatchSourceFileSystemObject] = []
+    private var debounce: Task<Void, Never>?
+    private var lastEvidencePass = Date.distantPast
 
     init(root: URL, store: PlanStore, report: @escaping (SyncStatus) -> Void) {
         self.root = root
@@ -224,9 +246,12 @@ final class FolderSyncBackend {
             return
         }
         Task { await sync(initial: true) }
+        watch()
+        // Backup for changes the watchers miss (network shares, some providers). Cheap: only
+        // files whose modification date changed are read.
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(20))
+                try? await Task.sleep(for: .seconds(5))
                 await self?.sync(initial: false)
             }
         }
@@ -235,10 +260,41 @@ final class FolderSyncBackend {
     func stop() {
         pollTask?.cancel()
         pollTask = nil
+        debounce?.cancel()
+        watchers.forEach { $0.cancel() }
+        watchers = []
         root.stopAccessingSecurityScopedResource()
     }
 
     func syncNow() { Task { await sync(initial: false) } }
+
+    /// Reacts within a moment when another device's changes land in the folder: a file
+    /// arriving or being replaced changes its directory, which wakes these sources.
+    private func watch() {
+        for dir in io.watchedDirectories {
+            let fd = open(dir.path, O_EVTONLY)
+            guard fd >= 0 else { continue }
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd,
+                                                                   eventMask: [.write, .rename, .delete, .extend, .attrib],
+                                                                   queue: .main)
+            source.setEventHandler { [weak self] in
+                MainActor.assumeIsolated { self?.changed() }
+            }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            watchers.append(source)
+        }
+    }
+
+    /// Several events arrive per saved file; sync once they settle.
+    private func changed() {
+        debounce?.cancel()
+        debounce = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await self?.sync(initial: false)
+        }
+    }
 
     /// Writes local changes straight away; remote changes arrive on the next poll.
     func push(_ c: StoreChanges) {
@@ -269,9 +325,16 @@ final class FolderSyncBackend {
     }
 
     private func sync(initial: Bool) async {
-        guard !busy, let store else { return }
+        guard let store else { return }
+        guard !busy else { again = true; return }
         busy = true
-        defer { busy = false }
+        defer {
+            busy = false
+            if again {
+                again = false
+                Task { await self.sync(initial: false) }
+            }
+        }
         if initial { report(.syncing) }
         let io = io
         let remote = await Task.detached { io.readAll() }.value
@@ -340,11 +403,15 @@ final class FolderSyncBackend {
         store.applyRemote(incoming)
         if !outgoing.isEmpty { push(outgoing) }
 
-        // Evidence for every live plan, both directions.
-        let localRoot = store.evidenceRootURL
-        let plans = store.snapshot.plans.filter { !$0.evidence.isEmpty }
-        let arrived = await Task.detached { plans.filter { io.mirrorEvidence(for: $0, localRoot: localRoot) }.map(\.id) }.value
-        for id in arrived { store.noteRemoteEvidence(planID: id) }
+        // Evidence for every live plan, both directions: when plans changed, or every 30 s
+        // (it checks each file, too much to do on every quick pass).
+        if initial || !incoming.plans.isEmpty || !outgoing.plans.isEmpty || Date.now.timeIntervalSince(lastEvidencePass) > 30 {
+            lastEvidencePass = .now
+            let localRoot = store.evidenceRootURL
+            let plans = store.snapshot.plans.filter { !$0.evidence.isEmpty }
+            let arrived = await Task.detached { plans.filter { io.mirrorEvidence(for: $0, localRoot: localRoot) }.map(\.id) }.value
+            for id in arrived { store.noteRemoteEvidence(planID: id) }
+        }
 
         report(remote.pending > 0 ? .waitingForDownloads(remote.pending) : .synced(.now))
     }
