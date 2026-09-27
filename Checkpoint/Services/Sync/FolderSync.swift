@@ -8,6 +8,7 @@ import Foundation
 ///     <folder>/plans/<id>.json
 ///     <folder>/folders/<uuid>.json
 ///     <folder>/smart/<uuid>.json
+///     <folder>/memories/<uuid>.json
 ///     <folder>/deleted.json
 ///     <folder>/evidence/<plan id>/<task id>/<file>
 nonisolated final class FolderSyncIO: @unchecked Sendable {
@@ -20,11 +21,27 @@ nonisolated final class FolderSyncIO: @unchecked Sendable {
         var plans: [String: Date] = [:]
         var folders: [UUID: Date] = [:]
         var smart: [UUID: Date] = [:]
+        var memories: [UUID: Date] = [:]
+
+        init() {}
+
+        // Each list is optional: files written before memories synced have no "memories" key,
+        // and a strict decode would drop the whole file, bringing deleted plans back.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            plans = try c.decodeIfPresent([String: Date].self, forKey: .plans) ?? [:]
+            folders = try c.decodeIfPresent([UUID: Date].self, forKey: .folders) ?? [:]
+            smart = try c.decodeIfPresent([UUID: Date].self, forKey: .smart) ?? [:]
+            memories = try c.decodeIfPresent([UUID: Date].self, forKey: .memories) ?? [:]
+        }
+
+        var isEmpty: Bool { plans.isEmpty && folders.isEmpty && smart.isEmpty && memories.isEmpty }
 
         mutating func merge(_ other: Tombstones) {
             plans.merge(other.plans) { max($0, $1) }
             folders.merge(other.folders) { max($0, $1) }
             smart.merge(other.smart) { max($0, $1) }
+            memories.merge(other.memories) { max($0, $1) }
         }
 
         /// Forget deletes older than 90 days so the file doesn't grow forever.
@@ -33,6 +50,7 @@ nonisolated final class FolderSyncIO: @unchecked Sendable {
             plans = plans.filter { $0.value > cutoff }
             folders = folders.filter { $0.value > cutoff }
             smart = smart.filter { $0.value > cutoff }
+            memories = memories.filter { $0.value > cutoff }
         }
     }
 
@@ -40,6 +58,7 @@ nonisolated final class FolderSyncIO: @unchecked Sendable {
         var plans: [SavedPlan] = []
         var folders: [PlanFolder] = []
         var smartFolders: [SmartFolder] = []
+        var memories: [PlanMemory] = []
         var tombstones = Tombstones()
         /// Files still downloading from iCloud; the next pass picks them up.
         var pending = 0
@@ -48,11 +67,12 @@ nonisolated final class FolderSyncIO: @unchecked Sendable {
     private var plansDir: URL { root.appending(path: "plans", directoryHint: .isDirectory) }
     private var foldersDir: URL { root.appending(path: "folders", directoryHint: .isDirectory) }
     private var smartDir: URL { root.appending(path: "smart", directoryHint: .isDirectory) }
+    private var memoriesDir: URL { root.appending(path: "memories", directoryHint: .isDirectory) }
     private var evidenceDir: URL { root.appending(path: "evidence", directoryHint: .isDirectory) }
     private var tombstoneURL: URL { root.appending(path: "deleted.json") }
 
     func prepare() throws {
-        for dir in [plansDir, foldersDir, smartDir, evidenceDir] {
+        for dir in [plansDir, foldersDir, smartDir, memoriesDir, evidenceDir] {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }
@@ -64,6 +84,7 @@ nonisolated final class FolderSyncIO: @unchecked Sendable {
         r.plans = readDir(plansDir, as: SavedPlan.self, pending: &r.pending)
         r.folders = readDir(foldersDir, as: PlanFolder.self, pending: &r.pending)
         r.smartFolders = readDir(smartDir, as: SmartFolder.self, pending: &r.pending)
+        r.memories = readDir(memoriesDir, as: PlanMemory.self, pending: &r.pending)
         if let data = coordinatedRead(tombstoneURL),
            let t = try? JSONDecoder().decode(Tombstones.self, from: data) {
             r.tombstones = t
@@ -103,6 +124,7 @@ nonisolated final class FolderSyncIO: @unchecked Sendable {
     func write(plan: SavedPlan) { write(plan, to: plansDir.appending(path: SyncNames.file(forPlan: plan.id))) }
     func write(folder: PlanFolder) { write(folder, to: foldersDir.appending(path: "\(folder.id.uuidString).json")) }
     func write(smart: SmartFolder) { write(smart, to: smartDir.appending(path: "\(smart.id.uuidString).json")) }
+    func write(memory: PlanMemory) { write(memory, to: memoriesDir.appending(path: "\(memory.id.uuidString).json")) }
 
     func removePlan(_ id: String) {
         remove(plansDir.appending(path: SyncNames.file(forPlan: id)))
@@ -111,6 +133,7 @@ nonisolated final class FolderSyncIO: @unchecked Sendable {
     }
     func removeFolder(_ id: UUID) { remove(foldersDir.appending(path: "\(id.uuidString).json")) }
     func removeSmart(_ id: UUID) { remove(smartDir.appending(path: "\(id.uuidString).json")) }
+    func removeMemory(_ id: UUID) { remove(memoriesDir.appending(path: "\(id.uuidString).json")) }
 
     func writeTombstones(_ t: Tombstones) {
         var merged = t
@@ -227,6 +250,7 @@ final class FolderSyncBackend {
         for id in c.deletedPlans { tomb.plans[id] = now }
         for id in c.deletedFolders { tomb.folders[id] = now }
         for id in c.deletedSmartFolders { tomb.smart[id] = now }
+        for id in c.deletedMemories { tomb.memories[id] = now }
         Task.detached {
             for p in c.plans {
                 io.write(plan: p)
@@ -237,7 +261,9 @@ final class FolderSyncBackend {
             for id in c.deletedPlans { io.removePlan(id) }
             for id in c.deletedFolders { io.removeFolder(id) }
             for id in c.deletedSmartFolders { io.removeSmart(id) }
-            if !(tomb.plans.isEmpty && tomb.folders.isEmpty && tomb.smart.isEmpty) { io.writeTombstones(tomb) }
+            for m in c.memories { io.write(memory: m) }
+            for id in c.deletedMemories { io.removeMemory(id) }
+            if !tomb.isEmpty { io.writeTombstones(tomb) }
         }
         report(.synced(.now))
     }
@@ -289,6 +315,26 @@ final class FolderSyncBackend {
         }
         for f in local.smartFolders where remoteSmart[f.id] == nil {
             if remote.tombstones.smart[f.id] != nil { incoming.deletedSmartFolders.append(f.id) } else { outgoing.smartFolders.append(f) }
+        }
+
+        // Memories: newer edit wins, like plans; tombstones beat anything older than the delete.
+        let localMemories = Dictionary(local.memories.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let remoteMemories = Dictionary(remote.memories.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for r in remote.memories {
+            if let deleted = remote.tombstones.memories[r.id], deleted >= r.updatedAt { continue }
+            if let l = localMemories[r.id] {
+                if r.updatedAt > l.updatedAt { incoming.memories.append(r) }
+                else if l.updatedAt > r.updatedAt { outgoing.memories.append(l) }
+            } else {
+                incoming.memories.append(r)
+            }
+        }
+        for l in local.memories where remoteMemories[l.id] == nil {
+            if let deleted = remote.tombstones.memories[l.id], deleted >= l.updatedAt {
+                incoming.deletedMemories.append(l.id)
+            } else {
+                outgoing.memories.append(l)
+            }
         }
 
         store.applyRemote(incoming)

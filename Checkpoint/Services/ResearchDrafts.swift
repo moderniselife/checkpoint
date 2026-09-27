@@ -256,3 +256,63 @@ extension PlanStore {
         drafts.removeAll { ($0.binnedAt ?? .distantFuture) < cutoff }
     }
 }
+
+// MARK: - Memories
+
+extension PlanStore {
+    var memoriesURL: URL { URL.applicationSupportDirectory.appending(path: "Checkpoint/memories.json") }
+
+    /// The memories told to the planner for this ticket.
+    func memories(for ticketKey: String) -> [String] {
+        memories.filter { $0.applies(to: ticketKey) }.map(\.text)
+    }
+
+    /// Enabled memories whose text or scope contains every word of the query.
+    func searchMemories(_ query: String) -> [PlanMemory] {
+        let words = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        return memories.filter { m in
+            m.enabled && words.allSatisfy { m.text.lowercased().contains($0) || m.scope.lowercased() == $0 }
+        }
+    }
+
+    /// Adds a memory; nil when the same text (ignoring case) is already remembered for that scope.
+    @discardableResult
+    func addMemory(_ text: String, scope: String, source: String? = nil, learned: Bool = false) -> PlanMemory? {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scope = scope.uppercased()
+        guard !clean.isEmpty,
+              !memories.contains(where: { $0.scope == scope && $0.text.caseInsensitiveCompare(clean) == .orderedSame })
+        else { return nil }
+        let m = PlanMemory(text: clean, scope: scope, source: source, learned: learned)
+        setMemories([m] + memories)
+        return m
+    }
+
+    func updateMemory(_ memory: PlanMemory) {
+        guard let i = memories.firstIndex(where: { $0.id == memory.id }), memories[i] != memory else { return }
+        var list = memories
+        list[i] = memory
+        list[i].updatedAt = .now
+        setMemories(list)
+    }
+
+    func removeMemory(_ id: UUID) {
+        setMemories(memories.filter { $0.id != id })
+    }
+
+    func loadMemories() {
+        if let data = try? Data(contentsOf: memoriesURL),
+           let saved = try? JSONDecoder().decode([PlanMemory].self, from: data) {
+            replaceMemories(saved)
+            return
+        }
+        // 0.7 builds before sync kept memories in preferences: bring them over once.
+        let d = UserDefaults.standard
+        if let data = d.data(forKey: "memories"),
+           let old = try? JSONDecoder().decode([PlanMemory].self, from: data), !old.isEmpty {
+            replaceMemories(old)
+            persistMemories()
+            d.removeObject(forKey: "memories")
+        }
+    }
+}

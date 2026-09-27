@@ -43,6 +43,7 @@ struct CheckpointApp: App {
         Window("Checkpoint Settings", id: SettingsView.windowID) {
             SettingsView()
                 .environment(settings)
+                .environment(store)
                 .environment(inspector)
                 .environment(sync)
         }

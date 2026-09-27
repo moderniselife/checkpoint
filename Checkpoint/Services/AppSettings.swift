@@ -104,10 +104,7 @@ final class AppSettings {
     var houseRules: String { didSet { UserDefaults.standard.set(houseRules, forKey: "houseRules") } }
     /// Whether the planner may save new memories while it researches.
     var learnMemories: Bool { didSet { UserDefaults.standard.set(learnMemories, forKey: "learnMemories") } }
-    /// Corrections and facts told to the planner on every matching plan (see PlanMemory).
-    var memories: [PlanMemory] = [] {
-        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(memories), forKey: "memories") }
-    }
+
     /// Cheaper model for Quick plans (IDEA-082); empty = same model at low effort.
     var quickModel: String { didSet { UserDefaults.standard.set(quickModel, forKey: "quickModel") } }
 
@@ -135,7 +132,6 @@ final class AppSettings {
         qaEnvironment = d.string(forKey: "qaEnvironment") ?? ""
         houseRules = d.string(forKey: "houseRules") ?? ""
         learnMemories = d.object(forKey: "learnMemories") as? Bool ?? true
-        memories = d.data(forKey: "memories").flatMap { try? JSONDecoder().decode([PlanMemory].self, from: $0) } ?? []
         quickModel = d.string(forKey: "quickModel") ?? ""
         atlassianAuth = AtlassianAuth(rawValue: d.string(forKey: "atlassianAuth") ?? "") ?? .oauth
         atlassianUser = MCPOAuth.atlassian.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil
@@ -374,42 +370,3 @@ extension AppSettings {
     func openCodebase() -> URL? { nil }
 }
 #endif
-
-// MARK: - Memories
-
-extension AppSettings {
-    /// The memories told to the planner for this ticket.
-    func memories(for ticketKey: String) -> [String] {
-        memories.filter { $0.applies(to: ticketKey) }.map(\.text)
-    }
-
-    /// Adds a memory; nil when the same text (ignoring case) is already remembered for that scope.
-    @discardableResult
-    func addMemory(_ text: String, scope: String, source: String? = nil, learned: Bool = false) -> PlanMemory? {
-        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let scope = scope.uppercased()
-        guard !clean.isEmpty,
-              !memories.contains(where: { $0.scope == scope && $0.text.caseInsensitiveCompare(clean) == .orderedSame })
-        else { return nil }
-        let m = PlanMemory(text: clean, scope: scope, source: source, learned: learned)
-        memories.insert(m, at: 0)
-        return m
-    }
-
-    /// Memories whose text or scope contains every word of the query.
-    func searchMemories(_ query: String) -> [PlanMemory] {
-        let words = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-        return memories.filter { m in
-            m.enabled && words.allSatisfy { m.text.lowercased().contains($0) || m.scope.lowercased() == $0 }
-        }
-    }
-
-    func updateMemory(_ memory: PlanMemory) {
-        guard let i = memories.firstIndex(where: { $0.id == memory.id }) else { return }
-        memories[i] = memory
-    }
-
-    func removeMemory(_ id: UUID) {
-        memories.removeAll { $0.id == id }
-    }
-}

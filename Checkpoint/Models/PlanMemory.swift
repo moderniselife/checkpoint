@@ -10,6 +10,8 @@ nonisolated struct PlanMemory: Codable, Identifiable, Hashable, Sendable {
     var scope: String = ""
     var enabled = true
     var createdAt: Date = .now
+    /// Last edit, so the newest copy wins when two devices changed it.
+    var updatedAt: Date = .now
     /// Where it came from, e.g. "PROJ-12 · Evidence type is read-only in Perform".
     var source: String?
     /// Saved by Checkpoint itself while researching, rather than by you.
@@ -29,6 +31,7 @@ nonisolated struct PlanMemory: Codable, Identifiable, Hashable, Sendable {
         scope = try c.decodeIfPresent(String.self, forKey: .scope) ?? ""
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? .now
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
         source = try c.decodeIfPresent(String.self, forKey: .source)
         learned = try c.decodeIfPresent(Bool.self, forKey: .learned) ?? false
     }

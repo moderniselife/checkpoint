@@ -5,14 +5,15 @@ import SwiftUI
 /// Everything Checkpoint remembers across plans: your corrections and what it learned itself.
 struct MemoriesPane: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(PlanStore.self) private var store
     @State private var adding = false
     @State private var editing: PlanMemory?
     @State private var query = ""
 
     private var shown: [PlanMemory] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !q.isEmpty else { return settings.memories }
-        return settings.memories.filter { $0.text.lowercased().contains(q) || $0.scope.lowercased().contains(q) }
+        guard !q.isEmpty else { return store.memories }
+        return store.memories.filter { $0.text.lowercased().contains(q) || $0.scope.lowercased().contains(q) }
     }
 
     var body: some View {
@@ -26,11 +27,11 @@ struct MemoriesPane: View {
             }
 
             Section {
-                if settings.memories.count > 6 {
+                if store.memories.count > 6 {
                     TextField("Search", text: $query, prompt: Text("Search memories"))
                 }
                 if shown.isEmpty {
-                    Text(settings.memories.isEmpty
+                    Text(store.memories.isEmpty
                          ? "Nothing yet. Use Correct This… on a task, or add one here."
                          : "No memories match.")
                         .foregroundStyle(.secondary)
@@ -43,18 +44,18 @@ struct MemoriesPane: View {
                     Button("Add Memory…", systemImage: "plus") { adding = true }
                 }
             } header: {
-                Text(settings.memories.isEmpty ? "Memories" : "Memories · \(settings.memories.count)")
+                Text(store.memories.isEmpty ? "Memories" : "Memories · \(store.memories.count)")
             }
         }
         .sheet(isPresented: $adding) {
-            MemoryEditor(memory: nil) { text, scope in settings.addMemory(text, scope: scope) }
+            MemoryEditor(memory: nil) { text, scope in store.addMemory(text, scope: scope) }
         }
         .sheet(item: $editing) { memory in
             MemoryEditor(memory: memory) { text, scope in
                 var m = memory
                 m.text = text
                 m.scope = scope.uppercased()
-                settings.updateMemory(m)
+                store.updateMemory(m)
             }
         }
     }
@@ -63,14 +64,14 @@ struct MemoriesPane: View {
 private struct MemoryRow: View {
     let memory: PlanMemory
     let edit: () -> Void
-    @Environment(AppSettings.self) private var settings
+    @Environment(PlanStore.self) private var store
     @State private var confirmingDelete = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Toggle("", isOn: Binding(
                 get: { memory.enabled },
-                set: { var m = memory; m.enabled = $0; settings.updateMemory(m) }
+                set: { var m = memory; m.enabled = $0; store.updateMemory(m) }
             ))
             .labelsHidden()
             #if os(macOS)
@@ -98,7 +99,7 @@ private struct MemoryRow: View {
             Menu {
                 Button("Edit…", systemImage: "pencil", action: edit)
                 Button(memory.enabled ? "Turn Off" : "Turn On", systemImage: memory.enabled ? "pause.circle" : "play.circle") {
-                    var m = memory; m.enabled.toggle(); settings.updateMemory(m)
+                    var m = memory; m.enabled.toggle(); store.updateMemory(m)
                 }
                 Divider()
                 Button("Delete", systemImage: "trash", role: .destructive) { confirmingDelete = true }
@@ -113,7 +114,7 @@ private struct MemoryRow: View {
         .contentShape(.rect)
         .onTapGesture(perform: edit)
         .confirmationDialog("Delete this memory?", isPresented: $confirmingDelete) {
-            Button("Delete", role: .destructive) { settings.removeMemory(memory.id) }
+            Button("Delete", role: .destructive) { store.removeMemory(memory.id) }
         } message: {
             Text("Future plans won't be told it any more.")
         }
@@ -235,7 +236,7 @@ struct CorrectionSheet: View {
 
     private func save() {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.addMemory(clean, scope: projectOnly ? (project ?? "") : "",
+        store.addMemory(clean, scope: projectOnly ? (project ?? "") : "",
                            source: "\(saved.plan.ticket.key)" + (task.map { " · \($0.title)" } ?? ""))
         if fixNow {
             let target = task.map { "the task “\($0.title)” and anywhere else in the plan it matters" }

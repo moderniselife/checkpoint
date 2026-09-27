@@ -237,6 +237,8 @@ final class PlanStore {
     private var task: Task<Void, Never>?
     /// Runs that haven't finished: paused, failed, interrupted, or in the bin (see ResearchDrafts.swift).
     var drafts: [ResearchDraft] = []
+    /// Corrections and facts told to every matching plan; synced like smart folders (see PlanMemory).
+    private(set) var memories: [PlanMemory] = []
     /// The draft the focused live run is writing into.
     var runningDraftID: UUID?
     @ObservationIgnored var stopReason: RunStopReason = .none
@@ -260,8 +262,11 @@ final class PlanStore {
     @ObservationIgnored private var syncedPlans: [String: SavedPlan] = [:]
     @ObservationIgnored private var syncedFolders: [UUID: PlanFolder] = [:]
     @ObservationIgnored private var syncedSmart: [UUID: SmartFolder] = [:]
+    @ObservationIgnored private var syncedMemories: [UUID: PlanMemory] = [:]
 
-    var snapshot: StoreSnapshot { StoreSnapshot(plans: plans, folders: folders, smartFolders: smartFolders) }
+    var snapshot: StoreSnapshot {
+        StoreSnapshot(plans: plans, folders: folders, smartFolders: smartFolders, memories: memories)
+    }
 
     /// Where evidence files live, for backends that mirror them.
     var evidenceRootURL: URL { evidenceRoot }
@@ -270,6 +275,31 @@ final class PlanStore {
         syncedPlans = Dictionary(plans.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         syncedFolders = Dictionary(folders.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         syncedSmart = Dictionary(smartFolders.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        syncedMemories = Dictionary(memories.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Replaces the memory list, saves it and tells sync.
+    func setMemories(_ list: [PlanMemory]) {
+        memories = list
+        persistMemories()
+    }
+
+    /// Loading only: no sync echo.
+    func replaceMemories(_ list: [PlanMemory]) { memories = list }
+
+    func persistMemories() {
+        if let data = try? JSONEncoder().encode(memories) { try? data.write(to: memoriesURL, options: .atomic) }
+        emitMemoryChanges()
+    }
+
+    private func emitMemoryChanges() {
+        let now = Dictionary(memories.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        defer { syncedMemories = now }
+        guard let onLocalChange else { return }
+        var c = StoreChanges()
+        c.memories = memories.filter { syncedMemories[$0.id] != $0 }
+        c.deletedMemories = syncedMemories.keys.filter { now[$0] == nil }
+        if !c.isEmpty { onLocalChange(c) }
     }
 
     private func emitPlanChanges() {
@@ -334,6 +364,10 @@ final class PlanStore {
             if let i = smartFolders.firstIndex(where: { $0.id == f.id }) { smartFolders[i] = f } else { smartFolders.append(f) }
         }
         for id in c.deletedSmartFolders { smartFolders.removeAll { $0.id == id } }
+        for m in c.memories {
+            if let i = memories.firstIndex(where: { $0.id == m.id }) { memories[i] = m } else { memories.insert(m, at: 0) }
+        }
+        for id in c.deletedMemories { memories.removeAll { $0.id == id } }
         writeAll()
         markSynced()
     }
@@ -348,6 +382,7 @@ final class PlanStore {
         if let data = try? JSONEncoder().encode(plans) { try? data.write(to: fileURL, options: .atomic) }
         if let data = try? JSONEncoder().encode(folders) { try? data.write(to: foldersURL, options: .atomic) }
         if let data = try? JSONEncoder().encode(smartFolders) { try? data.write(to: smartFoldersURL, options: .atomic) }
+        if let data = try? JSONEncoder().encode(memories) { try? data.write(to: memoriesURL, options: .atomic) }
     }
     private var smartFoldersURL: URL { fileURL.deletingLastPathComponent().appending(path: "smartFolders.json") }
 
@@ -366,6 +401,7 @@ final class PlanStore {
         }
         expandedFolders = Set((UserDefaults.standard.stringArray(forKey: "expandedFolders") ?? []).compactMap(UUID.init))
         loadDrafts()
+        loadMemories()
         // Auto-pause testing timers left running at quit (IDEA-025).
         for i in plans.indices where plans[i].timerRunningSince != nil || plans[i].itemTimer != nil {
             if let since = plans[i].timerRunningSince {
@@ -619,7 +655,7 @@ final class PlanStore {
         let plan = saved.plan
         let config = settings.llmConfig
         // Revisions keep to the same corrections as the first write.
-        let known = settings.memories(for: plan.ticket.key)
+        let known = memories(for: plan.ticket.key)
         let instruction = known.isEmpty ? instruction
             : instruction + "\n\nKeep to these corrections from earlier plans:\n" + known.map { "- \($0)" }.joined(separator: "\n")
         Task {
@@ -1011,14 +1047,14 @@ final class PlanStore {
         generatorWithScenarios.templateOverride = template
         generatorWithScenarios.trackerName = customServer?.displayName ?? ""
         generatorWithScenarios.resume = draft.snapshot
-        generatorWithScenarios.memories = settings.memories(for: key)
+        generatorWithScenarios.memories = memories(for: key)
         let project = PlanMemory.project(of: key)
         generatorWithScenarios.memoryTools = MemoryTools(
             ticketKey: key, canSave: settings.learnMemories,
-            search: { query in await MainActor.run { settings.searchMemories(query) } },
+            search: { query in await MainActor.run { self.searchMemories(query) } },
             save: { text, projectOnly in
                 await MainActor.run {
-                    settings.addMemory(text, scope: projectOnly ? (project ?? "") : "",
+                    self.addMemory(text, scope: projectOnly ? (project ?? "") : "",
                                        source: "Learned while planning \(key)", learned: true)
                 }
             })

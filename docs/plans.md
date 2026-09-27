@@ -66,7 +66,7 @@ the current plan with it.
 off, delete, or add your own. Each plan is told the memories for its project and follow them over its own
 assumptions. While researching it can also **search** the rest and, with *Learn while researching* on,
 **save** lasting facts it confirms (up to five a plan). Those are marked **Learned** so you can check them.
-Memories stay on the device that made them for now; they don't sync yet.
+Memories sync with everything else (sync folder or iCloud); if two devices edit the same one, the newer edit wins.
 
 ## Pause, resume and the bin
 
