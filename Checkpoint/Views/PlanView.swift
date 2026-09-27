@@ -151,13 +151,14 @@ struct PlanView: View {
         }
         .glassScrollIndicator()
         .drivesScrollChrome()
-        // The column the plan gets (≤ 820 minus margins) decides the header layout.
-        .onGeometryChange(for: CGFloat.self) { min($0.size.width, 820) - PageLayout.side * 2 } action: { headerWidth = $0 }
+        // The column the plan gets (≤ the readable width minus margins) decides the header layout.
+        .onGeometryChange(for: CGFloat.self) { min($0.size.width, layout.readableWidth) - PageLayout.side * 2 } action: { headerWidth = $0 }
         .safeAreaInset(edge: .bottom) {
             if pane == .chat { ChatComposer(saved: saved) }
         }
-        #if os(iOS)
+        // Correct This Plan (toolbar, More menu, Before you start) on every platform.
         .sheet(isPresented: $correctingPlan) { CorrectionSheet(task: nil, saved: saved) }
+        #if os(iOS)
         .sheet(item: $sharing) { file in ShareSheet(items: [file.url]).presentationDetents([.medium, .large]) }
         #endif
         .onChange(of: saved.chat.count) {
