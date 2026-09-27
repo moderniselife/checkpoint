@@ -74,7 +74,7 @@ struct SettingsView: View {
         case .jira: settings.isAtlassianConfigured ? .ok : .none
         case .linear: settings.isLinearConfigured ? .ok : .none
         case .sync: sync.status.isError ? .warn : (sync.mode == .off ? .none : .ok)
-        case .customMCP, .researchTools, .testing, .scenarios, .advanced: .none
+        case .customMCP, .researchTools, .memories, .testing, .scenarios, .advanced: .none
         }
     }
 
@@ -82,6 +82,7 @@ struct SettingsView: View {
     private func detail(for section: SettingsSection) -> some View {
         switch section {
         case .aiProvider: AIProviderPane()
+        case .memories: MemoriesPane()
         case .jira: JiraPane()
         case .linear: LinearPane()
         case .customMCP(let id):

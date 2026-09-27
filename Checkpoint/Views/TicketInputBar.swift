@@ -6,6 +6,9 @@ struct TicketInputBar: View {
     @State private var input = ""
     @State private var template: PlanGenerator.PlanTemplate = .auto
     @State private var quick = false
+    /// Extra context for the next analysis only.
+    @State private var runContext = ""
+    @State private var editingContext = false
     @FocusState private var focused: Bool
     @Namespace private var glass
     /// Width the bar actually gets; below ~700pt the pills drop their labels.
@@ -40,6 +43,7 @@ struct TicketInputBar: View {
         }
         .frame(maxWidth: 760)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .sheet(isPresented: $editingContext) { RunContextSheet(context: $runContext) }
         .animation(.smooth, value: store.isRunning)
         .animation(.smooth, value: compact)
         .onAppear {
@@ -85,7 +89,8 @@ struct TicketInputBar: View {
                 .keyboardType(.asciiCapable)
                 .submitLabel(.go)
                 #endif
-            PlanOptionsMenu(template: $template, quick: $quick, showScenarios: stacked)
+            PlanOptionsMenu(template: $template, quick: $quick, hasContext: !runContext.isEmpty,
+                            showScenarios: stacked) { editingContext = true }
                 .tourStop(.runOptions)
         }
         .padding(.leading, 18)
@@ -137,12 +142,15 @@ struct TicketInputBar: View {
     private func submit() {
         if quick {
             let q = PlanStore.quickOverrides(settings: settings)
-            store.analyze(input, template: template == .auto ? nil : template,
+            store.analyze(input, template: template == .auto ? nil : template, context: runContext,
                           modelOverride: q.model, effortOverride: q.effort, settings: settings)
         } else {
-            store.analyze(input, template: template == .auto ? nil : template, settings: settings)
+            store.analyze(input, template: template == .auto ? nil : template, context: runContext, settings: settings)
         }
-        if store.error == nil { input = "" }
+        if store.error == nil {
+            input = ""
+            runContext = ""
+        }
     }
 }
 
@@ -238,19 +246,25 @@ private struct TrackerMenu: View {
 private struct PlanOptionsMenu: View {
     @Binding var template: PlanGenerator.PlanTemplate
     @Binding var quick: Bool
+    var hasContext = false
     /// iPhone has no room for the Scenarios pill, so it lives in here.
     var showScenarios = false
+    var editContext: () -> Void = {}
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
 
     private var summary: String? {
         let scen = showScenarios && settings.scenarioMode != .off ? "Scenarios" : nil
-        let parts = [quick ? "Quick" : nil, template == .auto ? nil : template.label, scen].compactMap(\.self)
+        let parts = [quick ? "Quick" : nil, template == .auto ? nil : template.label, scen,
+                     hasContext ? "Context" : nil].compactMap(\.self)
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     var body: some View {
         Menu {
+            Button(hasContext ? "Edit Context for This Run…" : "Add Context for This Run…",
+                   systemImage: "text.bubble", action: editContext)
+            Divider()
             Picker("Depth", selection: $quick) {
                 Label("Deep — best model and effort", systemImage: "tortoise").tag(false)
                 Label("Quick — cheaper model, low effort", systemImage: "hare").tag(true)

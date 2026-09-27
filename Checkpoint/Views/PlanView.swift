@@ -20,6 +20,7 @@ struct PlanView: View {
     @FocusState private var listFocused: Bool
     @State private var copied = false
     @State private var editingTags = false
+    @State private var correctingPlan = false
     @State private var headerWidth: CGFloat = 800
     #if os(iOS)
     @State private var sharing: SharedFile?
@@ -147,6 +148,7 @@ struct PlanView: View {
             if pane == .chat { ChatComposer(saved: saved) }
         }
         #if os(iOS)
+        .sheet(isPresented: $correctingPlan) { CorrectionSheet(task: nil, saved: saved) }
         .sheet(item: $sharing) { file in ShareSheet(items: [file.url]).presentationDetents([.medium, .large]) }
         #endif
         .onChange(of: saved.chat.count) {
@@ -217,6 +219,7 @@ struct PlanView: View {
                 if saved.preset == "quick" {
                     Button("Upgrade to Deep", systemImage: "arrow.up.circle", action: rerunDeep)
                 }
+                Button("Correct This Plan…", systemImage: "lightbulb.max") { correctingPlan = true }
                 if let url = URL(string: plan.ticket.url), url.scheme != nil {
                     Button("Open in \(saved.tracker.label)", systemImage: "arrow.up.right.square") { Platform.open(url) }
                 }
@@ -291,6 +294,9 @@ struct PlanView: View {
             } else {
                 Button("Re-run", systemImage: "arrow.clockwise", action: rerun)
             }
+
+            Button("Correct", systemImage: "lightbulb.max") { correctingPlan = true }
+                .help("Tell Checkpoint what it got wrong. It remembers for future plans and can fix this one.")
 
             if let url = URL(string: plan.ticket.url), url.scheme != nil {
                 Button("Open in \(saved.tracker.label)", systemImage: "arrow.up.right.square") {
@@ -933,6 +939,7 @@ private struct TaskRow: View {
     @State private var noteText = ""
     @State private var reportingBug = false
     @State private var showingWhy = false
+    @State private var correcting = false
     @State private var dropTargeted = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -1180,6 +1187,7 @@ private struct TaskRow: View {
             }
             Divider()
             Button("Why This Task?", systemImage: "questionmark.circle") { showingWhy = true }
+            Button("Correct This…", systemImage: "lightbulb.max") { correcting = true }
         } label: {
             Image(systemName: "ellipsis.circle").foregroundStyle(.tertiary)
         }
@@ -1188,6 +1196,7 @@ private struct TaskRow: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Outcome, note, evidence — or drop files on the task")
+        .sheet(isPresented: $correcting) { CorrectionSheet(task: task, saved: saved) }
         .popover(isPresented: $showingWhy) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Why this task?").font(.headline)

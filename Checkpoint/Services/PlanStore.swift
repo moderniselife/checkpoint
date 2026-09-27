@@ -52,6 +52,8 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {    ///
     /// For `tracker == .custom`: which server, and its name when the plan was made.
     var customTrackerID: UUID? = nil
     var customTrackerName: String? = nil
+    /// Context the tester gave when this plan was written; re-runs reuse it.
+    var runContext: String? = nil
 
     /// "Jira", "Linear", or the custom tracker's name.
     var trackerName: String { tracker == .custom ? (customTrackerName ?? Tracker.custom.label) : tracker.label }
@@ -106,6 +108,7 @@ nonisolated struct SavedPlan: Codable, Sendable, Identifiable, Hashable {    ///
         planTimerFromItem = try c.decodeIfPresent(Bool.self, forKey: .planTimerFromItem) ?? false
         customTrackerID = try c.decodeIfPresent(UUID.self, forKey: .customTrackerID)
         customTrackerName = try c.decodeIfPresent(String.self, forKey: .customTrackerName)
+        runContext = try c.decodeIfPresent(String.self, forKey: .runContext)
     }
 
     var isOverdue: Bool { dueDate.map { $0 < .now && progress < 1 } ?? false }
@@ -615,6 +618,10 @@ final class PlanStore {
         regenerating = planID + (section.map { ":\($0.rawValue)" } ?? ":full")
         let plan = saved.plan
         let config = settings.llmConfig
+        // Revisions keep to the same corrections as the first write.
+        let known = settings.memories(for: plan.ticket.key)
+        let instruction = known.isEmpty ? instruction
+            : instruction + "\n\nKeep to these corrections from earlier plans:\n" + known.map { "- \($0)" }.joined(separator: "\n")
         Task {
             do {
                 let revised = try await PlanChat.revise(plan: plan, instruction: instruction, config: config)
@@ -882,7 +889,7 @@ final class PlanStore {
 
     /// `mode`/`tracker` default to the toggle and link detection; re-runs pass the plan's own.
     func analyze(_ input: String, mode: TestMode? = nil, tracker: Tracker? = nil, customTracker: UUID? = nil,
-                 template: PlanGenerator.PlanTemplate? = nil,
+                 template: PlanGenerator.PlanTemplate? = nil, context: String? = nil,
                  modelOverride: String? = nil, effortOverride: String? = nil,
                  settings: AppSettings) {
         let mode = mode ?? settings.mode
@@ -908,7 +915,8 @@ final class PlanStore {
         let draft = ResearchDraft(key: key, mode: mode, tracker: tracker,
                                   customTrackerID: server?.id, customTrackerName: server?.displayName,
                                   template: template?.rawValue, modelOverride: modelOverride,
-                                  effortOverride: effortOverride, folderID: targetFolder)
+                                  effortOverride: effortOverride, folderID: targetFolder,
+                                  context: context.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 })
         startDraft(draft, settings: settings)
     }
 
@@ -1003,6 +1011,20 @@ final class PlanStore {
         generatorWithScenarios.templateOverride = template
         generatorWithScenarios.trackerName = customServer?.displayName ?? ""
         generatorWithScenarios.resume = draft.snapshot
+        generatorWithScenarios.memories = settings.memories(for: key)
+        let project = PlanMemory.project(of: key)
+        generatorWithScenarios.memoryTools = MemoryTools(
+            ticketKey: key, canSave: settings.learnMemories,
+            search: { query in await MainActor.run { settings.searchMemories(query) } },
+            save: { text, projectOnly in
+                await MainActor.run {
+                    settings.addMemory(text, scope: projectOnly ? (project ?? "") : "",
+                                       source: "Learned while planning \(key)", learned: true)
+                }
+            })
+        // A re-run keeps the context the plan was first written with, unless new context was given.
+        let runContext = draft.context ?? plans.first { $0.id == SavedPlan.id(key, mode, tracker) }?.runContext
+        generatorWithScenarios.runContext = runContext ?? ""
         generatorWithScenarios.researchSources = settings.activeResearchSources
             .filter { $0.id != customServer?.id }
             .compactMap { source in
@@ -1028,6 +1050,7 @@ final class PlanStore {
         var saved = SavedPlan(plan: plan, mode: mode, tracker: tracker, createdAt: .now, done: kept)
         saved.customTrackerID = customServer?.id
         saved.customTrackerName = customServer?.displayName
+        saved.runContext = runContext
         saved.metCriteria = previous?.metCriteria.intersection(plan.acceptanceCriteria.map(\.id)) ?? []
         saved.failed = (previous?.failed ?? [:]).filter { keepable.contains($0.key) }
         saved.blocked = (previous?.blocked ?? [:]).filter { keepable.contains($0.key) }
@@ -1081,7 +1104,7 @@ final class PlanStore {
     /// batch keeps the plans in progress and the ones not started yet in Unfinished too.
     func startBatch(inputs: [String], mode: TestMode, tracker: Tracker, customTracker: UUID? = nil,
                     settings: AppSettings, folderName: String, template: PlanGenerator.PlanTemplate? = nil,
-                    parallel: Int = 1) {
+                    parallel: Int = 1, context: String? = nil) {
         cancelBatch(silent: true)
         let server = tracker == .custom ? settings.customTrackers.first { $0.id == customTracker } : nil
         var seen = Set<String>()
@@ -1110,7 +1133,8 @@ final class PlanStore {
         func makeDraft(_ key: String) -> ResearchDraft {
             ResearchDraft(key: key, mode: mode, tracker: tracker,
                           customTrackerID: server?.id, customTrackerName: server?.displayName,
-                          template: template?.rawValue, folderID: folder.id)
+                          template: template?.rawValue, folderID: folder.id,
+                          context: context.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 })
         }
         batchTask = Task {
             var next = 0
@@ -1442,6 +1466,8 @@ final class PlanStore {
 
     private static func friendly(_ tool: String) -> String {
         switch tool {
+        case "memory_search": "Checked memories"
+        case "memory_save": "Saved a memory"
         case "getJiraIssue": "Opened ticket"
         case "searchJiraIssuesUsingJql": "Searched Jira"
         case "getJiraIssueRemoteIssueLinks": "Checked remote links"

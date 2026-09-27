@@ -19,6 +19,8 @@ nonisolated struct ResearchDraft: Codable, Identifiable, Hashable, Sendable {
     var modelOverride: String?
     var effortOverride: String?
     var folderID: UUID?
+    /// Extra context the tester gave for this run.
+    var context: String?
     var createdAt: Date = .now
     var updatedAt: Date = .now
     var status: Status = .running
@@ -30,7 +32,9 @@ nonisolated struct ResearchDraft: Codable, Identifiable, Hashable, Sendable {
     var binnedAt: Date?
 
     init(key: String, mode: TestMode, tracker: Tracker, customTrackerID: UUID? = nil, customTrackerName: String? = nil,
-         template: String? = nil, modelOverride: String? = nil, effortOverride: String? = nil, folderID: UUID? = nil) {
+         template: String? = nil, modelOverride: String? = nil, effortOverride: String? = nil, folderID: UUID? = nil,
+         context: String? = nil) {
+        self.context = context
         self.key = key
         self.mode = mode
         self.tracker = tracker

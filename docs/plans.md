@@ -49,6 +49,25 @@ Prices are a snapshot and unknown models show tokens only.
 The Scenarios menu adds 3–6 end-to-end journeys: **from related tickets** (tracker only) or
 **tickets + codebase** (reads a repo folder you choose — sandboxed, read-only, confined to it).
 
+## Context, corrections and memories
+
+**Context for one run.** In the ticket field's options (the slider icon), **Add Context for This Run…**
+takes a note for this ticket only, like "test as a Company Admin on the demo tenant; only the web app
+changed". It's told to the planner, kept with the plan, and reused when you re-run it. **Plan Several
+Tickets** has the same field for a whole batch.
+
+**Corrections.** When a plan gets something wrong, fix it at the source: **Correct This…** in a task's ⋯
+menu, or **Correct This Plan…** in the plan's menu (for preconditions, roles, environments). Write what's
+true instead, e.g. "We don't have an assurance performer role. Log in with a Company Admin role.", then
+choose whether it applies to this project's tickets or to all of them. **Fix this plan now** also rewrites
+the current plan with it.
+
+**Memories.** Every correction becomes a memory. Settings → **Memories** lists them all: edit, turn one
+off, delete, or add your own. Each plan is told the memories for its project and follow them over its own
+assumptions. While researching it can also **search** the rest and, with *Learn while researching* on,
+**save** lasting facts it confirms (up to five a plan). Those are marked **Learned** so you can check them.
+Memories stay on the device that made them for now; they don't sync yet.
+
 ## Pause, resume and the bin
 
 A run can stop part-way: you pause it, the model or network fails, or the app closes. Nothing is lost.

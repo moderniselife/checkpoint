@@ -197,6 +197,9 @@ verified, what's known to be rough, and how to fix things when they break.
 | Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | ✅ | `Views/Onboarding/OnboardingView.swift` | Tested by the maintainer on iPhone, iPad and Mac |
 | Per-task and per-scenario timers feeding the plan timer | ✅ | `PlanStore.toggleItemTimer`, `ItemTimerPill` | Tested by the maintainer on iPhone, iPad and Mac |
 | iOS research continues in the background (continued-processing task) | ✅ | `CheckpointMobile/BackgroundResearch.swift` | Tested by the maintainer on iPhone, iPad and Mac |
+| Context for one run (ticket options, batch sheet); kept for re-runs | 🧪 | `RunContextSheet`, `SavedPlan.runContext` | Options → Add Context for This Run… |
+| Corrections from a task or plan become memories; optional fix-now revision | 🧪 | `CorrectionSheet`, `AppSettings.memories` | Task ⋯ → Correct This… |
+| Memories told to every matching plan; searchable and saveable by the planner during research | 🧪 | `MemoryTools`, `PlanGenerator.memories` | Settings → Memories |
 | Parallel batch planning (1–4 at once), per-run feeds, tap to watch any | 🧪 | `PlanStore.startBatch(parallel:)`, `LiveRun` | Plan Several Tickets → Plans at once |
 | Claude: fall back to prompt JSON when the plan schema + tools are too large to enforce | 🧪 | `PlanGenerator.runAnthropic`, `ClaudeError.isSchemaTooComplex` | Many tools → plan still written |
 | Pause / resume runs from the last finished research step; failures and interruptions resumable | 🧪 | `ResearchDrafts.swift`, `ResearchSnapshot`, `DraftsView` | Pause → Unfinished → Resume |
