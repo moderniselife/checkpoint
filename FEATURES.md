@@ -195,7 +195,7 @@ verified, what's known to be rough, and how to fix things when they break.
 | iPhone layout: bottom ticket bar, research feed sheet, one ⋯ menu, compact header/criteria/task rows | ✅ | `MobileRootView`, `PlanView` | Tested by the maintainer on iPhone, iPad and Mac |
 | Evidence from camera, photo library or Files; export via share sheet | ✅ | `MobilePickers.swift`, `TaskRow` | Tested by the maintainer on iPhone, iPad and Mac |
 | OAuth on iOS via in-app web sheet + loopback redirect | ✅ | `AuthBrowser.swift`, `MCPOAuth` | Tested by the maintainer on iPhone, iPad and Mac |
-| Sync folder (per-plan JSON files, tombstones, evidence mirror, newest edit wins) | ✅ | `Services/Sync/FolderSync.swift` | Tested by the maintainer on iPhone, iPad and Mac |
+| Sync folder (per-plan JSON files, tombstones, evidence mirror, newest edit wins; folder watched, 5 s cached checks, sync on app focus) | ✅ | `Services/Sync/FolderSync.swift` | Tested by the maintainer on iPhone, iPad and Mac |
 | iCloud sync via CKSyncEngine, gated on `CHECKPOINT_CLOUDKIT_CONTAINER` | 🔍 | `Services/Sync/CloudKitSync.swift` | Needs a paid team + container; see docs/sync.md |
 | Sync settings page and onboarding step (iCloud disabled with a reason when unavailable) | ✅ | `SyncPane`, `OnboardingView` | Tested by the maintainer on iPhone, iPad and Mac |
 | Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | ✅ | `Views/Onboarding/OnboardingView.swift` | Tested by the maintainer on iPhone, iPad and Mac |

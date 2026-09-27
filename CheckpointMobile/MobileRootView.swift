@@ -7,6 +7,7 @@ struct MobileRootView: View {
     @Environment(PlanStore.self) private var store
     @Environment(TicketInspector.self) private var inspector
     @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var sync
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.tourGuide) private var tour
     @Environment(\.openURL) private var openURL
@@ -77,7 +78,10 @@ struct MobileRootView: View {
         .animation(.smooth, value: store.error)
         .onChange(of: scenePhase, initial: true) { _, phase in
             store.appInBackground = phase == .background
-            if phase == .active { store.resumeAfterBackground(settings: settings) }
+            if phase == .active {
+                store.resumeAfterBackground(settings: settings)
+                sync.syncNow()   // pick up changes made on other devices straight away
+            }
         }
         .onChange(of: store.runningKey) { old, new in
             if let new { BackgroundResearch.shared.begin(key: new, store: store) }

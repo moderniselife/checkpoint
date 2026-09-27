@@ -40,8 +40,11 @@ a network share) carries it to your other devices.
 2. **iPhone / iPad:** Settings → Sync → *Sync folder* → Browse → iCloud Drive → the same `Checkpoint` folder.
 
 Inside, each plan, folder, smart folder and memory is its own small JSON file, deleted items are listed in
-`deleted.json`, and evidence files sit under `evidence/`. Checkpoint checks for changes every 20 seconds
-and whenever you edit something; **Sync Now** forces a pass.
+`deleted.json`, and evidence files sit under `evidence/`. Checkpoint writes your changes as you make them, watches the folder so another device's changes show up
+as soon as they land, checks every 5 seconds as a backup, and syncs whenever you switch back to the app;
+**Sync Now** forces a pass. How fast a change travels is then up to the folder's service: iCloud Drive
+usually carries it in a few seconds, sometimes longer on a slow connection or when the phone is saving
+power.
 
 **When the same plan or memory changes on two devices,** the most recent edit wins for it. Different
 plans never conflict. Folders and smart folders take the copy in the sync folder.
