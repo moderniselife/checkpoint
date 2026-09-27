@@ -1085,7 +1085,7 @@ final class PlanStore {
             } else if !batchErrors.isEmpty {
                 error = "Batch finished with \(batchErrors.count) failure(s), saved to Unfinished: " +
                     batchErrors.sorted(by: { $0.key < $1.key }).prefix(3)
-                        .map { "\($0.key): \($0.value.prefix(90))" }.joined(separator: " · ")
+                        .map { "\($0.key): \($0.value.count > 90 ? $0.value.prefix(89) + "…" : Substring($0.value))" }.joined(separator: " · ")
             }
             selection = Self.folderTag(folder.id)
             batchTask = nil
