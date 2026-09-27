@@ -9,7 +9,8 @@ import Foundation
 /// never touches CloudKit unless the container is configured. See docs/sync.md.
 ///
 /// Records live in one zone: `Plan` (JSON payload as an asset, plus `updatedAt`),
-/// `Folder` and `SmartFolder` (small JSON payloads), and `Evidence` (one file each).
+/// `Folder`, `SmartFolder` and `Memory` (small JSON payloads; memories carry `updatedAt`),
+/// and `Evidence` (one file each).
 @MainActor
 final class CloudKitSyncBackend {
     /// The configured container, or nil in builds without iCloud.
@@ -103,6 +104,8 @@ final class CloudKitSyncBackend {
         pending += c.deletedFolders.map { .deleteRecord(Self.recordID("folder", $0.uuidString)) }
         pending += c.smartFolders.map { .saveRecord(Self.recordID("smart", $0.id.uuidString)) }
         pending += c.deletedSmartFolders.map { .deleteRecord(Self.recordID("smart", $0.uuidString)) }
+        pending += c.memories.map { .saveRecord(Self.recordID("memory", $0.id.uuidString)) }
+        pending += c.deletedMemories.map { .deleteRecord(Self.recordID("memory", $0.uuidString)) }
         engine.state.add(pendingRecordZoneChanges: pending)
     }
 
@@ -111,6 +114,7 @@ final class CloudKitSyncBackend {
         c.plans = s.plans
         c.folders = s.folders
         c.smartFolders = s.smartFolders
+        c.memories = s.memories
         push(c)
     }
 
@@ -181,6 +185,14 @@ final class CloudKitSyncBackend {
                   let data = try? JSONEncoder().encode(f) else { return nil }
             let r = blankRecord(type: "SmartFolder", id: id)
             r["payload"] = data
+            return r
+        }
+        if name.hasPrefix("memory-") {
+            guard let m = snap.memories.first(where: { "memory-\($0.id.uuidString)" == name }),
+                  let data = try? JSONEncoder().encode(m) else { return nil }
+            let r = blankRecord(type: "Memory", id: id)
+            r["payload"] = data
+            r["updatedAt"] = m.updatedAt
             return r
         }
         if name.hasPrefix("evidence-") {
@@ -286,6 +298,13 @@ final class CloudKitSyncBackend {
                 if let data = r["payload"] as? Data, let f = try? JSONDecoder().decode(PlanFolder.self, from: data) { c.folders.append(f) }
             case "SmartFolder":
                 if let data = r["payload"] as? Data, let f = try? JSONDecoder().decode(SmartFolder.self, from: data) { c.smartFolders.append(f) }
+            case "Memory":
+                guard let data = r["payload"] as? Data, let m = try? JSONDecoder().decode(PlanMemory.self, from: data) else { continue }
+                if let local = snap.memories.first(where: { $0.id == m.id }), local.updatedAt > m.updatedAt {
+                    requeue.append(.saveRecord(r.recordID))
+                } else {
+                    c.memories.append(m)
+                }
             case "Evidence":
                 guard let p = r["planID"] as? String, let t = r["taskID"] as? String, let n = r["name"] as? String,
                       let src = (r["file"] as? CKAsset)?.fileURL else { continue }
@@ -307,6 +326,8 @@ final class CloudKitSyncBackend {
                 c.deletedFolders.append(uuid)
             } else if name.hasPrefix("smart-"), let uuid = UUID(uuidString: String(name.dropFirst(6))) {
                 c.deletedSmartFolders.append(uuid)
+            } else if name.hasPrefix("memory-"), let uuid = UUID(uuidString: String(name.dropFirst(7))) {
+                c.deletedMemories.append(uuid)
             }
         }
         store.applyRemote(c)

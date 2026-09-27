@@ -8,6 +8,7 @@ import SwiftUI
 /// lists every `CustomMCPTracker`.
 enum SettingsSection: Hashable, Identifiable {
     case aiProvider
+    case memories
     case jira
     case linear
     case customMCP(id: UUID?)   // nil = list, UUID = detail for one tracker
@@ -20,6 +21,7 @@ enum SettingsSection: Hashable, Identifiable {
     var id: String {
         switch self {
         case .aiProvider: "ai"
+        case .memories: "memories"
         case .jira: "jira"
         case .linear: "linear"
         case .customMCP(let id): "custom-\(id?.uuidString ?? "list")"
@@ -34,6 +36,7 @@ enum SettingsSection: Hashable, Identifiable {
     var title: String {
         switch self {
         case .aiProvider: "AI Provider"
+        case .memories: "Memories"
         case .jira: "Jira"
         case .linear: "Linear"
         case .customMCP: "Custom Servers"
@@ -48,6 +51,7 @@ enum SettingsSection: Hashable, Identifiable {
     var subtitle: String {
         switch self {
         case .aiProvider: "Model, key and effort used to write plans"
+        case .memories: "Corrections and facts every plan should know"
         case .jira: "Atlassian Rovo MCP — issues, comments, specs"
         case .linear: "Linear read-only MCP — issues and comments"
         case .customMCP: "Any MCP server that holds tickets — Asana, your own tracker"
@@ -62,6 +66,7 @@ enum SettingsSection: Hashable, Identifiable {
     var icon: String {
         switch self {
         case .aiProvider: "brain.head.profile"
+        case .memories: "lightbulb.max"
         case .jira: "square.stack.3d.up"
         case .linear: "line.3.horizontal.decrease.circle"
         case .customMCP: "server.rack"
@@ -85,6 +90,7 @@ enum SettingsSection: Hashable, Identifiable {
     var tint: Color {
         switch self {
         case .aiProvider: .purple
+        case .memories: .yellow
         case .jira: .blue
         case .linear: .indigo
         case .customMCP: .teal
@@ -100,6 +106,7 @@ enum SettingsSection: Hashable, Identifiable {
     var keywords: [String] {
         switch self {
         case .aiProvider: ["ai", "provider", "model", "key", "claude", "openai", "ollama", "effort", "llm"]
+        case .memories: ["memory", "memories", "corrections", "correct", "facts", "learn", "remember", "roles", "knowledge"]
         case .jira: ["jira", "atlassian", "rovo", "mcp", "oauth", "token", "site"]
         case .linear: ["linear", "oauth", "api key", "mcp"]
         case .customMCP: ["custom", "mcp", "endpoint", "server", "self-hosted", "tracker"]
@@ -119,7 +126,7 @@ enum SettingsSection: Hashable, Identifiable {
 
         var sections: [SettingsSection] {
             switch self {
-            case .intelligence: [.aiProvider, .researchTools(id: nil)]
+            case .intelligence: [.aiProvider, .memories, .researchTools(id: nil)]
             case .trackers: [.jira, .linear, .customMCP(id: nil)]
             case .workspace: [.testing, .scenarios]
             case .app: [.sync, .advanced]
@@ -129,7 +136,7 @@ enum SettingsSection: Hashable, Identifiable {
 
     var group: Group {
         switch self {
-        case .aiProvider, .researchTools: .intelligence
+        case .aiProvider, .memories, .researchTools: .intelligence
         case .jira, .linear, .customMCP: .trackers
         case .testing, .scenarios: .workspace
         case .sync, .advanced: .app

@@ -62,6 +62,12 @@ nonisolated struct PlanGenerator: Sendable {
     var toolRules: [String: @Sendable (String) -> Bool] = [:]
     /// Team-wide extra instructions appended to the prompt (IDEA-009).
     var houseRules: String = ""
+    /// Corrections and facts from earlier plans that apply to this ticket.
+    var memories: [String] = []
+    /// What the tester added for this run only.
+    var runContext: String = ""
+    /// Search and save memories while researching.
+    var memoryTools: MemoryTools? = nil
     /// Forced plan shape (IDEA-010); nil = let the ticket type decide.
     var templateOverride: PlanTemplate? = nil
     /// Optional end-to-end scenarios; `.ticketsAndCode` needs `codebase`.
@@ -80,6 +86,11 @@ nonisolated struct PlanGenerator: Sendable {
         let rules = houseRules.trimmingCharacters(in: .whitespacesAndNewlines)
         if !rules.isEmpty {
             p += "\n\nTeam house rules (always follow):\n\(rules)"
+        }
+        if !memories.isEmpty {
+            p += "\n\nCorrections and facts from earlier plans. Always follow them: they override your own assumptions "
+                + "about roles, permissions, environments, data and setup.\n"
+                + memories.map { "- \($0)" }.joined(separator: "\n")
         }
         return p
     }
@@ -135,6 +146,7 @@ nonisolated struct PlanGenerator: Sendable {
         runner.toolOwners = owners
         runner.toolRules = rules
         if effectiveScenarios == .ticketsAndCode { tools += CodebaseTools.tools }
+        if let memoryTools { tools += memoryTools.tools }
         if scenarios == .ticketsAndCode && codebase == nil {
             await onEvent(.status("No codebase folder set — building scenarios from tickets only."))
         }
@@ -153,6 +165,16 @@ nonisolated struct PlanGenerator: Sendable {
         var request = "Build the \(mode == .qa ? "QA" : "developer") test brief for \(trackerDisplayName) issue \(ticketKey).\n\(siteLine)"
         if mode == .qa, !environment.isEmpty {
             request += "\nHosted environment under test: \(environment). Unless the tickets say otherwise, write the plan for this environment."
+        }
+        if let memoryTools {
+            request += "\n\nYou have a memory across plans: memory_search looks up corrections and facts from earlier plans."
+            if memoryTools.canSave {
+                request += " When you confirm something future plans should know (a role or permission that does or doesn't exist, an environment, a test account, how a feature really works), save it with memory_save. Don't save guesses or details that only matter to this ticket."
+            }
+        }
+        let context = runContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !context.isEmpty {
+            request += "\n\nContext from the tester for this run (use it; it outranks your assumptions):\n\(context)"
         }
         if !researchSources.isEmpty {
             request += "\n\nResearch tools you can use as well, beside the tracker:"
@@ -453,6 +475,11 @@ nonisolated struct PlanGenerator: Sendable {
         return await withTaskGroup(of: (Int, CallResult).self) { group in
             for (i, call) in calls.enumerated() {
                 group.addTask {
+                    // Memory tools run locally against Checkpoint's saved memories.
+                    if MemoryTools.toolNames.contains(call.name), let memoryTools {
+                        let r = await memoryTools.call(call.name, call.input)
+                        return (i, CallResult(id: call.id, text: r.text, isError: r.isError))
+                    }
                     // Codebase tools run locally, read-only, inside the chosen folder.
                     if CodebaseTools.toolNames.contains(call.name), let codebase {
                         let r = codebase.call(call.name, call.input)

@@ -102,6 +102,9 @@ final class AppSettings {
     var qaEnvironment: String { didSet { UserDefaults.standard.set(qaEnvironment, forKey: "qaEnvironment") } }
     /// Team-wide instructions appended to every generation prompt (IDEA-009).
     var houseRules: String { didSet { UserDefaults.standard.set(houseRules, forKey: "houseRules") } }
+    /// Whether the planner may save new memories while it researches.
+    var learnMemories: Bool { didSet { UserDefaults.standard.set(learnMemories, forKey: "learnMemories") } }
+
     /// Cheaper model for Quick plans (IDEA-082); empty = same model at low effort.
     var quickModel: String { didSet { UserDefaults.standard.set(quickModel, forKey: "quickModel") } }
 
@@ -128,6 +131,7 @@ final class AppSettings {
         codebasePath = d.string(forKey: "codebasePath")
         qaEnvironment = d.string(forKey: "qaEnvironment") ?? ""
         houseRules = d.string(forKey: "houseRules") ?? ""
+        learnMemories = d.object(forKey: "learnMemories") as? Bool ?? true
         quickModel = d.string(forKey: "quickModel") ?? ""
         atlassianAuth = AtlassianAuth(rawValue: d.string(forKey: "atlassianAuth") ?? "") ?? .oauth
         atlassianUser = MCPOAuth.atlassian.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil

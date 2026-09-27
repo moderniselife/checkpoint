@@ -44,6 +44,7 @@ struct BatchSheet: View {
     @State private var folderName = ""
     @State private var runMode: TestMode = .dev
     @AppStorage("batchParallel") private var parallel = 1
+    @State private var context = ""
     @State private var resolving = false
     @State private var resolveError: String?
 
@@ -116,6 +117,17 @@ struct BatchSheet: View {
                     Text("Large batch — each plan takes a minute or more. They run one at a time and you can cancel from the sidebar.")
                         .font(.caption).foregroundStyle(.orange)
                 }
+            }
+
+            Section {
+                TextField("Context", text: $context,
+                          prompt: Text("e.g. Test as a Company Admin on the demo tenant"), axis: .vertical)
+                    .lineLimit(2...5)
+            } header: {
+                Text("Context for every plan")
+            } footer: {
+                Text("Optional. Told to the planner for each ticket in this batch.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section {
@@ -340,7 +352,7 @@ struct BatchSheet: View {
         let dest = destination
         store.startBatch(inputs: keys, mode: runMode, tracker: dest.tracker, customTracker: dest.custom,
                          settings: settings, folderName: folderName.trimmingCharacters(in: .whitespaces),
-                         parallel: min(parallel, keys.count))
+                         parallel: min(parallel, keys.count), context: context)
         dismiss()
     }
 }

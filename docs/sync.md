@@ -39,11 +39,11 @@ a network share) carries it to your other devices.
    and Checkpoint makes a `Checkpoint` folder inside.
 2. **iPhone / iPad:** Settings → Sync → *Sync folder* → Browse → iCloud Drive → the same `Checkpoint` folder.
 
-Inside, each plan, folder and smart folder is its own small JSON file, deleted items are listed in
+Inside, each plan, folder, smart folder and memory is its own small JSON file, deleted items are listed in
 `deleted.json`, and evidence files sit under `evidence/`. Checkpoint checks for changes every 20 seconds
 and whenever you edit something; **Sync Now** forces a pass.
 
-**When the same plan changes on two devices,** the most recent edit wins for that plan. Different
+**When the same plan or memory changes on two devices,** the most recent edit wins for it. Different
 plans never conflict. Folders and smart folders take the copy in the sync folder.
 
 ### iCloud: the App Store build
@@ -54,8 +54,8 @@ the app to be signed by a paid Apple Developer team with an iCloud container, so
 
 ### What syncs
 
-Plans (tasks, verdicts, notes, tags, pins, reminders, timer, chat), folders, smart folders and evidence
-files. **API keys and tracker sign-ins never sync.** They stay in each device's Keychain, so connect
+Plans (tasks, verdicts, notes, tags, pins, reminders, timer, chat), folders, smart folders, memories and
+evidence files. Unfinished runs stay on the device they ran on. **API keys and tracker sign-ins never sync.** They stay in each device's Keychain, so connect
 each device once.
 
 ## Turning on iCloud (for maintainers)

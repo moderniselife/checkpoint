@@ -27,10 +27,12 @@ nonisolated struct StoreChanges: Sendable {
     var deletedFolders: [UUID] = []
     var smartFolders: [SmartFolder] = []
     var deletedSmartFolders: [UUID] = []
+    var memories: [PlanMemory] = []
+    var deletedMemories: [UUID] = []
 
     var isEmpty: Bool {
         plans.isEmpty && deletedPlans.isEmpty && folders.isEmpty && deletedFolders.isEmpty
-            && smartFolders.isEmpty && deletedSmartFolders.isEmpty
+            && smartFolders.isEmpty && deletedSmartFolders.isEmpty && memories.isEmpty && deletedMemories.isEmpty
     }
 }
 
@@ -39,6 +41,7 @@ nonisolated struct StoreSnapshot: Sendable {
     var plans: [SavedPlan]
     var folders: [PlanFolder]
     var smartFolders: [SmartFolder]
+    var memories: [PlanMemory]
 }
 
 /// Names for records and files. Plan ids contain ":" (bad in Finder and some servers).
