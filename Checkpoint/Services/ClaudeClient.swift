@@ -16,6 +16,14 @@ nonisolated struct ClaudeClient: Sendable {
                 return "Claude API \(code): \(body.prefix(300))"
             }
         }
+
+        /// The API couldn't compile the output schema (plus tool schemas) into a grammar.
+        var isSchemaTooComplex: Bool {
+            guard case .http(400, let body) = self else { return false }
+            let b = body.lowercased()
+            return b.contains("grammar") && (b.contains("too large") || b.contains("too complex"))
+                || b.contains("schema is too complex")
+        }
     }
 
     let apiKey: String
