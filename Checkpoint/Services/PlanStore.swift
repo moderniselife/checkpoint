@@ -186,6 +186,26 @@ enum LivePhase: Equatable {
     case writing(characters: Int)
 }
 
+/// One run in flight: what it's working on and what it has shown so far.
+struct LiveRun: Identifiable, Equatable {
+    let id: UUID
+    let key: String
+    let mode: TestMode
+    let tracker: Tracker
+    var feed: [FeedItem]
+    var phase: LivePhase = .connecting
+    var startedAt = Date()
+    var currentTurn = 0
+
+    /// Progress across the current batch of tool calls; once all return, the model is thinking again.
+    mutating func updateReadingPhase() {
+        let batchStart = feed.lastIndex { $0.kind != .tool }.map { $0 + 1 } ?? 0
+        let batch = feed[batchStart...]
+        let done = batch.filter { $0.state != .pending }.count
+        phase = done < batch.count ? .reading(done: done, total: batch.count) : .thinking(turn: currentTurn)
+    }
+}
+
 @Observable
 final class PlanStore {
     private(set) var plans: [SavedPlan] = []
@@ -198,16 +218,23 @@ final class PlanStore {
         didSet { UserDefaults.standard.set(expandedFolders.map(\.uuidString), forKey: "expandedFolders") }
     }
 
-    private(set) var runningKey: String?
-    private(set) var feed: [FeedItem] = []
-    private(set) var phase: LivePhase = .connecting
-    private(set) var startedAt: Date?
-    private var currentTurn = 0
+    /// Every run in flight, by draft id. A single analysis has one; a parallel batch several.
+    private(set) var liveRuns: [UUID: LiveRun] = [:]
+    /// The run the progress feed shows (and the one iOS reports in the background).
+    private var focusedRun: LiveRun? { runningDraftID.flatMap { liveRuns[$0] } }
+    var runningKey: String? { focusedRun?.key }
+    var feed: [FeedItem] { focusedRun?.feed ?? [] }
+    var phase: LivePhase { focusedRun?.phase ?? .connecting }
+    var startedAt: Date? { focusedRun?.startedAt }
+    var runningMode: TestMode { focusedRun?.mode ?? .dev }
+    var runningTracker: Tracker { focusedRun?.tracker ?? .jira }
+    /// Runs in flight, oldest first, for the sidebar.
+    var activeRuns: [LiveRun] { liveRuns.values.sorted { $0.startedAt < $1.startedAt } }
     var error: String?
     private var task: Task<Void, Never>?
     /// Runs that haven't finished: paused, failed, interrupted, or in the bin (see ResearchDrafts.swift).
     var drafts: [ResearchDraft] = []
-    /// The draft the live run is writing into.
+    /// The draft the focused live run is writing into.
     var runningDraftID: UUID?
     @ObservationIgnored var stopReason: RunStopReason = .none
     /// iOS: the app is in the background. A run that dies there resumes when it's back.
@@ -829,7 +856,7 @@ final class PlanStore {
         try? data.write(to: smartFoldersURL, options: .atomic)
         emitSmartChanges()
     }
-    var isRunning: Bool { runningKey != nil }
+    var isRunning: Bool { !liveRuns.isEmpty }
 
     /// Accepts "PROJ-123", "proj-123" or a pasted Jira URL.
     static func extractKey(_ input: String) -> String? {
@@ -847,8 +874,6 @@ final class PlanStore {
         return trimmed.isEmpty ? nil : String(trimmed.prefix(300))
     }
 
-    private(set) var runningMode: TestMode = .dev
-    private(set) var runningTracker: Tracker = .jira
 
     /// Quick preset = optional cheaper model at low effort (IDEA-082).
     static func quickOverrides(settings: AppSettings) -> (model: String?, effort: String?) {
@@ -905,6 +930,7 @@ final class PlanStore {
                 drafts[i].binnedAt = .now
             }
         }
+        stopReason = .none
         upsertDraft(draft)
         beginLive(draft)
         selection = nil
@@ -916,24 +942,34 @@ final class PlanStore {
             } catch {
                 self.draftStopped(id, error: error)
             }
-            runningKey = nil
-            runningDraftID = nil
+            endLive(id)
         }
     }
 
-    /// Resets the live feed for a draft; resumed runs keep what they'd already shown.
+    /// Starts tracking a run; resumed runs keep what their feed already showed.
     private func beginLive(_ draft: ResearchDraft) {
-        feed = draft.feed
+        var feed = draft.feed
         if draft.snapshot != nil || !draft.feed.isEmpty {
             feed.append(FeedItem(kind: .status, title: "Resumed", detail: ""))
         }
-        phase = .connecting
-        startedAt = Date()
-        runningKey = draft.key
-        runningMode = draft.mode
-        runningTracker = draft.tracker
-        runningDraftID = draft.id
+        liveRuns[draft.id] = LiveRun(id: draft.id, key: draft.key, mode: draft.mode, tracker: draft.tracker, feed: feed)
+        if focusedRun == nil { runningDraftID = draft.id }
     }
+
+    /// A run finished or stopped: drop it, and show the next one still going, if any.
+    private func endLive(_ id: UUID) {
+        liveRuns[id] = nil
+        if runningDraftID == id || focusedRun == nil { runningDraftID = activeRuns.first?.id }
+    }
+
+    /// Shows this run in the progress feed (parallel batches).
+    func focusRun(_ id: UUID) {
+        guard liveRuns[id] != nil else { return }
+        runningDraftID = id
+    }
+
+    func liveFeed(for id: UUID) -> [FeedItem] { liveRuns[id]?.feed ?? [] }
+    func liveStartedAt(for id: UUID) -> Date? { liveRuns[id]?.startedAt }
 
     /// Shared single-plan runner: research via the generator, then merge with
     /// any previous run (ticks, verdicts, tags, folder survive). Used by both
@@ -942,7 +978,7 @@ final class PlanStore {
         guard let draft = drafts.first(where: { $0.id == draftID }) else { throw CancellationError() }
         let key = draft.key, mode = draft.mode, tracker = draft.tracker
         let targetFolder = draft.folderID
-        let startedAt = self.startedAt ?? Date()
+        let startedAt = liveRuns[draftID]?.startedAt ?? Date()
         let template = draft.template.flatMap(PlanGenerator.PlanTemplate.init(rawValue:))
         let modelOverride = draft.modelOverride, effortOverride = draft.effortOverride
         let customServer = tracker == .custom
@@ -980,7 +1016,7 @@ final class PlanStore {
         let runGenerator = generatorWithScenarios
         defer { codebaseURL?.stopAccessingSecurityScopedResource() }
         let (plan, usage) = try await runGenerator.run(ticketKey: key) { event in
-            await MainActor.run { self.record(event) }
+            await MainActor.run { self.record(event, for: draftID) }
         } onSnapshot: { snap in
             await MainActor.run { self.saveSnapshot(snap, for: draftID) }
         }
@@ -1015,7 +1051,7 @@ final class PlanStore {
         }
         saved.preset = modelOverride != nil || effortOverride != nil ? "quick" : (previous?.preset ?? "deep")
         saved.updatedAt = .now
-        saved.research = feed
+        saved.research = liveRuns[draftID]?.feed ?? []
         saved.researchDuration = draft.researchSeconds + Date().timeIntervalSince(startedAt)
         planDiff = previous.map { PlanDiff.compare(old: $0.plan, new: plan, planID: id) } ?? nil
         plans.removeAll { $0.id == id }
@@ -1034,13 +1070,18 @@ final class PlanStore {
     private var batchTask: Task<Void, Never>?
 
     var batchLabel: String {
-        batchRunning ? "\(min(batchDone + 1, max(batchTotal, 1)))/\(batchTotal)" : ""
+        guard batchRunning else { return "" }
+        let running = liveRuns.count
+        return running > 1 ? "\(batchDone)/\(batchTotal) done · \(running) running"
+            : "\(min(batchDone + 1, max(batchTotal, 1)))/\(batchTotal)"
     }
 
-    /// Runs `inputs` one at a time into a new folder. Invalid keys are skipped
-    /// up front; per-plan failures are collected and summarized at the end.
+    /// Plans `inputs` into a new folder, `parallel` at a time (1–4). Invalid keys are skipped
+    /// up front; per-plan failures go to Unfinished and are summarised at the end. Pausing the
+    /// batch keeps the plans in progress and the ones not started yet in Unfinished too.
     func startBatch(inputs: [String], mode: TestMode, tracker: Tracker, customTracker: UUID? = nil,
-                    settings: AppSettings, folderName: String, template: PlanGenerator.PlanTemplate? = nil) {
+                    settings: AppSettings, folderName: String, template: PlanGenerator.PlanTemplate? = nil,
+                    parallel: Int = 1) {
         cancelBatch(silent: true)
         let server = tracker == .custom ? settings.customTrackers.first { $0.id == customTracker } : nil
         var seen = Set<String>()
@@ -1053,6 +1094,10 @@ final class PlanStore {
             error = "Connect an AI provider and \(server?.displayName ?? tracker.label) in \(Platform.settingsName) first."
             return
         }
+        guard !isRunning else {
+            error = "Wait for the current run to finish, or pause it first."
+            return
+        }
         let folder = createFolder(named: folderName, in: selectedFolder?.id ?? selected?.folderID)
         expandedFolders.insert(folder.id)
         batchRunning = true
@@ -1060,43 +1105,76 @@ final class PlanStore {
         batchTotal = keys.count
         batchErrors = [:]
         error = nil
+        stopReason = .none
+        let width = min(max(parallel, 1), 4)
+        func makeDraft(_ key: String) -> ResearchDraft {
+            ResearchDraft(key: key, mode: mode, tracker: tracker,
+                          customTrackerID: server?.id, customTrackerName: server?.displayName,
+                          template: template?.rawValue, folderID: folder.id)
+        }
         batchTask = Task {
-            for key in keys {
-                if Task.isCancelled { break }
-                let draft = ResearchDraft(key: key, mode: mode, tracker: tracker,
-                                          customTrackerID: server?.id, customTrackerName: server?.displayName,
-                                          template: template?.rawValue, folderID: folder.id)
-                upsertDraft(draft)
-                beginLive(draft)
-                do {
-                    _ = try await self.runSingle(draftID: draft.id, settings: settings)
-                } catch {
-                    draftStopped(draft.id, error: error, reportError: false)
-                    if error is CancellationError || Task.isCancelled { break }
-                    batchErrors[key] = error.localizedDescription
+            var next = 0
+            await withTaskGroup(of: Void.self) { group in
+                while next < min(width, keys.count) {
+                    let draft = makeDraft(keys[next])
+                    next += 1
+                    group.addTask { await self.runBatchItem(draft, settings: settings) }
                 }
-                batchDone += 1
+                while await group.next() != nil {
+                    guard !Task.isCancelled, next < keys.count else { continue }
+                    let draft = makeDraft(keys[next])
+                    next += 1
+                    group.addTask { await self.runBatchItem(draft, settings: settings) }
+                }
             }
-            runningKey = nil
-            runningDraftID = nil
+            let stopped = Task.isCancelled
+            let discarded: Bool = { if case .discard = stopReason { return true } else { return false } }()
+            // Paused (by you or by iOS): the tickets that never started wait in Unfinished as well.
+            if stopped, !discarded, next < keys.count {
+                for key in keys[next...] {
+                    var d = makeDraft(key)
+                    d.status = .paused
+                    d.errorMessage = "Not started: the batch was paused."
+                    drafts.append(d)
+                }
+                saveDrafts()
+            }
             batchRunning = false
-            if Task.isCancelled {
-                error = "Batch stopped after \(batchDone)/\(batchTotal) plans. The one in progress is in Unfinished."
+            if stopped {
+                if discarded {
+                    error = "Batch discarded after \(batchDone)/\(batchTotal) plans. The runs in progress are in the Bin."
+                } else {
+                    error = "Batch paused after \(batchDone)/\(batchTotal) plans. The rest are in Unfinished."
+                }
             } else if !batchErrors.isEmpty {
                 error = "Batch finished with \(batchErrors.count) failure(s), saved to Unfinished: " +
                     batchErrors.sorted(by: { $0.key < $1.key }).prefix(3)
-                        .map { "\($0.key): \($0.value.prefix(90))" }.joined(separator: " · ")
+                        .map { "\($0.key): \($0.value.count > 90 ? $0.value.prefix(89) + "…" : Substring($0.value))" }.joined(separator: " · ")
             }
+            stopReason = .none
             selection = Self.folderTag(folder.id)
             batchTask = nil
         }
     }
 
+    /// One ticket of a batch, start to finish.
+    private func runBatchItem(_ draft: ResearchDraft, settings: AppSettings) async {
+        upsertDraft(draft)
+        beginLive(draft)
+        do {
+            _ = try await runSingle(draftID: draft.id, settings: settings)
+        } catch {
+            draftStopped(draft.id, error: error, reportError: false)
+            if !(error is CancellationError || Task.isCancelled) {
+                batchErrors[draft.key] = error.localizedDescription
+            }
+        }
+        if !Task.isCancelled { batchDone += 1 }
+        endLive(draft.id)
+    }
+
     func cancelBatch(silent: Bool = false) {
         batchTask?.cancel()
-        batchTask = nil
-        batchRunning = false
-        if !silent { error = "Batch stopped. The plan in progress is saved in Unfinished." }
     }
 
     /// Stops the live run and keeps it in Unfinished, ready to resume from its last finished step.
@@ -1333,39 +1411,33 @@ final class PlanStore {
         save()
     }
 
-    private func record(_ event: PlanGenerator.Event) {
+    private func record(_ event: PlanGenerator.Event, for id: UUID) {
+        guard var run = liveRuns[id] else { return }
         switch event {
         case .status(let s):
-            feed.append(FeedItem(kind: .status, title: s, detail: ""))
+            run.feed.append(FeedItem(kind: .status, title: s, detail: ""))
         case .waiting(let turn):
-            currentTurn = turn
-            phase = .thinking(turn: turn)
+            run.currentTurn = turn
+            run.phase = .thinking(turn: turn)
         case .thinking(let turn, let index, let text):
             let ref = "t\(turn)-\(index)"
             let firstLine = text.split(separator: "\n").first.map(String.init) ?? text
-            if let i = feed.lastIndex(where: { $0.ref == ref }) {
-                feed[i].title = firstLine
-                feed[i].detail = text
+            if let i = run.feed.lastIndex(where: { $0.ref == ref }) {
+                run.feed[i].title = firstLine
+                run.feed[i].detail = text
             } else {
-                feed.append(FeedItem(kind: .thinking, title: firstLine, detail: text, ref: ref))
+                run.feed.append(FeedItem(kind: .thinking, title: firstLine, detail: text, ref: ref))
             }
         case .writing(let n):
-            phase = .writing(characters: n)
-        case .toolCall(let id, let name, let detail):
-            feed.append(FeedItem(kind: .tool, title: Self.friendly(name), detail: detail, state: .pending, ref: id))
-            updateReadingPhase()
-        case .toolDone(let id, let ok):
-            if let i = feed.lastIndex(where: { $0.ref == id }) { feed[i].state = ok ? .done : .failed }
-            updateReadingPhase()
+            run.phase = .writing(characters: n)
+        case .toolCall(let callID, let name, let detail):
+            run.feed.append(FeedItem(kind: .tool, title: Self.friendly(name), detail: detail, state: .pending, ref: callID))
+            run.updateReadingPhase()
+        case .toolDone(let callID, let ok):
+            if let i = run.feed.lastIndex(where: { $0.ref == callID }) { run.feed[i].state = ok ? .done : .failed }
+            run.updateReadingPhase()
         }
-    }
-
-    /// Progress across the current batch of tool calls; once all return, Claude is thinking again.
-    private func updateReadingPhase() {
-        let batchStart = feed.lastIndex { $0.kind != .tool }.map { $0 + 1 } ?? 0
-        let batch = feed[batchStart...]
-        let done = batch.filter { $0.state != .pending }.count
-        phase = done < batch.count ? .reading(done: done, total: batch.count) : .thinking(turn: currentTurn)
+        liveRuns[id] = run
     }
 
     private static func friendly(_ tool: String) -> String {

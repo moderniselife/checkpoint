@@ -29,7 +29,7 @@ struct SidebarView: View {
                 Image(systemName: "chart.bar.fill").foregroundStyle(.indigo.gradient)
             }
             .tag(PlanStore.dashboardTag)
-            if let key = store.runningKey {
+            if let key = store.runningKey, !store.batchRunning {
                 Section("Analyzing") {
                     HStack {
                         ProgressView().controlSize(.small)
@@ -46,15 +46,31 @@ struct SidebarView: View {
                 }
             }
             if store.batchRunning {
-                Section("Batch") {
+                Section {
+                    // Every plan in flight; tap one to watch it in the progress feed.
+                    ForEach(store.activeRuns) { run in
+                        Button { store.focusRun(run.id) } label: {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text(run.key).font(.body.monospaced())
+                                ModeBadge(mode: run.mode, compact: true)
+                                Spacer(minLength: 4)
+                                if run.id == store.runningDraftID && store.activeRuns.count > 1 {
+                                    Image(systemName: "eye").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
                     HStack {
-                        ProgressView().controlSize(.small)
-                        Text("\(store.batchLabel) · \(store.runningKey ?? "")")
-                            .font(.body.monospaced())
+                        Text("Batch · \(store.batchLabel)")
                         Spacer(minLength: 4)
-                        Button("Cancel", role: .destructive) { store.cancelBatch() }
+                        Button("Pause", systemImage: "pause.fill") { store.pause() }
+                            .labelStyle(.iconOnly)
                             .buttonStyle(.plain)
-                            .foregroundStyle(.red)
+                            .help("Pause the batch. Plans in progress and not started yet wait in Unfinished.")
                     }
                 }
             }

@@ -197,6 +197,8 @@ verified, what's known to be rough, and how to fix things when they break.
 | Welcome onboarding (7 pages, skippable, Help → Welcome replays it) | ✅ | `Views/Onboarding/OnboardingView.swift` | Tested by the maintainer on iPhone, iPad and Mac |
 | Per-task and per-scenario timers feeding the plan timer | ✅ | `PlanStore.toggleItemTimer`, `ItemTimerPill` | Tested by the maintainer on iPhone, iPad and Mac |
 | iOS research continues in the background (continued-processing task) | ✅ | `CheckpointMobile/BackgroundResearch.swift` | Tested by the maintainer on iPhone, iPad and Mac |
+| Parallel batch planning (1–4 at once), per-run feeds, tap to watch any | 🧪 | `PlanStore.startBatch(parallel:)`, `LiveRun` | Plan Several Tickets → Plans at once |
+| Claude: fall back to prompt JSON when the plan schema + tools are too large to enforce | 🧪 | `PlanGenerator.runAnthropic`, `ClaudeError.isSchemaTooComplex` | Many tools → plan still written |
 | Pause / resume runs from the last finished research step; failures and interruptions resumable | 🧪 | `ResearchDrafts.swift`, `ResearchSnapshot`, `DraftsView` | Pause → Unfinished → Resume |
 | Built-in Unfinished smart folder and a 30-day Bin for discarded runs | 🧪 | `PlanStore.unfinishedDrafts`, `binnedDrafts` | Sidebar → Smart folders |
 | iOS: run paused (not failed) when iOS stops it in the background, auto-resumes on return | 🧪 | `BackgroundResearch`, `PlanStore.resumeAfterBackground` | Background a run on a device |

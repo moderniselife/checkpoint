@@ -193,7 +193,11 @@ nonisolated struct PlanGenerator: Sendable {
             ["name": .string($0.name), "description": .string($0.description), "input_schema": Self.cleanSchema($0.inputSchema, strict: false)]
         }
         // Compatible servers may not support Claude-only features, so ask for JSON in the prompt instead.
-        let system = prompt + (native ? "" : Self.jsonInstruction)
+        var system = prompt + (native ? "" : Self.jsonInstruction)
+        // Schema-enforced output. The API compiles the plan schema together with every tool's
+        // input schema into one grammar; with many tools (big research servers) it refuses it as
+        // too large, and then the plan is asked for as JSON in the prompt instead.
+        var enforceSchema = native
         var messages: [JSONValue] = resume?.messages ?? [["role": "user", "content": .string(request)]]
         let firstTurn = (resume?.turn ?? 0) + 1
         func snapshot(_ turn: Int) async {
@@ -215,22 +219,40 @@ nonisolated struct PlanGenerator: Sendable {
             ]
             if native {
                 body["thinking"] = ["type": "adaptive", "display": "summarized"]
-                body["output_config"] = [
-                    "effort": .string(llm.effort),
-                    "format": ["type": "json_schema", "schema": TestPlan.jsonSchema],
-                ]
+                var output: [String: JSONValue] = ["effort": .string(llm.effort)]
+                if enforceSchema { output["format"] = ["type": "json_schema", "schema": TestPlan.jsonSchema] }
+                body["output_config"] = .object(output)
                 body["cache_control"] = ["type": "ephemeral"]
                 if usesFallbacks { body["fallbacks"] = "default" }
             }
 
             // Streamed so thinking and plan-writing progress show live on long epics.
-            let (response, thinkingBudgetHit) = try await claude.streamMessage(
-                .object(body), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : [],
-                thinkingBudget: Self.thinkingBudget(for: llm.effort)
-            ) { event in
-                switch event {
-                case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
-                case .writing(let n): await onEvent(.writing(characters: n))
+            let response: JSONValue, thinkingBudgetHit: Bool
+            do {
+                (response, thinkingBudgetHit) = try await claude.streamMessage(
+                    .object(body), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : [],
+                    thinkingBudget: Self.thinkingBudget(for: llm.effort)
+                ) { event in
+                    switch event {
+                    case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
+                    case .writing(let n): await onEvent(.writing(characters: n))
+                    }
+                }
+            } catch let error as ClaudeClient.ClaudeError where enforceSchema && error.isSchemaTooComplex {
+                enforceSchema = false
+                system += Self.jsonInstruction
+                await onEvent(.status("Too many tools to lock the plan format, asking for JSON in the instructions instead."))
+                // Same turn again, without the format.
+                body["system"] = .string(system)
+                body["output_config"] = ["effort": .string(llm.effort)]
+                (response, thinkingBudgetHit) = try await claude.streamMessage(
+                    .object(body), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : [],
+                    thinkingBudget: Self.thinkingBudget(for: llm.effort)
+                ) { event in
+                    switch event {
+                    case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
+                    case .writing(let n): await onEvent(.writing(characters: n))
+                    }
                 }
             }
             usage.add(Self.responseUsage(response))
@@ -275,7 +297,7 @@ nonisolated struct PlanGenerator: Sendable {
                 } catch {
                     // Compatible servers can't enforce the schema, and weak models
                     // narrate instead of answering. One stern retry, then fail.
-                    guard !native, !retriedFinal else { throw error }
+                    guard !enforceSchema, !retriedFinal else { throw error }
                     retriedFinal = true
                     await onEvent(.status("Answer wasn't usable — asking once more, JSON only…"))
                     messages.append(["role": "assistant", "content": .string(String(text.suffix(4000)))])
