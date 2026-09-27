@@ -200,6 +200,11 @@ extension PlanStore {
         case .none where lostInBackground:
             d.status = .paused
             d.errorMessage = "The connection dropped while Checkpoint was in the background."
+        case .none where Self.isThinkingError(error):
+            d.status = .failed
+            d.errorMessage = error.localizedDescription
+            // Offer the fix instead of a bare error: turn thinking off (or down) and resume.
+            thinkingProblem = ThinkingProblem(draftID: id, key: d.key, message: error.localizedDescription)
         case .none:
             d.status = .failed
             d.errorMessage = error.localizedDescription
@@ -217,6 +222,14 @@ extension PlanStore {
         autoResumeDraftID = nil
         guard !isRunning, drafts.contains(where: { $0.id == id && $0.binnedAt == nil }) else { return }
         resume(id, settings: settings)
+    }
+
+    /// A provider refusing a thinking / reasoning option ("adaptive thinking is not supported…").
+    nonisolated static func isThinkingError(_ error: Error) -> Bool {
+        let m = error.localizedDescription.lowercased()
+        guard m.contains("thinking") || m.contains("reasoning") else { return false }
+        return ["not supported", "unsupported", "does not support", "doesn't support", "not available",
+                "not enabled", "invalid", "unknown parameter", "unrecognized", "not allowed"].contains(where: m.contains)
     }
 
     nonisolated static func isConnectionLoss(_ error: Error) -> Bool {
@@ -315,4 +328,12 @@ extension PlanStore {
             d.removeObject(forKey: "memories")
         }
     }
+}
+
+/// A run that stopped because its model refused a thinking option.
+struct ThinkingProblem: Identifiable, Equatable {
+    let draftID: UUID
+    let key: String
+    let message: String
+    var id: UUID { draftID }
 }

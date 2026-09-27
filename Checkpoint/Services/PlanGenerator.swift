@@ -228,10 +228,11 @@ nonisolated struct PlanGenerator: Sendable {
         }
         let usesFallbacks = native && (llm.model.hasPrefix("claude-opus") || llm.model.hasPrefix("claude-fable"))
         var retriedFinal = false
+        // What this model accepts; adjusted (and remembered) if the API refuses an option.
+        var traits = ClaudeModelTraits.resolve(model: llm.model, mode: llm.thinking, effort: llm.effort)
+        if !traits.schema { enforceSchema = false; system += native ? Self.jsonInstruction : "" }
 
-        for turn in firstTurn...(firstTurn + Self.maxTurns - 1) {
-            try Task.checkCancellation()
-            await onEvent(.waiting(turn: turn))
+        func requestBody() -> [String: JSONValue] {
             var body: [String: JSONValue] = [
                 "model": .string(llm.model),
                 "max_tokens": 32000,
@@ -239,42 +240,56 @@ nonisolated struct PlanGenerator: Sendable {
                 "tools": .array(toolDefs),
                 "messages": .array(messages),
             ]
-            if native {
-                body["thinking"] = ["type": "adaptive", "display": "summarized"]
-                var output: [String: JSONValue] = ["effort": .string(llm.effort)]
-                if enforceSchema { output["format"] = ["type": "json_schema", "schema": TestPlan.jsonSchema] }
-                body["output_config"] = .object(output)
-                body["cache_control"] = ["type": "ephemeral"]
-                if usesFallbacks { body["fallbacks"] = "default" }
+            guard native else { return body }
+            switch traits.thinking {
+            case .adaptive: body["thinking"] = ["type": "adaptive", "display": "summarized"]
+            case .budget(let tokens): body["thinking"] = ["type": "enabled", "budget_tokens": .number(Double(tokens))]
+            case .off: break
             }
+            var output: [String: JSONValue] = [:]
+            if traits.effort { output["effort"] = .string(llm.effort) }
+            if enforceSchema { output["format"] = ["type": "json_schema", "schema": TestPlan.jsonSchema] }
+            if !output.isEmpty { body["output_config"] = .object(output) }
+            body["cache_control"] = ["type": "ephemeral"]
+            if usesFallbacks { body["fallbacks"] = "default" }
+            return body
+        }
+
+        for turn in firstTurn...(firstTurn + Self.maxTurns - 1) {
+            try Task.checkCancellation()
+            await onEvent(.waiting(turn: turn))
 
             // Streamed so thinking and plan-writing progress show live on long epics.
-            let response: JSONValue, thinkingBudgetHit: Bool
-            do {
-                (response, thinkingBudgetHit) = try await claude.streamMessage(
-                    .object(body), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : [],
-                    thinkingBudget: Self.thinkingBudget(for: llm.effort)
-                ) { event in
-                    switch event {
-                    case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
-                    case .writing(let n): await onEvent(.writing(characters: n))
+            var response: JSONValue = .null
+            var thinkingBudgetHit = false
+            var refusals = 0
+            while true {
+                do {
+                    (response, thinkingBudgetHit) = try await claude.streamMessage(
+                        .object(requestBody()), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : [],
+                        thinkingBudget: Self.thinkingBudget(for: llm.effort)
+                    ) { event in
+                        switch event {
+                        case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
+                        case .writing(let n): await onEvent(.writing(characters: n))
+                        }
                     }
-                }
-            } catch let error as ClaudeClient.ClaudeError where enforceSchema && error.isSchemaTooComplex {
-                enforceSchema = false
-                system += Self.jsonInstruction
-                await onEvent(.status("Too many tools to lock the plan format, asking for JSON in the instructions instead."))
-                // Same turn again, without the format.
-                body["system"] = .string(system)
-                body["output_config"] = ["effort": .string(llm.effort)]
-                (response, thinkingBudgetHit) = try await claude.streamMessage(
-                    .object(body), betas: usesFallbacks ? ["server-side-fallback-2026-07-01"] : [],
-                    thinkingBudget: Self.thinkingBudget(for: llm.effort)
-                ) { event in
-                    switch event {
-                    case .thinking(let index, let text): await onEvent(.thinking(turn: turn, index: index, text: text))
-                    case .writing(let n): await onEvent(.writing(characters: n))
+                    break
+                } catch let error as ClaudeClient.ClaudeError where refusals < 4 {
+                    refusals += 1
+                    if enforceSchema && error.isSchemaTooComplex {
+                        enforceSchema = false
+                        system += Self.jsonInstruction
+                        await onEvent(.status("Too many tools to lock the plan format, asking for JSON in the instructions instead."))
+                        continue
                     }
+                    if native, let (next, why) = traits.adjusted(after: error, model: llm.model, effort: llm.effort) {
+                        traits = next
+                        if !next.schema && enforceSchema { enforceSchema = false; system += Self.jsonInstruction }
+                        await onEvent(.status(why))
+                        continue
+                    }
+                    throw error
                 }
             }
             usage.add(Self.responseUsage(response))
@@ -376,10 +391,13 @@ nonisolated struct PlanGenerator: Sendable {
             default: b["max_tokens"] = 32000
             }
             let effort = llm.effort == "xhigh" ? "high" : llm.effort
-            switch llm.provider {
-            case .openai, .gemini, .xai: b["reasoning_effort"] = .string(effort)
-            case .openrouter: b["reasoning"] = ["effort": .string(effort)]
-            default: break
+            // Thinking off: don't ask for reasoning at all (some models refuse the option).
+            if llm.thinking != .off {
+                switch llm.provider {
+                case .openai, .gemini, .xai: b["reasoning_effort"] = .string(effort)
+                case .openrouter: b["reasoning"] = ["effort": .string(effort)]
+                default: break
+                }
             }
             if final {
                 b["response_format"] = ["type": "json_schema", "json_schema": [

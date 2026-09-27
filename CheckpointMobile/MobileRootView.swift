@@ -64,6 +64,7 @@ struct MobileRootView: View {
                     }
                 }
         }
+        .thinkingProblemAlert()
         .overlay(alignment: .bottom) {
             if let error = store.error {
                 ErrorBanner(message: error)

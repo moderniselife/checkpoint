@@ -111,4 +111,6 @@ nonisolated struct LLMConfig: Sendable {
     var model: String
     /// low / medium / high / xhigh — mapped per provider where supported.
     var effort: String
+    /// How Claude models are asked to think (ignored by other providers).
+    var thinking: ThinkingMode = .auto
 }

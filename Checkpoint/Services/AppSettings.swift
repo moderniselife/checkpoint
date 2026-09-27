@@ -85,13 +85,14 @@ final class AppSettings {
 
     var llmConfig: LLMConfig {
         LLMConfig(provider: provider, apiKey: llmKey, baseURL: llmBaseURL,
-                  model: model.trimmingCharacters(in: .whitespaces), effort: effort)
+                  model: model.trimmingCharacters(in: .whitespaces), effort: effort, thinking: thinkingMode)
     }
     var atlassianEmail: String { didSet { UserDefaults.standard.set(atlassianEmail, forKey: "atlassianEmail") } }
     var atlassianToken: String { didSet { Keychain.set(atlassianToken, for: "atlassian") } }
     /// Jira site hostname, e.g. yourcompany.atlassian.net — used as the MCP cloudId.
     var site: String { didSet { UserDefaults.standard.set(site, forKey: "site") } }
     var effort: String { didSet { UserDefaults.standard.set(effort, forKey: "effort") } }
+    var thinkingMode: ThinkingMode { didSet { UserDefaults.standard.set(thinkingMode.rawValue, forKey: "thinkingMode") } }
     var mode: TestMode { didSet { UserDefaults.standard.set(mode.rawValue, forKey: "mode") } }
     /// Optional end-to-end scenario generation.
     var scenarioMode: ScenarioMode { didSet { UserDefaults.standard.set(scenarioMode.rawValue, forKey: "scenarioMode") } }
@@ -132,6 +133,7 @@ final class AppSettings {
         qaEnvironment = d.string(forKey: "qaEnvironment") ?? ""
         houseRules = d.string(forKey: "houseRules") ?? ""
         learnMemories = d.object(forKey: "learnMemories") as? Bool ?? true
+        thinkingMode = ThinkingMode(rawValue: d.string(forKey: "thinkingMode") ?? "") ?? .auto
         quickModel = d.string(forKey: "quickModel") ?? ""
         atlassianAuth = AtlassianAuth(rawValue: d.string(forKey: "atlassianAuth") ?? "") ?? .oauth
         atlassianUser = MCPOAuth.atlassian.isSignedIn ? d.string(forKey: "atlassianUser") ?? "Signed in" : nil
