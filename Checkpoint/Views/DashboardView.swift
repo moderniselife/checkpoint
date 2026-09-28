@@ -5,6 +5,7 @@ import Charts
 /// plans still in progress. Built from `updatedAt`, which bumps on every tick,
 /// re-run and move, so it needs no extra persistence.
 struct DashboardView: View {
+    @Environment(\.layout) private var layout
     @Environment(PlanStore.self) private var store
 
     private var weekAgo: Date { .now.addingTimeInterval(-7 * 24 * 3600) }
@@ -122,7 +123,7 @@ struct DashboardView: View {
                     }
                 }
             }
-            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: layout.readableWidth, alignment: .leading)
             .padding(.horizontal, PageLayout.side)
             .padding(.top, PageLayout.top)
             .padding(.bottom, 40)

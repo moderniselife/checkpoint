@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TicketInputBar: View {
+    @Environment(\.layout) private var layout
     @Environment(PlanStore.self) private var store
     @Environment(AppSettings.self) private var settings
     @State private var input = ""
@@ -41,7 +42,8 @@ struct TicketInputBar: View {
                 }
             }
         }
-        .frame(maxWidth: 760)
+        // Grows with big Mac windows (scale 1–1.3 → 760–1120pt).
+        .frame(maxWidth: 760 * (1 + (layout.scale - 1) * 1.6))
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .sheet(isPresented: $editingContext) { RunContextSheet(context: $runContext) }
         .animation(.smooth, value: store.isRunning)
@@ -70,11 +72,11 @@ struct TicketInputBar: View {
             // is focused, and this field auto-focuses, so it was never visible.
             TextField("", text: $input)
                 .textFieldStyle(.plain)
-                .font(.title3)
+                .font(fieldFont)
                 .background(alignment: .leading) {
                     if input.isEmpty {
                         Text(placeholder)
-                            .font(.title3)
+                            .font(fieldFont)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                             .allowsHitTesting(false)
@@ -93,9 +95,9 @@ struct TicketInputBar: View {
                             showScenarios: stacked) { editingContext = true }
                 .tourStop(.runOptions)
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 8)
-        .padding(.vertical, 12)
+        .padding(.leading, 18 * layout.scale)
+        .padding(.trailing, 8 * layout.scale)
+        .padding(.vertical, 12 * layout.scale)
         .glassEffect(.regular.interactive(), in: .capsule)
         .glassEffectID("field", in: glass)
         .tourStop(.ticketBar)
@@ -115,6 +117,7 @@ struct TicketInputBar: View {
             }
                 .menuIndicator(.hidden)
                 .help("Pause and keep it in Unfinished. Hold for more.")
+                .font(layout.scale > 1.01 ? .scaled(13, layout.scale, weight: .semibold) : nil)
                 .buttonStyle(.glass)
                 .controlSize(.extraLarge)
                 .glassEffectID("action", in: glass)
@@ -122,6 +125,7 @@ struct TicketInputBar: View {
             Button("Analyze", systemImage: "sparkles", action: submit)
                 .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                 .help("Analyze (⌘Return)")
+                .font(layout.scale > 1.01 ? .scaled(13, layout.scale, weight: .semibold) : nil)
                 .buttonStyle(.glassProminent)
                 .controlSize(.extraLarge)
                 .keyboardShortcut(.return, modifiers: .command)
@@ -129,6 +133,9 @@ struct TicketInputBar: View {
                 .glassEffectID("action", in: glass)
         }
     }
+
+    /// Title 3 normally; larger on big Mac windows.
+    private var fieldFont: Font { layout.scale > 1.01 ? .scaled(15, layout.scale) : .title3 }
 
     private var placeholder: String {
         if let server = settings.route("").custom { return "Ticket in \(server.displayName), or paste a link" }
@@ -157,6 +164,7 @@ struct TicketInputBar: View {
 /// Dev / QA switch that sits in the glass input bar. ⌘⇧M flips it.
 private struct ModeToggle: View {
     var compact = false
+    @Environment(\.layout) private var layout
     @Environment(AppSettings.self) private var settings
     @Environment(PlanStore.self) private var store
 
@@ -172,9 +180,10 @@ private struct ModeToggle: View {
                         .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                         .lineLimit(1)
                         .fixedSize()
-                        .font(.callout.weight(selected ? .semibold : .regular))
-                        .padding(.horizontal, compact ? 10 : 12)
-                        .padding(.vertical, 8)
+                        .font(layout.scale > 1.01 ? .scaled(12, layout.scale, weight: selected ? .semibold : .regular)
+                              : .callout.weight(selected ? .semibold : .regular))
+                        .padding(.horizontal, (compact ? 10 : 12) * layout.scale)
+                        .padding(.vertical, 8 * layout.scale)
                         .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
                         .background {
                             if selected {
@@ -306,6 +315,7 @@ private struct PlanOptionsMenu: View {
 /// Optional scenario generation: off, from related tickets, or tickets + a local codebase.
 private struct ScenarioMenu: View {
     var compact = false
+    @Environment(\.layout) private var layout
     @Environment(AppSettings.self) private var settings
     @Environment(PlanStore.self) private var store
 
@@ -333,10 +343,11 @@ private struct ScenarioMenu: View {
             Label(on ? settings.scenarioMode.shortLabel : "Scenarios", systemImage: "theatermasks")
                 .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
                 .lineLimit(1)
-                .font(.callout.weight(on ? .semibold : .regular))
+                .font(layout.scale > 1.01 ? .scaled(12, layout.scale, weight: on ? .semibold : .regular)
+                      : .callout.weight(on ? .semibold : .regular))
                 .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 12 * layout.scale)
+                .padding(.vertical, 8 * layout.scale)
                 .background { if on { Capsule().fill(Color.purple.gradient) } }
         }
         .menuStyle(.button)
